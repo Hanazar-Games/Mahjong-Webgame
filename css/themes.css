@@ -1,0 +1,33 @@
+/* ===== 主题覆盖样式 ===== */
+
+/* 经典绿 (默认) */
+.theme-classic-green {
+    --bg-primary: #1a3a1a;
+    --bg-secondary: #2d5a2d;
+    --bg-card: #3d6b3d;
+    --accent-gold: #d4a843;
+}
+
+/* 深海蓝 */
+.theme-dark-blue {
+    --bg-primary: #1a1a3a;
+    --bg-secondary: #2d2d5a;
+    --bg-card: #3d3d6b;
+    --accent-gold: #6b9ed4;
+}
+
+/* 原木色 */
+.theme-wood {
+    --bg-primary: #3a2a1a;
+    --bg-secondary: #5a4a2d;
+    --bg-card: #6b5a3d;
+    --accent-gold: #c4a86b;
+}
+
+/* 中国红 */
+.theme-red {
+    --bg-primary: #3a1a1a;
+    --bg-secondary: #5a2d2d;
+    --bg-card: #6b3d3d;
+    --accent-gold: #d46b6b;
+}
