@@ -6,20 +6,32 @@ const UIComponents = (function() {
     'use strict';
 
     /**
-     * 创建麻将牌DOM元素
+     * 创建麻将牌DOM元素（真实大号牌面版）
      */
     function createTileElement(tile, options = {}) {
         const div = document.createElement('div');
-        div.className = 'mahjong-tile';
-        div.dataset.id = tile.id;
-        div.dataset.suit = tile.suit;
-        div.dataset.value = tile.value;
+        div.className = `mahjong-tile suit-${tile.suit || 'unknown'}`;
+        if (tile.id) div.dataset.id = tile.id;
+        if (tile.suit) div.dataset.suit = tile.suit;
+        if (tile.value) div.dataset.value = tile.value;
         
         if (options.faceDown) {
             div.classList.add('back');
         } else {
-            div.textContent = tile.unicode;
-            div.title = tile.name;
+            const face = document.createElement('span');
+            face.className = 'tile-face';
+            face.textContent = tile.unicode || '?';
+            div.appendChild(face);
+            if (tile.name) div.title = tile.name;
+            
+            // 添加牌面装饰线（真实麻将牌特征）
+            const decoTop = document.createElement('div');
+            decoTop.className = 'tile-deco tile-deco-top';
+            div.appendChild(decoTop);
+            
+            const decoBottom = document.createElement('div');
+            decoBottom.className = 'tile-deco tile-deco-bottom';
+            div.appendChild(decoBottom);
         }
         
         if (options.selectable) {
@@ -33,9 +45,7 @@ const UIComponents = (function() {
         }
         
         if (options.small) {
-            div.style.width = '28px';
-            div.style.height = '38px';
-            div.style.fontSize = '1rem';
+            div.classList.add('tile-small');
         }
         
         // 添加拖拽支持

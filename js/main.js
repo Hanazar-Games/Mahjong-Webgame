@@ -338,7 +338,6 @@
                 // 只有自己显示飞入动画
                 const tileEl = UIComponents.createTileElement(data.tile, {
                     onClick: handleTileClick,
-                    selectable: true,
                     draggable: true,
                     onDragEnd: (t) => {
                         App.engine.playerDiscard(t.id);
@@ -553,7 +552,6 @@
             player.hand.forEach((tile, index) => {
                 const tileEl = UIComponents.createTileElement(tile, {
                     onClick: handleTileClick,
-                    selectable: true,
                     draggable: true,
                     onDragEnd: (t) => {
                         App.engine.playerDiscard(t.id);
@@ -757,6 +755,10 @@
                     App.anGangOptions = null;
                     disableActionButtons();
                     enablePlayerActions(true);
+                } else if (engine.currentPlayerIndex === 0 && player.hand.length > engine.typeConfig.handSize) {
+                    // 跳过自摸，允许继续打牌
+                    enablePlayerActions(true);
+                    engine.startTimer();
                 }
                 break;
         }
@@ -765,19 +767,21 @@
     }
 
     /**
-     * 启用操作按钮
+     * 启用操作按钮（增量模式，允许多个按钮同时启用）
      */
     function enableActionButtons(action) {
-        const buttons = {
-            'btn-chi': action.type === 'chi',
-            'btn-peng': action.type === 'peng',
-            'btn-gang': action.type === 'gang' || action.type === 'an_gang',
-            'btn-hu': action.type === 'hu'
+        const buttonMap = {
+            'chi': 'btn-chi',
+            'peng': 'btn-peng',
+            'gang': 'btn-gang',
+            'an_gang': 'btn-gang',
+            'hu': 'btn-hu'
         };
         
-        for (const [id, enabled] of Object.entries(buttons)) {
-            const btn = document.getElementById(id);
-            if (btn) btn.disabled = !enabled;
+        const btnId = buttonMap[action.type];
+        if (btnId) {
+            const btn = document.getElementById(btnId);
+            if (btn) btn.disabled = false;
         }
     }
 
