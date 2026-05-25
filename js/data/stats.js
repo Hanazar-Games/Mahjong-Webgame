@@ -87,6 +87,12 @@ const Stats = (function() {
         stats.totalHu += result.huCount || 0;
         stats.totalZiMo += result.ziMoCount || 0;
         
+        // 记录玩过的麻将种类
+        stats.playedTypes = stats.playedTypes || [];
+        if (result.mahjongType && !stats.playedTypes.includes(result.mahjongType)) {
+            stats.playedTypes.push(result.mahjongType);
+        }
+        
         // 添加历史记录
         stats.history.unshift({
             date: new Date().toISOString(),
