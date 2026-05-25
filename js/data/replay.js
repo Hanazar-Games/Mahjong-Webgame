@@ -51,7 +51,7 @@ const Replay = (function() {
             })),
             rounds: engine.round,
             history: engine.gameHistory,
-            finalScores: engine.players.map(p => ({
+            finalScores: [...engine.players].sort((a, b) => b.score - a.score).map(p => ({
                 name: p.name,
                 score: p.score,
                 isWin: p.isHu

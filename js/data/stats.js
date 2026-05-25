@@ -129,7 +129,7 @@ const Stats = (function() {
         { id: 'qing_yi_se', name: '清一色', desc: '胡出清一色', icon: '🎨', condition: (s, r) => r.hasQingYiSe },
         { id: 'thirteen_orphans', name: '国士无双', desc: '胡出十三幺', icon: '👑', condition: (s, r) => r.winType === 'thirteen_orphans' },
         { id: 'all_types', name: '全能选手', desc: '玩遍所有麻将种类', icon: '🌍', condition: (s, r) => s.playedTypes?.length >= 10 },
-        { id: 'perfect', name: '完美对局', desc: '一局不输赢得比赛', icon: '💎', condition: (s, r) => r.isWin && r.rounds >= 4 && r.lossCount === 0 }
+        { id: 'perfect', name: '完美对局', desc: '赢得满局比赛', icon: '💎', condition: (s, r) => r.isWin && r.rounds >= 4 }
     ];
 
     function getAchievements() {

@@ -17,8 +17,8 @@ const Rules = (function() {
         
         const sorted = sortTiles(hand);
         
-        // 七对
-        if (hand.length === 14 && isSevenPairs(sorted)) {
+        // 七对（支持任意偶数张牌，如台湾麻将16张=8对）
+        if (hand.length % 2 === 0 && hand.length >= 14 && isSevenPairs(sorted)) {
             return { canWin: true, type: 'seven_pairs' };
         }
         
@@ -158,14 +158,14 @@ const Rules = (function() {
      * 支持四张相同牌作为两对
      */
     function isSevenPairs(tiles) {
-        if (tiles.length !== 14) return false;
+        if (tiles.length % 2 !== 0) return false;
         const counts = countTiles(tiles);
         let pairCount = 0;
         for (const key in counts) {
             if (counts[key] % 2 !== 0) return false; // 每种牌数量必须是偶数
             pairCount += counts[key] / 2;
         }
-        return pairCount === 7;
+        return pairCount === tiles.length / 2;
     }
 
     /**
@@ -513,7 +513,7 @@ const Rules = (function() {
         analyzeTingPai,
         checkQueYiMen,
         isDeadHand,
-        isSevenPairs: tiles => tiles.length === 14 && isSevenPairs(tiles),
+        isSevenPairs: tiles => tiles.length % 2 === 0 && tiles.length >= 14 && isSevenPairs(tiles),
         isThirteenOrphans,
         countTiles,
         getAllTiles

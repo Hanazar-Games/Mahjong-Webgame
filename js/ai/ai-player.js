@@ -230,7 +230,7 @@ const AIPlayer = (function() {
         }
         
         // 检查是否听牌
-        const winResult = canWin(player.hand);
+        const winResult = canWin(player.hand, {});
         if (winResult.canWin) {
             return false; // 听牌了不打杠
         }
