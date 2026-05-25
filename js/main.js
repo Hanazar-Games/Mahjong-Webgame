@@ -245,9 +245,14 @@
         }
         
         const type = selectedType.dataset.type;
+        const typeConfig = Tiles.getConfig(type);
+        if (!typeConfig) {
+            Utils.toast('无效的麻将种类');
+            return;
+        }
         const config = {
             mahjongType: type,
-            playerCount: Tiles.getConfig(type).playerCount,
+            playerCount: typeConfig.playerCount,
             aiDifficulty: App.settings.aiDifficulty,
             speed: App.settings.gameSpeed,
             maxRounds: parseInt(App.settings.gameRounds)
@@ -295,14 +300,17 @@
         App.currentScreen = 'game-screen';
         
         // 更新玩家名称显示
-        document.getElementById('self-name').textContent = App.settings.playerName || '玩家';
+        const selfNameEl = document.getElementById('self-name');
+        if (selfNameEl) selfNameEl.textContent = App.settings.playerName || '玩家';
         
         // 牌桌入场动画
         const table = document.getElementById('game-table');
         if (table) {
             table.style.opacity = '0';
             table.style.transform = 'scale(0.9) rotateX(10deg)';
-            setTimeout(() => {
+            if (App._tableEnterTimeout) clearTimeout(App._tableEnterTimeout);
+            App._tableEnterTimeout = setTimeout(() => {
+                App._tableEnterTimeout = null;
                 table.style.transition = 'opacity 0.6s ease, transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
                 table.style.opacity = '1';
                 table.style.transform = '';
@@ -331,23 +339,7 @@
         });
         
         engine.on('tileDealt', (data) => {
-            // 逐张发牌动画
-            const position = getPositionName(data.playerIndex);
-            const handEl = document.getElementById(`hand-${position}`);
-            if (handEl && data.playerIndex === 0) {
-                // 只有自己显示飞入动画
-                const tileEl = UIComponents.createTileElement(data.tile, {
-                    onClick: handleTileClick,
-                    draggable: true,
-                    onDragEnd: (t) => {
-                        App.engine.playerDiscard(t.id);
-                        enablePlayerActions(false);
-                    }
-                });
-                tileEl.classList.add('tile-drawn');
-                tileEl.style.animationDelay = '0s';
-                handEl.appendChild(tileEl);
-            }
+            // 只更新牌堆计数，不发牌动画到DOM（避免与tilesDealed的renderGameState竞态）
             updateDeckCount(data.deckCount);
         });
         
@@ -361,8 +353,8 @@
             if (data.index === 0) {
                 // 玩家回合：摸牌
                 engine.playerDraw().then((result) => {
-                    // 如果游戏已结束（流局等），不再启用操作
-                    if (engine.state === 'ended') {
+                    // 防御引擎被销毁或替换的竞态
+                    if (!App.engine || App.engine !== engine || engine.state !== 'playing') {
                         return;
                     }
                     if (!result || !result.ziMo) {
@@ -473,6 +465,10 @@
         
         engine.on('needDiscard', (data) => {
             if (data.index === 0) {
+                // 防御引擎被销毁的竞态
+                if (!App.engine || App.engine !== engine || engine.state !== 'playing') {
+                    return;
+                }
                 enablePlayerActions(true);
                 Utils.toast('请打出一张牌');
                 engine.startTimer();
@@ -524,12 +520,15 @@
         renderDiscardPile();
         
         // 更新牌堆数量
-        document.getElementById('deck-count').textContent = `剩余: ${state.deckCount}`;
+        const deckCountEl = document.getElementById('deck-count');
+        if (deckCountEl) deckCountEl.textContent = `剩余: ${state.deckCount}`;
         
         // 更新圈风
         const winds = ['东', '南', '西', '北'];
-        document.getElementById('wind-indicator').textContent = winds[state.currentWind];
-        document.getElementById('round-info').textContent = `${state.round}/${App.engine.config.maxRounds}局`;
+        const windEl = document.getElementById('wind-indicator');
+        if (windEl) windEl.textContent = winds[state.currentWind];
+        const roundEl = document.getElementById('round-info');
+        if (roundEl) roundEl.textContent = `${state.round}/${App.engine.config.maxRounds}局`;
     }
 
     /**
@@ -561,6 +560,12 @@
                     tileEl.classList.add('tile-drawn');
                 }
                 handEl.appendChild(tileEl);
+            });
+            // 根据当前游戏状态自动设置禁用状态，防止re-render后丢失
+            const engine = App.engine;
+            const shouldDisable = !engine || engine.currentPlayerIndex !== 0 || engine.state !== 'playing';
+            handEl.querySelectorAll('.mahjong-tile').forEach(tile => {
+                tile.classList.toggle('disabled', shouldDisable);
             });
         } else if (displayMode === 'small') {
             // 小牌堆显示
@@ -620,14 +625,17 @@
         
         App.engine.discardPile.forEach((tile, index) => {
             const tileEl = UIComponents.createTileElement(tile, { small: true });
+            // 只在真正的新牌丢弃时添加动画，避免re-render时重复动画
             if (animateLast && index === App.engine.discardPile.length - 1) {
                 tileEl.classList.add('tile-discarded');
             }
             pileEl.appendChild(tileEl);
         });
         
-        // 滚动到最新
-        setTimeout(() => {
+        // 滚动到最新（如果之前有timeout则取消）
+        if (App._discardScrollTimeout) clearTimeout(App._discardScrollTimeout);
+        App._discardScrollTimeout = setTimeout(() => {
+            App._discardScrollTimeout = null;
             pileEl.scrollTop = pileEl.scrollHeight;
         }, 50);
     }
@@ -752,7 +760,7 @@
                     App.anGangOptions = null;
                     disableActionButtons();
                     enablePlayerActions(true);
-                } else if (engine.currentPlayerIndex === 0 && player.hand.length > engine.typeConfig.handSize) {
+                } else if (engine.currentPlayerIndex === 0 && player.hand.length > (engine.typeConfig?.handSize || 13)) {
                     // 跳过自摸，允许继续打牌
                     enablePlayerActions(true);
                     engine.startTimer();
@@ -800,8 +808,7 @@
         if (!handEl) return;
         
         handEl.querySelectorAll('.mahjong-tile').forEach(tile => {
-            tile.style.pointerEvents = enable ? 'auto' : 'none';
-            tile.style.opacity = enable ? '1' : '0.7';
+            tile.classList.toggle('disabled', !enable);
         });
     }
 
@@ -909,6 +916,7 @@
             const config = { ...App.engine.config };
             App.engine.destroy();
             App.engine = null;
+            App.anGangOptions = null;
             AudioManager.stopBgm();
             await startGame(config);
         }
@@ -918,6 +926,14 @@
      * 结束游戏
      */
     function endGame() {
+        // 取消可能存在的入场动画timeout
+        if (App._tableEnterTimeout) {
+            clearTimeout(App._tableEnterTimeout);
+            App._tableEnterTimeout = null;
+        }
+        // 清理过时的杠选项
+        App.anGangOptions = null;
+        
         // 牌桌退场动画
         const table = document.getElementById('game-table');
         if (table) {
@@ -946,11 +962,13 @@
      * 显示/隐藏游戏内菜单
      */
     function showIngameMenu() {
-        document.getElementById('ingame-menu').classList.remove('hidden');
+        const menu = document.getElementById('ingame-menu');
+        if (menu) menu.classList.remove('hidden');
     }
 
     function hideIngameMenu() {
-        document.getElementById('ingame-menu').classList.add('hidden');
+        const menu = document.getElementById('ingame-menu');
+        if (menu) menu.classList.add('hidden');
     }
 
     /**
@@ -1137,6 +1155,7 @@
             }
             if (key === 'sfx-enabled') {
                 const enabled = value === 'true' || value === true;
+                App.settings[settingKey] = enabled; // 存储为布尔值
                 AudioManager.setSfxEnabled(enabled);
                 if (enabled) AudioManager.SFX.toggleSwitch();
             }
@@ -1155,21 +1174,42 @@
     /**
      * 处理滑块输入
      */
+    // 滑块保存防抖（避免每帧写入localStorage）
+    let _sliderSaveTimer = null;
+    
     function handleSliderInput(e) {
         const el = e.target;
         const label = document.getElementById(el.id + '-value');
         if (label) {
             label.textContent = el.value + '%';
         }
-        handleSettingChange(e);
         
-        // 同步音频系统
+        // 更新内存中的设置，但延迟保存到localStorage
+        const keyMap = {
+            'bgm-volume': 'bgmVolume',
+            'sfx-volume': 'sfxVolume',
+            'table-zoom': 'tableZoom',
+            'hand-size': 'handSize'
+        };
+        const settingKey = keyMap[el.id];
+        if (settingKey) {
+            App.settings[settingKey] = parseInt(el.value);
+        }
+        
+        // 同步音频系统（即时）
         if (el.id === 'bgm-volume') {
             AudioManager.setBgmVolume(parseInt(el.value) / 100);
         }
         if (el.id === 'sfx-volume') {
             AudioManager.setSfxVolume(parseInt(el.value) / 100);
         }
+        
+        // 防抖保存到localStorage
+        if (_sliderSaveTimer) clearTimeout(_sliderSaveTimer);
+        _sliderSaveTimer = setTimeout(() => {
+            _sliderSaveTimer = null;
+            Stats.saveSettings(App.settings);
+        }, 300);
     }
 
     /**
@@ -1249,8 +1289,11 @@
             renderRoomList(rooms);
         });
         
-        // 创建房间按钮
-        document.getElementById('create-room')?.addEventListener('click', () => {
+        // 创建房间按钮（使用{once:true}防止重复绑定）
+        const createRoomBtn = document.getElementById('create-room');
+        if (createRoomBtn && !createRoomBtn._listenerAttached) {
+            createRoomBtn._listenerAttached = true;
+            createRoomBtn.addEventListener('click', () => {
             AudioManager.SFX.buttonClick();
             const name = document.getElementById('room-name').value;
             const type = document.getElementById('room-mahjong-type').value;
@@ -1260,6 +1303,7 @@
                 // 等待玩家加入
             });
         });
+        }
     }
 
     /**
@@ -1289,6 +1333,10 @@
      */
     function handleKeydown(e) {
         if (App.currentScreen !== 'game-screen') return;
+        
+        // 如果有模态框打开，忽略游戏快捷键（ESC除外）
+        const hasModal = document.querySelector('.modal');
+        if (hasModal && e.key !== 'Escape') return;
         
         // 如果菜单已打开，ESC关闭菜单
         const menu = document.getElementById('ingame-menu');
@@ -1329,6 +1377,7 @@
             }
             case 's':
             case 'S':
+                e.preventDefault();
                 handleAction('skip');
                 break;
         }

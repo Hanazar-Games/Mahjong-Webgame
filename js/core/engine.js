@@ -801,7 +801,8 @@ class MahjongEngine extends Utils.EventEmitter {
             });
         } else {
             this.round++;
-            this.currentWind = (this.currentWind + 1) % 4;
+            // 圈风每4局改变一次（东→南→西→北），而非每局都变
+            this.currentWind = Math.floor((this.round - 1) / 4) % 4;
             
             // 轮换庄家
             const currentDealer = this.players.findIndex(p => p.isDealer);

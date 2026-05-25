@@ -18,6 +18,7 @@ const Stats = (function() {
         totalScore: 0,
         bestGame: 0,
         mostBombs: 0,
+        playedTypes: [],
         totalGang: 0,
         totalHu: 0,
         totalZiMo: 0,
