@@ -297,6 +297,8 @@ class MahjongEngine extends Utils.EventEmitter {
         if (!tile) {
             console.error('Invalid discard: tile not in hand', tileId);
             this.emit('error', { type: 'invalidDiscard', tileId });
+            // 恢复计时器让玩家有机会重新选择
+            this.startTimer();
             return;
         }
         
@@ -541,18 +543,19 @@ class MahjongEngine extends Utils.EventEmitter {
                 await this.handleFlower(player);
             }
             
-            // 检查杠上开花
-            const winResult = Rules.canWin(player.hand, this.ruleConfig);
-            if (winResult.canWin) {
-                await this.executeHu(player, { type: 'hu', winInfo: winResult, isGangShangKaiHua: true });
-                return;
-            }
-            
+            // 先emit摸牌事件，确保UI手牌状态正确
             this.emit('draw', { player: player.toJSON(), tile: gangTile, fromGang: true, index: this.currentPlayerIndex, deckCount: this.deckCount });
         }
         
-        // emit gang事件在摸牌之后，确保handSize正确
+        // emit gang事件，确保UI副露状态正确
         this.emit('gang', { player: player.toJSON(), tiles: [...sameTiles, discardTile] });
+        
+        // 检查杠上开花
+        const winResult = Rules.canWin(player.hand, this.ruleConfig);
+        if (winResult.canWin) {
+            await this.executeHu(player, { type: 'hu', winInfo: winResult, isGangShangKaiHua: true });
+            return;
+        }
         
         // 杠后已经摸过牌，直接要求打牌（不再走turnStart的摸牌流程）
         this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
@@ -602,21 +605,22 @@ class MahjongEngine extends Utils.EventEmitter {
                 await this.handleFlower(player);
             }
             
-            // 检查杠上开花
-            const winResult = Rules.canWin(player.hand, this.ruleConfig);
-            if (winResult.canWin) {
-                await this.executeHu(player, { type: 'hu', winInfo: winResult, isGangShangKaiHua: true });
-                return { gangShangKaiHua: true };
-            }
-            
+            // 先emit摸牌事件，确保UI手牌状态正确
             this.emit('draw', { player: player.toJSON(), tile: gangTile, fromGang: true, index: this.currentPlayerIndex, deckCount: this.deckCount });
         }
         
-        // emit事件在摸牌之后，确保handSize正确
+        // emit gang事件，确保UI副露状态正确
         if (wasAnGang) {
             this.emit('anGang', { player: player.toJSON(), tiles: option.tiles });
         } else {
             this.emit('jiaGang', { player: player.toJSON(), meld: option.meld });
+        }
+        
+        // 检查杠上开花
+        const winResult = Rules.canWin(player.hand, this.ruleConfig);
+        if (winResult.canWin) {
+            await this.executeHu(player, { type: 'hu', winInfo: winResult, isGangShangKaiHua: true });
+            return { gangShangKaiHua: true };
         }
         
         // 暗杠后需要打牌
@@ -717,7 +721,8 @@ class MahjongEngine extends Utils.EventEmitter {
             fan: fanResult,
             score: totalScore,
             hand: player.hand.map(t => t.id),
-            winType: winInfo.type
+            winType: winInfo.type,
+            isGangShangKaiHua: action.isGangShangKaiHua || false
         });
         
         // 检查是否一局结束
@@ -860,12 +865,14 @@ class MahjongEngine extends Utils.EventEmitter {
         this.stopTimer();
         if (this.config.speed === 'instant') return;
         
-        this.timer = setTimeout(() => {
+        this.timer = setTimeout(async () => {
             this.emit('turnTimeout', { player: this.players[this.currentPlayerIndex].toJSON() });
             // 自动打出一张牌
             const player = this.players[this.currentPlayerIndex];
             const tile = player.hand[0];
-            if (tile) this.playerDiscard(tile.id);
+            if (tile) {
+                await this.playerDiscard(tile.id);
+            }
         }, this.turnTimeout);
     }
 

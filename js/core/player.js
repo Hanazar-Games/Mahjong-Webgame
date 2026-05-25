@@ -100,7 +100,8 @@ class Player extends Utils.EventEmitter {
             melds: this.melds,
             discards: this.discards.map(t => t.id),
             flowers: this.flowers,
-            isHu: this.isHu
+            isHu: this.isHu,
+            gangCount: this.gangCount
         };
     }
 }

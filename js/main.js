@@ -426,7 +426,11 @@
         });
         
         engine.on('hu', (data) => {
-            UIComponents.showActionEffect(data.isZiMo ? '自摸' : '胡');
+            let effectText = data.isZiMo ? '自摸' : '胡';
+            if (data.isGangShangKaiHua) {
+                effectText = '杠上开花';
+            }
+            UIComponents.showActionEffect(effectText);
             showHuResult(data);
             UIComponents.showWinEffect(data.isZiMo);
             
@@ -455,12 +459,6 @@
         });
         
         engine.on('ziMo', (data) => {
-            if (data.player.position === 0) {
-                enableActionButtons({ type: 'hu' });
-            }
-        });
-        
-        engine.on('gangShangKaiHua', (data) => {
             if (data.player.position === 0) {
                 enableActionButtons({ type: 'hu' });
             }
@@ -813,8 +811,12 @@
      */
     function showHuResult(data) {
         const fanText = data.fan?.fans?.map(f => `${f.name} ${f.fan}番`).join('<br>') || '';
+        let title = data.isZiMo ? '🎉 自摸!' : '🎉 胡牌!';
+        if (data.isGangShangKaiHua) {
+            title = '🎉 杠上开花!';
+        }
         UIComponents.createModal(
-            data.isZiMo ? '🎉 自摸!' : '🎉 胡牌!',
+            title,
             `<p><strong>${data.player.name}</strong> 胡牌</p>
              <p>得分: <strong style="color:var(--accent-gold)">+${data.score}</strong></p>
              <p style="font-size:0.85rem;color:var(--text-muted)">${fanText}</p>`,
