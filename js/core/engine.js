@@ -62,6 +62,10 @@ class MahjongEngine extends Utils.EventEmitter {
      * 开始游戏
      */
     async start() {
+        // 确保轮次和风位已初始化（防止异常调用导致状态混乱）
+        if (!this.round || this.round < 1) this.round = 1;
+        if (this.currentWind === undefined || this.currentWind === null) this.currentWind = 0;
+        
         this.state = 'dealing';
         this.emit('gameStart', { round: this.round, wind: this.currentWind });
         
@@ -120,6 +124,10 @@ class MahjongEngine extends Utils.EventEmitter {
         
         for (let i = 0; i < drawOrder.length; i++) {
             const playerIndex = drawOrder[i];
+            if (this.deck.length === 0) {
+                console.error('Deck exhausted during deal');
+                break;
+            }
             const tile = this.deck.pop();
             this.deckCount = this.deck.length;
             this.players[playerIndex].draw(tile);
@@ -509,12 +517,16 @@ class MahjongEngine extends Utils.EventEmitter {
      * 执行杠
      */
     async executeGang(player, action) {
+        this.stopTimer();
+        this.state = 'action';
+        
         const discardTile = this.lastDiscard;
         
         // 从弃牌堆移除被杠的牌
         this.removeFromDiscardPile(discardTile);
         
-        const sameTiles = player.hand.filter(t => Tiles.isSameTile(t, discardTile));
+        // 明杠只取3张手牌（防止手牌有4张时变成5张副露）
+        const sameTiles = player.hand.filter(t => Tiles.isSameTile(t, discardTile)).slice(0, 3);
         
         player.removeFromHand(sameTiles);
         player.addMeld({
@@ -571,6 +583,9 @@ class MahjongEngine extends Utils.EventEmitter {
      * 执行暗杠
      */
     async executeAnGang(player, option) {
+        this.stopTimer();
+        this.state = 'action';
+        
         const wasAnGang = option.type === 'an_gang';
         
         if (wasAnGang) {
@@ -657,6 +672,14 @@ class MahjongEngine extends Utils.EventEmitter {
         // 四川麻将：检查缺门是否已完成
         if (this.ruleConfig.queYiMen && !this.checkQueYiMenComplete(player)) {
             this.emit('invalidHu', { player: player.toJSON(), reason: 'queYiMenNotComplete' });
+            // 恢复游戏状态，防止卡住
+            if (isZiMo) {
+                this.state = 'playing';
+                this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
+            } else {
+                this.state = 'playing';
+                await this.nextTurn();
+            }
             return;
         }
         
@@ -845,6 +868,10 @@ class MahjongEngine extends Utils.EventEmitter {
         
         // 打牌
         const tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty);
+        if (!tileToDiscard) {
+            console.error('AI has no tile to discard');
+            return;
+        }
         await this.playerDiscard(tileToDiscard.id);
     }
 
@@ -888,6 +915,10 @@ class MahjongEngine extends Utils.EventEmitter {
      */
     recordHistory(action, data) {
         this.gameHistory.push({ action, data, timestamp: Date.now() });
+        // 防止内存无限增长
+        if (this.gameHistory.length > 5000) {
+            this.gameHistory = this.gameHistory.slice(-3000);
+        }
     }
 
     /**
@@ -911,6 +942,7 @@ class MahjongEngine extends Utils.EventEmitter {
      */
     destroy() {
         this.stopTimer();
+        this.removeAllListeners();
         this.players = [];
         this.deck = [];
         this.state = 'idle';

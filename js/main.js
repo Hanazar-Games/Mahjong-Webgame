@@ -277,8 +277,8 @@
             const difficulties = ['简单AI', '普通AI', '困难AI', '专家AI'];
             const diffIndex = ['easy', 'normal', 'hard', 'expert'].indexOf(config.aiDifficulty);
             const name = config.playerCount === 3 
-                ? ['上家', '下家'][i - 1]
-                : ['上家', '对家', '下家'][i - 1];
+                ? ['下家', '上家'][i - 1]
+                : ['下家', '对家', '上家'][i - 1];
             playerConfigs.push({ 
                 name: `${difficulties[diffIndex]}-${name}`, 
                 isAI: true 
@@ -374,7 +374,7 @@
         });
         
         engine.on('draw', (data) => {
-            renderPlayerHand(data.index, data.player.handSize, true);
+            renderPlayerHand(data.index, data.player.handSize, true, data.tile?.id);
             updateDeckCount(data.deckCount);
             AudioManager.SFX.draw();
         });
@@ -535,7 +535,7 @@
     /**
      * 渲染玩家手牌
      */
-    function renderPlayerHand(playerIndex, handSize, animateLast = false) {
+    function renderPlayerHand(playerIndex, handSize, animateLast = false, drawnTileId = null) {
         const handEl = document.getElementById(`hand-${getPositionName(playerIndex)}`);
         if (!handEl) return;
         
@@ -556,8 +556,8 @@
                         enablePlayerActions(false);
                     }
                 });
-                // 最后一张牌添加3D摸牌动画
-                if (animateLast && index === player.hand.length - 1) {
+                // 摸牌动画：优先匹配drawnTileId（因为手牌会被排序，最后一张不一定是新摸的）
+                if (animateLast && (drawnTileId ? tile.id === drawnTileId : index === player.hand.length - 1)) {
                     tileEl.classList.add('tile-drawn');
                 }
                 handEl.appendChild(tileEl);
@@ -693,12 +693,14 @@
                 // 选择另一张牌
                 AudioManager.SFX.selectTile();
                 selected.classList.remove('selected');
-                document.querySelector(`[data-id="${tile.id}"]`).classList.add('selected');
+                const targetEl = document.querySelector(`[data-id="${CSS.escape(tile.id)}"]`);
+                if (targetEl) targetEl.classList.add('selected');
             }
         } else {
             // 选择牌
             AudioManager.SFX.selectTile();
-            document.querySelector(`[data-id="${tile.id}"]`).classList.add('selected');
+            const targetEl = document.querySelector(`[data-id="${CSS.escape(tile.id)}"]`);
+            if (targetEl) targetEl.classList.add('selected');
         }
     }
 
@@ -737,12 +739,9 @@
                 const selfWin = Rules.canWin(player.hand, engine.ruleConfig);
                 if (selfWin.canWin) {
                     await engine.executeAction(player, { type: 'hu', winInfo: selfWin });
-                } else if (engine.lastDiscard) {
-                    // 点炮胡
-                    const winInfo = Rules.canWin([...player.hand, engine.lastDiscard], engine.ruleConfig);
-                    if (winInfo.canWin) {
-                        await engine.executeAction(player, { type: 'hu', winInfo });
-                    }
+                } else if (engine.pendingAction?.action.type === 'hu' && engine.lastDiscard) {
+                    // 点炮胡：必须通过pendingAction验证，防止利用过期lastDiscard作弊
+                    await engine.executeAction(player, engine.pendingAction.action);
                 }
                 break;
             case 'skip':
@@ -909,6 +908,7 @@
         if (App.engine) {
             const config = { ...App.engine.config };
             App.engine.destroy();
+            App.engine = null;
             AudioManager.stopBgm();
             await startGame(config);
         }
@@ -1322,6 +1322,7 @@
             }
             case '4':
             case ' ': {
+                e.preventDefault();
                 const btn = document.getElementById('btn-hu');
                 if (btn && !btn.disabled) handleAction('hu');
                 break;

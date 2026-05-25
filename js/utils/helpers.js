@@ -181,6 +181,9 @@ const Utils = {
             if (!this.events[event]) return;
             this.events[event].forEach(cb => cb(...args));
         }
+        removeAllListeners() {
+            this.events = {};
+        }
         once(event, callback) {
             const onceWrapper = (...args) => {
                 callback(...args);

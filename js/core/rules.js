@@ -40,8 +40,10 @@ const Rules = (function() {
      * 标准胡牌判断
      */
     function findStandardWin(tiles) {
-        if (tiles.length === 0) return { pairs: [], melds: [] };
+        if (tiles.length === 0) return { pair: [], melds: [] };
         if (tiles.length % 3 !== 2) return null;
+        // 标准胡牌至少需要5张（1对+1个面子）
+        if (tiles.length < 5) return null;
 
         // 尝试每种牌作为将牌
         for (let i = 0; i < tiles.length - 1; i++) {
@@ -113,7 +115,7 @@ const Rules = (function() {
     }
 
     function findSequence(tiles, target) {
-        if (target.isHonor) return null;
+        if (target.isHonor || target.isFlower) return null;
         
         // 找到 target 的索引（第一张）
         const idx0 = tiles.findIndex(t => isSameTile(t, target));
@@ -218,7 +220,7 @@ const Rules = (function() {
      */
     function canChi(hand, discard, config = {}) {
         if (config.allowChi === false) return [];
-        if (discard.isHonor) return [];
+        if (discard.isHonor || discard.isFlower) return [];
         
         const results = [];
         const suit = discard.suit;
@@ -268,18 +270,22 @@ const Rules = (function() {
         if (config.allowAnGang === false) return [];
         const results = [];
         const counts = countTiles(hand);
+        const anGangKeys = new Set();
         
         // 暗杠：手中有4张相同牌
         for (const key in counts) {
             if (counts[key] === 4) {
                 const tile = hand.find(t => tileKey(t) === key);
                 results.push({ type: 'an_gang', tiles: hand.filter(t => tileKey(t) === key) });
+                anGangKeys.add(key);
             }
         }
         
-        // 加杠：已碰过，手中有第4张
+        // 加杠：已碰过，手中有第4张（排除已有暗杠的）
         for (const meld of melds) {
             if (meld.type === 'triplet') {
+                const key = tileKey(meld.tiles[0]);
+                if (anGangKeys.has(key)) continue;
                 const fourth = hand.find(t => isSameTile(t, meld.tiles[0]));
                 if (fourth) {
                     results.push({ type: 'jia_gang', meld, tile: fourth });
@@ -412,7 +418,9 @@ const Rules = (function() {
         const all = getAllTiles(hand, melds);
         const suits = new Set(all.map(t => t.suit));
         const hasHonor = all.some(t => t.isHonor);
-        return suits.size === 2 && hasHonor;
+        const hasNonHonor = all.some(t => !t.isHonor);
+        // 混一色 = 一种数牌花色 + 字牌，不能全是字牌（那是字一色）
+        return suits.size === 2 && hasHonor && hasNonHonor;
     }
 
     function isPengPengHu(winInfo, melds) {
@@ -428,8 +436,9 @@ const Rules = (function() {
         if (winInfo.type !== 'standard') return false;
         // 平和不能有碰杠副露
         if (melds && melds.length > 0) return false;
-        // 将牌不是箭牌
-        if (winInfo.pair[0].isHonor) return false;
+        // 将牌不能是箭牌或幺九牌
+        const pairTile = winInfo.pair[0];
+        if (pairTile.isHonor || pairTile.isTerminal) return false;
         // 所有面子都是顺子
         return winInfo.melds.every(m => m.type === 'sequence');
     }
@@ -479,18 +488,24 @@ const Rules = (function() {
 
     function countRemaining(tile, hand) {
         const inHand = hand.filter(t => isSameTile(t, tile)).length;
-        return 4 - inHand;
+        // 花牌只有1张，其他牌通常4张
+        const total = tile.isFlower ? 1 : 4;
+        return Math.max(0, total - inHand);
     }
 
     /**
      * 四川麻将：判断缺门
      */
-    function checkQueYiMen(hand) {
+    function checkQueYiMen(hand, chosenSuit = null) {
         const suits = new Set();
         for (const tile of hand) {
             if (!tile.isHonor && !tile.isFlower) {
                 suits.add(tile.suit);
             }
+        }
+        // 如果指定了缺门花色，必须确认该花色确实不存在
+        if (chosenSuit && suits.has(chosenSuit)) {
+            return false;
         }
         return suits.size <= 2;
     }
