@@ -893,11 +893,19 @@ class MahjongEngine extends Utils.EventEmitter {
         this.stopTimer();
         if (this.config.speed === 'instant') return;
         
+        const playerIndex = this.currentPlayerIndex;
+        const player = this.players[playerIndex];
+        if (!player) return;
+        
         this.timer = setTimeout(async () => {
-            this.emit('turnTimeout', { player: this.players[this.currentPlayerIndex].toJSON() });
+            // 防御：游戏可能已结束或状态已改变
+            if (this.state !== 'playing' || this.currentPlayerIndex !== playerIndex) return;
+            const currentPlayer = this.players[this.currentPlayerIndex];
+            if (!currentPlayer) return;
+            
+            this.emit('turnTimeout', { player: currentPlayer.toJSON() });
             // 自动打出一张牌
-            const player = this.players[this.currentPlayerIndex];
-            const tile = player.hand[0];
+            const tile = currentPlayer.hand[0];
             if (tile) {
                 await this.playerDiscard(tile.id);
             }

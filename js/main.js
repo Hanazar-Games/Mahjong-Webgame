@@ -536,11 +536,12 @@
      */
     function renderPlayerHand(playerIndex, handSize, animateLast = false, drawnTileId = null) {
         const handEl = document.getElementById(`hand-${getPositionName(playerIndex)}`);
-        if (!handEl) return;
+        if (!handEl || !App.engine) return;
         
         handEl.innerHTML = '';
         
         const player = App.engine.players[playerIndex];
+        if (!player) return;
         const isSelf = playerIndex === 0;
         const displayMode = isSelf ? 'full' : App.settings.opponentDisplay;
         
@@ -596,9 +597,10 @@
      */
     function renderPlayerMelds(playerIndex) {
         const meldsEl = document.getElementById(`melds-${getPositionName(playerIndex)}`);
-        if (!meldsEl) return;
+        if (!meldsEl || !App.engine) return;
         
         const player = App.engine.players[playerIndex];
+        if (!player) return;
         meldsEl.innerHTML = '';
         
         for (const meld of player.melds) {

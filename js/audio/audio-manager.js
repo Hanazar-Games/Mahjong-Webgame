@@ -65,6 +65,9 @@ const AudioManager = (function() {
             volume = 0.3
         } = options;
 
+        const amp = (volume || 0) * sfxVolume;
+        if (amp <= 0.0001) return;
+
         const now = audioCtx.currentTime;
 
         // 载波
@@ -80,8 +83,8 @@ const AudioManager = (function() {
 
         const envelope = audioCtx.createGain();
         envelope.gain.setValueAtTime(0, now);
-        envelope.gain.linearRampToValueAtTime(volume * sfxVolume, now + attack);
-        envelope.gain.exponentialRampToValueAtTime(volume * sfxVolume * sustain, now + attack + decay);
+        envelope.gain.linearRampToValueAtTime(amp, now + attack);
+        envelope.gain.exponentialRampToValueAtTime(Math.max(amp * sustain, 0.0001), now + attack + decay);
         envelope.gain.exponentialRampToValueAtTime(0.001, now + attack + decay + release);
 
         modOsc.connect(modGain);
@@ -109,6 +112,9 @@ const AudioManager = (function() {
             decay = 0.15
         } = options;
 
+        const amp = (volume || 0) * sfxVolume;
+        if (amp <= 0.0001) return;
+
         const now = audioCtx.currentTime;
         const bufferSize = audioCtx.sampleRate * duration;
         const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
@@ -128,7 +134,7 @@ const AudioManager = (function() {
 
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(volume * sfxVolume, now + attack);
+        gain.gain.linearRampToValueAtTime(amp, now + attack);
         gain.gain.exponentialRampToValueAtTime(0.001, now + attack + decay);
 
         noise.connect(filter);
@@ -152,6 +158,9 @@ const AudioManager = (function() {
             harmonics = []
         } = options;
 
+        const amp = (volume || 0) * sfxVolume;
+        if (amp <= 0.0001) return;
+
         const now = audioCtx.currentTime;
         const mainOsc = audioCtx.createOscillator();
         mainOsc.type = type;
@@ -159,7 +168,7 @@ const AudioManager = (function() {
         mainOsc.frequency.exponentialRampToValueAtTime(Math.max(freq - pitchDrop, 50), now + decay);
 
         const mainGain = audioCtx.createGain();
-        mainGain.gain.setValueAtTime(volume * sfxVolume, now);
+        mainGain.gain.setValueAtTime(amp, now);
         mainGain.gain.exponentialRampToValueAtTime(0.001, now + decay);
 
         mainOsc.connect(mainGain);
@@ -173,7 +182,7 @@ const AudioManager = (function() {
             osc.type = 'sine';
             osc.frequency.value = freq * h.freq;
             const g = audioCtx.createGain();
-            g.gain.setValueAtTime(volume * sfxVolume * h.amp, now + h.delay);
+            g.gain.setValueAtTime(amp * h.amp, now + h.delay);
             g.gain.exponentialRampToValueAtTime(0.001, now + decay * 0.8);
             osc.connect(g);
             g.connect(sfxGain);
@@ -188,6 +197,9 @@ const AudioManager = (function() {
     function playChord(freqs, options = {}) {
         if (!audioCtx || !sfxEnabled) return;
         const { duration = 0.5, volume = 0.4, type = 'sine', stagger = 0.04 } = options;
+        const amp = (volume || 0) * sfxVolume;
+        if (amp <= 0.0001) return;
+
         const now = audioCtx.currentTime;
 
         freqs.forEach((freq, i) => {
@@ -200,7 +212,7 @@ const AudioManager = (function() {
             const attack = 0.02;
             const rel = duration - attack;
             g.gain.setValueAtTime(0, t);
-            g.gain.linearRampToValueAtTime(volume * sfxVolume * 0.3, t + attack);
+            g.gain.linearRampToValueAtTime(amp * 0.3, t + attack);
             g.gain.exponentialRampToValueAtTime(0.001, t + attack + rel);
 
             osc.connect(g);
@@ -216,6 +228,9 @@ const AudioManager = (function() {
     function playBell(freq, options = {}) {
         if (!audioCtx || !sfxEnabled) return;
         const { duration = 1.5, volume = 0.4 } = options;
+        const amp = (volume || 0) * sfxVolume;
+        if (amp <= 0.0001) return;
+
         const now = audioCtx.currentTime;
 
         const fundamental = audioCtx.createOscillator();
@@ -224,7 +239,7 @@ const AudioManager = (function() {
 
         const g = audioCtx.createGain();
         g.gain.setValueAtTime(0, now);
-        g.gain.linearRampToValueAtTime(volume * sfxVolume * 0.5, now + 0.05);
+        g.gain.linearRampToValueAtTime(amp * 0.5, now + 0.05);
         g.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
         fundamental.connect(g);
@@ -239,7 +254,7 @@ const AudioManager = (function() {
             osc.frequency.value = freq * ratio;
             const g2 = audioCtx.createGain();
             g2.gain.setValueAtTime(0, now + i * 0.05);
-            g2.gain.linearRampToValueAtTime(volume * sfxVolume * 0.15 / ratio, now + i * 0.05 + 0.03);
+            g2.gain.linearRampToValueAtTime(amp * 0.15 / ratio, now + i * 0.05 + 0.03);
             g2.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.7);
             osc.connect(g2);
             g2.connect(sfxGain);
@@ -569,6 +584,7 @@ const AudioManager = (function() {
 
     function playBgmNote(freq, time, duration, oscType, addHarmony) {
         if (!audioCtx || !bgmPlaying) return;
+        if (bgmVolume <= 0.0001) return;
 
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
@@ -590,7 +606,7 @@ const AudioManager = (function() {
             harm.type = 'sine';
             harm.frequency.value = freq * 1.5;
             harmGain.gain.setValueAtTime(0, time + 0.05);
-            harmGain.gain.linearRampToValueAtTime(bgmVolume * 0.025, time + 0.12);
+            harmGain.gain.linearRampToValueAtTime(Math.max(bgmVolume * 0.025, 0.0001), time + 0.12);
             harmGain.gain.exponentialRampToValueAtTime(0.001, time + duration * 0.6);
             harm.connect(harmGain);
             harmGain.connect(bgmGain);
