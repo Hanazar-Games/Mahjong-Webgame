@@ -64,6 +64,16 @@ const Utils = {
     },
 
     /**
+     * HTML实体转义（防止XSS）
+     */
+    escapeHtml(text) {
+        if (text == null) return '';
+        const div = document.createElement('div');
+        div.textContent = String(text);
+        return div.innerHTML;
+    },
+
+    /**
      * 格式化日期
      */
     formatDate(date = new Date()) {

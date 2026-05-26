@@ -10,7 +10,6 @@
         engine: null,
         settings: null,
         stats: null,
-        selectedTile: null,
         currentScreen: 'main-menu',
         network: null,
         anGangOptions: null
@@ -82,6 +81,8 @@
                     el.value = value;
                     const label = document.getElementById(id + '-value');
                     if (label) label.textContent = value + '%';
+                } else if (el.type === 'checkbox') {
+                    el.checked = !!value;
                 } else {
                     el.value = value;
                 }
@@ -131,6 +132,7 @@
             advancedToggle.addEventListener('click', () => {
                 AudioManager.SFX.buttonClick();
                 const content = document.getElementById('advanced-content');
+                if (!content) return;
                 advancedToggle.classList.toggle('collapsed');
                 content.classList.toggle('collapsed');
             });
@@ -201,19 +203,24 @@
         
         switch (mode) {
             case 'ai':
+                App.currentScreen = 'game-screen';
                 startAIGame();
                 break;
             case 'lan':
+                App.currentScreen = 'network-lobby';
                 UIComponents.switchScreen('network-lobby');
                 initNetwork();
                 break;
             case 'custom':
+                App.currentScreen = 'custom-mode';
                 UIComponents.switchScreen('custom-mode');
                 break;
             case 'replay':
+                App.currentScreen = 'replay-list';
                 UIComponents.switchScreen('replay-list');
                 break;
             case 'achievements':
+                App.currentScreen = 'achievements';
                 UIComponents.switchScreen('achievements');
                 break;
         }
@@ -230,7 +237,7 @@
             playerCount: typeConfig?.playerCount || 4,
             aiDifficulty: App.settings.aiDifficulty,
             speed: App.settings.gameSpeed,
-            maxRounds: parseInt(App.settings.gameRounds)
+            maxRounds: Math.max(1, parseInt(App.settings.gameRounds) || 4)
         };
         
         await startGame(config);
@@ -257,7 +264,7 @@
             playerCount: typeConfig.playerCount,
             aiDifficulty: App.settings.aiDifficulty,
             speed: App.settings.gameSpeed,
-            maxRounds: parseInt(App.settings.gameRounds)
+            maxRounds: Math.max(1, parseInt(App.settings.gameRounds) || 4)
         };
         
         await startGame(config);
@@ -267,7 +274,11 @@
      * 开始游戏
      */
     async function startGame(config) {
-        // 清理旧游戏
+        // 清理旧游戏（先取消可能存在的退场动画，防止竞态销毁新引擎）
+        if (App._endGameTimeout) {
+            clearTimeout(App._endGameTimeout);
+            App._endGameTimeout = null;
+        }
         if (App.engine) {
             App.engine.destroy();
         }
@@ -283,11 +294,12 @@
         for (let i = 1; i < config.playerCount; i++) {
             const difficulties = ['简单AI', '普通AI', '困难AI', '专家AI'];
             const diffIndex = ['easy', 'normal', 'hard', 'expert'].indexOf(config.aiDifficulty);
+            const diffName = difficulties[diffIndex] || 'AI';
             const name = config.playerCount === 3 
                 ? ['下家', '上家'][i - 1]
                 : ['下家', '对家', '上家'][i - 1];
             playerConfigs.push({ 
-                name: `${difficulties[diffIndex]}-${name}`, 
+                name: `${diffName}-${name || '对手'}`, 
                 isAI: true 
             });
         }
@@ -363,23 +375,28 @@
                         enablePlayerActions(true);
                         engine.startTimer();
                     }
+                }).catch(err => {
+                    console.warn('playerDraw error:', err);
                 });
             }
         });
         
         engine.on('draw', (data) => {
+            if (!data || !data.player) return;
             renderPlayerHand(data.index, data.player.handSize, true, data.tile?.id);
             updateDeckCount(data.deckCount);
             AudioManager.SFX.draw();
         });
         
         engine.on('discard', (data) => {
+            if (!data || !data.player) return;
             renderDiscardPile(true);
             renderPlayerHand(data.player.position, data.player.handSize);
             AudioManager.SFX.discard();
         });
         
         engine.on('actionAvailable', (data) => {
+            if (!data || !data.player) return;
             if (data.player.position === 0) {
                 enableActionButtons(data.action);
                 AudioManager.SFX.tick();
@@ -387,6 +404,7 @@
         });
         
         engine.on('chi', (data) => {
+            if (!data || !data.player) return;
             UIComponents.showActionEffect('吃');
             renderPlayerMelds(data.player.position);
             renderPlayerHand(data.player.position, data.player.handSize);
@@ -395,6 +413,7 @@
         });
         
         engine.on('peng', (data) => {
+            if (!data || !data.player) return;
             UIComponents.showActionEffect('碰');
             renderPlayerMelds(data.player.position);
             renderPlayerHand(data.player.position, data.player.handSize);
@@ -403,6 +422,7 @@
         });
         
         engine.on('gang', (data) => {
+            if (!data || !data.player) return;
             UIComponents.showActionEffect('杠');
             renderPlayerMelds(data.player.position);
             renderPlayerHand(data.player.position, data.player.handSize);
@@ -412,6 +432,7 @@
         });
         
         engine.on('anGang', (data) => {
+            if (!data || !data.player) return;
             UIComponents.showActionEffect('暗杠');
             renderPlayerMelds(data.player.position);
             renderPlayerHand(data.player.position, data.player.handSize);
@@ -420,6 +441,7 @@
         });
         
         engine.on('hu', (data) => {
+            if (!data || !data.player) return;
             let effectText = data.isZiMo ? '自摸' : '胡';
             if (data.isGangShangKaiHua) {
                 effectText = '杠上开花';
@@ -453,12 +475,14 @@
         });
         
         engine.on('ziMo', (data) => {
+            if (!data || !data.player) return;
             if (data.player.position === 0) {
                 enableActionButtons({ type: 'hu' });
             }
         });
         
         engine.on('anGangOptions', (data) => {
+            if (!data || !data.player) return;
             if (data.player.position === 0) {
                 App.anGangOptions = data.options;
                 enableActionButtons({ type: 'gang' });
@@ -483,8 +507,9 @@
         });
         
         engine.on('queYiMenSelected', (data) => {
+            if (!data || !data.player) return;
             const suitNames = { wan: '万', tong: '筒', tiao: '条' };
-            Utils.toast(`${data.player.name} 缺${suitNames[data.suit]}`);
+            Utils.toast(`${Utils.escapeHtml(data.player.name)} 缺${suitNames[data.suit] || ''}`);
         });
         
         engine.on('invalidHu', (data) => {
@@ -497,8 +522,9 @@
         engine.on('roundEnd', (data) => {
             console.log('一局结束', data);
             // 更新所有玩家分数显示
-            if (!data.players || data.players.length === 0) return;
-            for (let i = 0; i < engine.config.playerCount; i++) {
+            if (!data || !data.players || data.players.length === 0) return;
+            const playerCount = engine.config?.playerCount || 4;
+            for (let i = 0; i < playerCount; i++) {
                 const p = data.players[i];
                 if (p) updatePlayerScore(i, p.score);
             }
@@ -522,7 +548,7 @@
         }
         
         // 渲染弃牌堆
-        renderDiscardPile();
+        renderDiscardPile(false);
         
         // 更新牌堆数量
         const deckCountEl = document.getElementById('deck-count');
@@ -533,7 +559,7 @@
         const windEl = document.getElementById('wind-indicator');
         if (windEl) windEl.textContent = winds[state.currentWind];
         const roundEl = document.getElementById('round-info');
-        if (roundEl) roundEl.textContent = `${state.round}/${App.engine.config.maxRounds}局`;
+        if (roundEl) roundEl.textContent = `${state.round ?? 1}/${App.engine.config?.maxRounds ?? 1}局`;
     }
 
     /**
@@ -552,6 +578,7 @@
         
         if (isSelf) {
             // 自己的牌：全部显示，可点击，支持拖拽
+            if (!player.hand) return;
             player.hand.forEach((tile, index) => {
                 const tileEl = UIComponents.createTileElement(tile, {
                     onClick: handleTileClick,
@@ -586,6 +613,7 @@
             }
         } else if (displayMode === 'full') {
             // 完整显示对手手牌（旁观/调试模式）
+            if (!player.hand) return;
             player.hand.forEach((tile, index) => {
                 const tileEl = UIComponents.createTileElement(tile, { small: true });
                 if (animateLast && index === player.hand.length - 1) {
@@ -609,6 +637,7 @@
         if (!player) return;
         meldsEl.innerHTML = '';
         
+        if (!player.melds) return;
         for (const meld of player.melds) {
             const group = document.createElement('div');
             group.className = 'meld-group';
@@ -631,7 +660,7 @@
         
         pileEl.innerHTML = '';
         
-        App.engine.discardPile.forEach((tile, index) => {
+        (App.engine.discardPile || []).forEach((tile, index) => {
             const tileEl = UIComponents.createTileElement(tile, { small: true });
             // 只在真正的新牌丢弃时添加动画，避免re-render时重复动画
             if (animateLast && index === App.engine.discardPile.length - 1) {
@@ -654,7 +683,7 @@
     function updatePlayerScore(index, score) {
         const position = getPositionName(index);
         const scoreEl = document.querySelector(`#player-${position} .player-score`);
-        if (scoreEl) scoreEl.textContent = score;
+        if (scoreEl) scoreEl.textContent = score ?? '—';
     }
 
     /**
@@ -662,7 +691,7 @@
      */
     function updateDeckCount(count) {
         const el = document.getElementById('deck-count');
-        if (el) el.textContent = `剩余: ${count}`;
+        if (el) el.textContent = `剩余: ${count ?? 0}`;
     }
 
     /**
@@ -733,6 +762,7 @@
         const player = engine.players[0];
         if (!player) return;
         
+        try {
         switch (type) {
             case 'chi':
                 if (engine.pendingAction?.action.type === 'chi') {
@@ -756,8 +786,12 @@
                 break;
             case 'hu':
                 // 优先检查自摸（手牌已包含摸到的牌）
+                if (typeof Rules === 'undefined' || !Rules.canWin) {
+                    console.error('Rules模块未加载');
+                    break;
+                }
                 const selfWin = Rules.canWin(player.hand, engine.ruleConfig);
-                if (selfWin.canWin) {
+                if (selfWin && selfWin.canWin) {
                     await engine.executeAction(player, { type: 'hu', winInfo: selfWin });
                 } else if (engine.pendingAction?.action.type === 'hu' && engine.lastDiscard) {
                     // 点炮胡：必须通过pendingAction验证，防止利用过期lastDiscard作弊
@@ -772,15 +806,18 @@
                     App.anGangOptions = null;
                     disableActionButtons();
                     enablePlayerActions(true);
-                } else if (engine.currentPlayerIndex === 0 && player.hand.length > (engine.typeConfig?.handSize || 13)) {
+                } else if (engine.currentPlayerIndex === 0 && player.hand?.length > (engine.typeConfig?.handSize || 13)) {
                     // 跳过自摸，允许继续打牌
                     enablePlayerActions(true);
                     engine.startTimer();
                 }
                 break;
         }
-        
-        disableActionButtons();
+        } catch (e) {
+            console.error('handleAction error:', e);
+        } finally {
+            disableActionButtons();
+        }
     }
 
     /**
@@ -829,15 +866,15 @@
      * 显示胡牌结果
      */
     function showHuResult(data) {
-        const fanText = data.fan?.fans?.map(f => `${f.name} ${f.fan}番`).join('<br>') || '';
+        const fanText = (data.fan?.fans || []).map(f => `${Utils.escapeHtml(f.name)} ${f.fan}番`).join('<br>');
         let title = data.isZiMo ? '🎉 自摸!' : '🎉 胡牌!';
         if (data.isGangShangKaiHua) {
             title = '🎉 杠上开花!';
         }
         UIComponents.createModal(
             title,
-            `<p><strong>${data.player.name}</strong> 胡牌</p>
-             <p>得分: <strong style="color:var(--accent-gold)">+${data.score}</strong></p>
+            `<p><strong>${Utils.escapeHtml(data.player?.name)}</strong> 胡牌</p>
+             <p>得分: <strong style="color:var(--accent-gold)">+${data.score || 0}</strong></p>
              <p style="font-size:0.85rem;color:var(--text-muted)">${fanText}</p>`,
             [{ text: '确定' }]
         );
@@ -854,8 +891,8 @@
         sorted.forEach((p, i) => {
             const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '•';
             resultHtml += `<div style="padding:6px 0;display:flex;justify-content:space-between">
-                <span>${medal} ${p.name}</span>
-                <span style="color:${p.score > 0 ? 'var(--win-color)' : 'var(--lose-color)'}">${p.score}</span>
+                <span>${medal} ${Utils.escapeHtml(p.name)}</span>
+                <span style="color:${(p.score || 0) > 0 ? 'var(--win-color)' : 'var(--lose-color)'}">${p.score || 0}</span>
             </div>`;
         });
         
@@ -888,6 +925,7 @@
         let winType = null;
         
         for (const entry of App.engine?.gameHistory || []) {
+            if (!entry || !entry.data) continue;
             if (entry.action === 'hu' && entry.data.playerId === 0) {
                 if (entry.data.isZiMo) ziMoCount++;
                 if (entry.data.fan) {
@@ -915,9 +953,13 @@
         
         // 保存回放
         if (App.engine) {
-            const replayData = Replay.createReplayData(App.engine);
-            Replay.saveReplay(replayData);
-            renderReplays();
+            try {
+                const replayData = Replay.createReplayData(App.engine);
+                Replay.saveReplay(replayData);
+                renderReplays();
+            } catch (e) {
+                console.error('保存回放失败:', e);
+            }
         }
         
         loadStats();
@@ -928,12 +970,17 @@
      */
     async function restartGame() {
         if (App.engine) {
-            const config = { ...App.engine.config };
-            App.engine.destroy();
-            App.engine = null;
-            App.anGangOptions = null;
-            AudioManager.stopBgm();
-            await startGame(config);
+            try {
+                const config = { ...App.engine.config };
+                App.engine.destroy();
+                App.engine = null;
+                App.anGangOptions = null;
+                AudioManager.stopBgm();
+                await startGame(config);
+            } catch (e) {
+                console.error('重新开始游戏失败:', e);
+                Utils.toast('游戏启动失败，请返回主菜单');
+            }
         }
     }
 
@@ -946,8 +993,20 @@
             clearTimeout(App._tableEnterTimeout);
             App._tableEnterTimeout = null;
         }
+        // 取消可能存在的退场动画timeout
+        if (App._endGameTimeout) {
+            clearTimeout(App._endGameTimeout);
+            App._endGameTimeout = null;
+        }
         // 清理过时的杠选项
         App.anGangOptions = null;
+        
+        // 立即销毁引擎（不延迟），避免竞态
+        if (App.engine) {
+            App.engine.destroy();
+            App.engine = null;
+        }
+        AudioManager.stopBgm();
         
         // 牌桌退场动画
         const table = document.getElementById('game-table');
@@ -957,12 +1016,8 @@
             table.style.transform = 'scale(0.95) rotateX(5deg)';
         }
         
-        setTimeout(() => {
-            if (App.engine) {
-                App.engine.destroy();
-                App.engine = null;
-            }
-            AudioManager.stopBgm();
+        App._endGameTimeout = setTimeout(() => {
+            App._endGameTimeout = null;
             UIComponents.switchScreen('main-menu');
             App.currentScreen = 'main-menu';
             
@@ -1136,7 +1191,8 @@
         }
         
         if (el.type === 'number') {
-            value = parseInt(value);
+            const n = parseInt(value);
+            value = isNaN(n) ? 0 : n;
         }
         
         // 映射到settings对象
@@ -1169,7 +1225,7 @@
                 applyTheme(value);
             }
             if (key === 'sfx-enabled') {
-                const enabled = value === 'true' || value === true;
+                const enabled = el.type === 'checkbox' ? el.checked : (value === 'true' || value === true);
                 App.settings[settingKey] = enabled; // 存储为布尔值
                 AudioManager.setSfxEnabled(enabled);
                 if (enabled) AudioManager.SFX.toggleSwitch();
@@ -1223,7 +1279,12 @@
         if (_sliderSaveTimer) clearTimeout(_sliderSaveTimer);
         _sliderSaveTimer = setTimeout(() => {
             _sliderSaveTimer = null;
-            Stats.saveSettings(App.settings);
+            try {
+                Stats.saveSettings(App.settings);
+            } catch (e) {
+                console.error('保存设置失败:', e);
+                Utils.toast('设置保存失败');
+            }
         }, 300);
     }
 
@@ -1285,9 +1346,14 @@
      */
     function handleResetStats() {
         if (confirm('确定要重置所有统计数据吗？此操作不可恢复。')) {
-            Stats.resetStats();
-            loadStats();
-            Utils.toast('统计数据已重置');
+            try {
+                Stats.resetStats();
+                loadStats();
+                Utils.toast('统计数据已重置');
+            } catch (e) {
+                console.error('重置统计失败:', e);
+                Utils.toast('重置统计失败');
+            }
         }
     }
 
@@ -1302,6 +1368,9 @@
         // 搜索房间
         App.network.discoverRooms().then(rooms => {
             renderRoomList(rooms);
+        }).catch(err => {
+            console.warn('discoverRooms error:', err);
+            renderRoomList([]);
         });
         
         // 创建房间按钮（使用{once:true}防止重复绑定）
@@ -1312,12 +1381,15 @@
                 AudioManager.SFX.buttonClick();
                 const nameInput = document.getElementById('room-name');
                 const typeSelect = document.getElementById('room-mahjong-type');
-                const name = nameInput ? nameInput.value : '我的麻将房';
+                let name = nameInput ? nameInput.value.trim() : '';
+                if (!name) name = '我的麻将房';
                 const type = typeSelect ? typeSelect.value : 'guangdong';
                 
                 App.network.createRoom(name, type).then(room => {
-                    Utils.toast(`房间 ${name} 已创建`);
+                    Utils.toast(`房间 ${Utils.escapeHtml(name)} 已创建`);
                     // 等待玩家加入
+                }).catch(err => {
+                    Utils.toast('创建房间失败: ' + (err.message || '未知错误'));
                 });
             });
         }
@@ -1340,7 +1412,9 @@
         for (const room of rooms) {
             list.appendChild(UIComponents.createRoomItem(room, (r) => {
                 App.network.joinRoom(r.id).then(() => {
-                    Utils.toast(`已加入房间 ${r.name}`);
+                    Utils.toast(`已加入房间 ${Utils.escapeHtml(r.name || '')}`);
+                }).catch(err => {
+                    Utils.toast('加入房间失败: ' + (err.message || '未知错误'));
                 });
             }));
         }
@@ -1352,6 +1426,17 @@
     function handleKeydown(e) {
         if (App.currentScreen !== 'game-screen') return;
         if (!App.engine) return;
+        
+        // 忽略重复按键（长按不触发）
+        if (e.repeat) return;
+        
+        // 忽略输入法/文本框中的按键
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) {
+            return;
+        }
+        
+        // 忽略带修饰键的按键（防止阻止Ctrl+S等浏览器快捷键）
+        if (e.ctrlKey || e.altKey || e.metaKey) return;
         
         // 如果有模态框打开，忽略游戏快捷键（ESC除外）
         const hasModal = document.querySelector('.modal');
@@ -1411,7 +1496,7 @@
         document.addEventListener('touchstart', (e) => {
             if (e.touches.length === 0) return;
             touchStartY = e.touches[0].clientY;
-        });
+        }, { passive: true });
         
         document.addEventListener('touchend', (e) => {
             if (e.changedTouches.length === 0) return;
@@ -1422,7 +1507,12 @@
             if (diff > 100 && App.currentScreen === 'game-screen') {
                 showIngameMenu();
             }
-        });
+            touchStartY = 0;
+        }, { passive: true });
+        
+        document.addEventListener('touchcancel', () => {
+            touchStartY = 0;
+        }, { passive: true });
     }
 
     // 启动
