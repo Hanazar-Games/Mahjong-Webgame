@@ -13,7 +13,8 @@ const Rules = (function() {
      * 使用递归分解法
      */
     function canWin(hand, config = {}) {
-        if (hand.length % 3 !== 1 && hand.length % 3 !== 2) return false;
+        if (!hand || !Array.isArray(hand)) return { canWin: false };
+        if (hand.length % 3 !== 1 && hand.length % 3 !== 2) return { canWin: false };
         
         const sorted = sortTiles(hand);
         
@@ -219,6 +220,7 @@ const Rules = (function() {
      * 判断是否可以吃
      */
     function canChi(hand, discard, config = {}) {
+        if (!discard) return [];
         if (config.allowChi === false) return [];
         if (discard.isHonor || discard.isFlower) return [];
         
@@ -249,6 +251,7 @@ const Rules = (function() {
      * 判断是否可以碰
      */
     function canPeng(hand, discard, config = {}) {
+        if (!discard) return false;
         if (config.allowPeng === false) return false;
         const sameTiles = hand.filter(t => isSameTile(t, discard));
         return sameTiles.length >= 2;
@@ -258,6 +261,7 @@ const Rules = (function() {
      * 判断是否可以明杠
      */
     function canGang(hand, discard, config = {}) {
+        if (!discard) return false;
         if (config.allowGang === false) return false;
         const sameTiles = hand.filter(t => isSameTile(t, discard));
         return sameTiles.length >= 3;
@@ -268,6 +272,7 @@ const Rules = (function() {
      */
     function canAnGang(hand, melds, config = {}) {
         if (config.allowAnGang === false) return [];
+        if (!Array.isArray(melds)) melds = [];
         const results = [];
         const counts = countTiles(hand);
         const anGangKeys = new Set();
@@ -283,6 +288,7 @@ const Rules = (function() {
         
         // 加杠：已碰过，手中有第4张（排除已有暗杠的）
         for (const meld of melds) {
+            if (!meld || !meld.tiles || !meld.tiles.length) continue;
             if (meld.type === 'triplet') {
                 const key = tileKey(meld.tiles[0]);
                 if (anGangKeys.has(key)) continue;
@@ -305,6 +311,7 @@ const Rules = (function() {
      * @param {Object} context - 上下文
      */
     function calculateFan(hand, melds, winInfo, config = {}, context = {}) {
+        if (!winInfo) return { total: 0, fans: [] };
         let fan = 0;
         const fans = [];
         
@@ -398,10 +405,13 @@ const Rules = (function() {
      * 获取所有参与牌型计算的牌（手牌+副露）
      */
     function getAllTiles(hand, melds) {
+        if (!hand) return [];
         const all = [...hand];
         if (melds) {
             for (const meld of melds) {
-                all.push(...meld.tiles);
+                if (meld && Array.isArray(meld.tiles)) {
+                    all.push(...meld.tiles);
+                }
             }
         }
         return all;
@@ -433,10 +443,11 @@ const Rules = (function() {
     }
 
     function isPingHu(winInfo, melds) {
-        if (winInfo.type !== 'standard') return false;
-        // 平和不能有碰杠副露
-        if (melds && melds.length > 0) return false;
+        if (!winInfo || winInfo.type !== 'standard') return false;
+        // 平和不能有碰杠副露（吃顺子在某些规则中允许）
+        if (melds && melds.some(m => m.type !== 'sequence')) return false;
         // 将牌不能是箭牌或幺九牌
+        if (!winInfo.pair || winInfo.pair.length === 0) return false;
         const pairTile = winInfo.pair[0];
         if (pairTile.isHonor || pairTile.isTerminal) return false;
         // 所有面子都是顺子
@@ -457,6 +468,7 @@ const Rules = (function() {
      * 听牌分析
      */
     function analyzeTingPai(hand, config = {}) {
+        if (!hand || !Array.isArray(hand)) return [];
         const result = [];
         const allPossible = generateAllPossibleTiles(config);
         
@@ -475,19 +487,31 @@ const Rules = (function() {
 
     function generateAllPossibleTiles(config) {
         const tiles = [];
-        const suits = ['wan', 'tong', 'tiao', 'feng', 'jian'];
-        const maxValues = { wan: 9, tong: 9, tiao: 9, feng: 4, jian: 3 };
-        
-        for (const suit of suits) {
-            for (let v = 1; v <= maxValues[suit]; v++) {
-                tiles.push(createTile(suit, v));
+        // 根据麻将种类的牌组配置生成可能的牌
+        const typeConfig = Tiles.getConfig(config.mahjongType);
+        if (typeConfig && typeConfig.tileSets) {
+            for (const set of typeConfig.tileSets) {
+                if (set.suit === 'hua') continue; // 花牌不用于胡牌
+                for (let v = set.range[0]; v <= set.range[1]; v++) {
+                    tiles.push(createTile(set.suit, v));
+                }
+            }
+        } else {
+            // 回退：生成所有标准牌
+            const suits = ['wan', 'tong', 'tiao', 'feng', 'jian'];
+            const maxValues = { wan: 9, tong: 9, tiao: 9, feng: 4, jian: 3 };
+            for (const suit of suits) {
+                for (let v = 1; v <= maxValues[suit]; v++) {
+                    tiles.push(createTile(suit, v));
+                }
             }
         }
         return tiles;
     }
 
     function countRemaining(tile, hand) {
-        const inHand = hand.filter(t => isSameTile(t, tile)).length;
+        if (!tile) return 0;
+        const inHand = hand ? hand.filter(t => isSameTile(t, tile)).length : 0;
         // 花牌只有1张，其他牌通常4张
         const total = tile.isFlower ? 1 : 4;
         return Math.max(0, total - inHand);
@@ -497,6 +521,10 @@ const Rules = (function() {
      * 四川麻将：判断缺门
      */
     function checkQueYiMen(hand, chosenSuit = null) {
+        const validSuits = ['wan', 'tong', 'tiao'];
+        if (chosenSuit && !validSuits.includes(chosenSuit)) {
+            return false;
+        }
         const suits = new Set();
         for (const tile of hand) {
             if (!tile.isHonor && !tile.isFlower) {

@@ -42,19 +42,20 @@ const Replay = (function() {
     }
 
     function createReplayData(engine) {
+        if (!engine || !engine.config) return {};
         return {
             mahjongType: engine.config.mahjongType,
-            players: engine.players.map(p => ({
-                name: p.name,
-                isAI: p.isAI,
-                position: p.position
+            players: (engine.players || []).map(p => ({
+                name: p?.name || '',
+                isAI: p?.isAI || false,
+                position: p?.position || 0
             })),
-            rounds: engine.round,
-            history: engine.gameHistory,
-            finalScores: [...engine.players].sort((a, b) => b.score - a.score).map(p => ({
-                name: p.name,
-                score: p.score,
-                isWin: p.isHu
+            rounds: engine.round || 1,
+            history: engine.gameHistory || [],
+            finalScores: [...(engine.players || [])].sort((a, b) => (b?.score || 0) - (a?.score || 0)).map(p => ({
+                name: p?.name || '',
+                score: p?.score || 0,
+                isWin: p?.isHu || false
             }))
         };
     }

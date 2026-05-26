@@ -41,6 +41,10 @@ class MahjongEngine extends Utils.EventEmitter {
             fast: 400,
             instant: 0
         };
+        // 防御：无效speed回退到normal
+        if (!this.speedMap[this.config.speed]) {
+            this.config.speed = 'normal';
+        }
     }
 
     /**
@@ -62,6 +66,11 @@ class MahjongEngine extends Utils.EventEmitter {
      * 开始游戏
      */
     async start() {
+        // 防御：玩家必须已初始化
+        if (!this.players || this.players.length === 0) {
+            console.error('Engine start: players not initialized');
+            return;
+        }
         // 确保轮次和风位已初始化（防止异常调用导致状态混乱）
         if (!this.round || this.round < 1) this.round = 1;
         if (this.currentWind === undefined || this.currentWind === null) this.currentWind = 0;
@@ -237,6 +246,11 @@ class MahjongEngine extends Utils.EventEmitter {
      */
     async startTurn() {
         const player = this.players[this.currentPlayerIndex];
+        if (!player) {
+            console.error('startTurn: invalid player index', this.currentPlayerIndex);
+            await this.handleDrawGame();
+            return;
+        }
         
         if (player.isHu) {
             await this.nextTurn();
@@ -300,6 +314,11 @@ class MahjongEngine extends Utils.EventEmitter {
         this.stopTimer();
         
         const player = this.players[this.currentPlayerIndex];
+        if (!player) {
+            console.error('playerDiscard: invalid player index');
+            await this.handleDrawGame();
+            return;
+        }
         const tile = player.discard(tileId);
         
         if (!tile) {
@@ -438,6 +457,12 @@ class MahjongEngine extends Utils.EventEmitter {
                 await this.executeHu(player, action);
                 this.pendingAction = null;
                 return;
+            default:
+                console.error('Unknown action type:', action.type);
+                this.pendingAction = null;
+                this.state = 'playing';
+                await this.nextTurn();
+                return;
         }
     }
 
@@ -445,6 +470,12 @@ class MahjongEngine extends Utils.EventEmitter {
      * 执行吃
      */
     async executeChi(player, action) {
+        if (!action.options || action.options.length === 0) {
+            console.error('executeChi: no options available');
+            this.state = 'playing';
+            await this.nextTurn();
+            return;
+        }
         const chiTiles = action.options[0]; // 默认选择第一种吃法
         const discardTile = this.lastDiscard;
         
@@ -488,6 +519,12 @@ class MahjongEngine extends Utils.EventEmitter {
         this.removeFromDiscardPile(discardTile);
         
         const sameTiles = player.hand.filter(t => Tiles.isSameTile(t, discardTile));
+        if (sameTiles.length < 2) {
+            console.error('executePeng: not enough tiles');
+            this.state = 'playing';
+            await this.nextTurn();
+            return;
+        }
         const usedTiles = sameTiles.slice(0, 2);
         
         player.removeFromHand(usedTiles);
@@ -527,6 +564,12 @@ class MahjongEngine extends Utils.EventEmitter {
         
         // 明杠只取3张手牌（防止手牌有4张时变成5张副露）
         const sameTiles = player.hand.filter(t => Tiles.isSameTile(t, discardTile)).slice(0, 3);
+        if (sameTiles.length < 3) {
+            console.error('executeGang: not enough tiles');
+            this.state = 'playing';
+            await this.nextTurn();
+            return;
+        }
         
         player.removeFromHand(sameTiles);
         player.addMeld({
@@ -820,7 +863,12 @@ class MahjongEngine extends Utils.EventEmitter {
     async nextTurn() {
         do {
             this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.config.playerCount;
-        } while (this.players[this.currentPlayerIndex].isHu && !this.isRoundOver());
+            // 防御：players数组异常时的保护
+            if (!this.players[this.currentPlayerIndex]) {
+                console.error('nextTurn: invalid player index', this.currentPlayerIndex);
+                break;
+            }
+        } while (this.players[this.currentPlayerIndex]?.isHu && !this.isRoundOver());
         
         if (this.isRoundOver()) {
             await this.endRound();
@@ -842,6 +890,11 @@ class MahjongEngine extends Utils.EventEmitter {
      */
     async aiTurn(player) {
         await Utils.sleep(this.speedMap[this.config.speed] * 0.8);
+        
+        // 防御：引擎可能在sleep期间被销毁
+        if (this.state === 'idle' || !this.players || !this.players[this.currentPlayerIndex]) {
+            return;
+        }
         
         // AI先摸牌
         const drawResult = await this.playerDraw();
@@ -900,6 +953,8 @@ class MahjongEngine extends Utils.EventEmitter {
         this.timer = setTimeout(async () => {
             // 防御：游戏可能已结束或状态已改变
             if (this.state !== 'playing' || this.currentPlayerIndex !== playerIndex) return;
+            // 额外防御：引擎可能被销毁导致players为空
+            if (!this.players || !this.players[this.currentPlayerIndex]) return;
             const currentPlayer = this.players[this.currentPlayerIndex];
             if (!currentPlayer) return;
             
@@ -952,6 +1007,14 @@ class MahjongEngine extends Utils.EventEmitter {
     destroy() {
         this.stopTimer();
         this.removeAllListeners();
+        this.pendingAction = null;
+        this.currentPlayerIndex = 0;
+        this.gameHistory = [];
+        this.replayData = [];
+        this.round = 1;
+        this.currentWind = 0;
+        this.lastDiscard = null;
+        this.discardPile = [];
         this.players = [];
         this.deck = [];
         this.state = 'idle';

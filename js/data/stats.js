@@ -42,7 +42,16 @@ const Stats = (function() {
 
     function addExp(amount) {
         const stats = getStats();
+        return _addExpToStats(stats, amount);
+    }
+    
+    function _addExpToStats(stats, amount) {
         stats.exp += amount;
+        
+        // 防御：maxExp为0或负数时防止无限循环
+        if (!stats.maxExp || stats.maxExp <= 0) {
+            stats.maxExp = 100;
+        }
         
         // 升级检查
         while (stats.exp >= stats.maxExp) {
@@ -51,7 +60,6 @@ const Stats = (function() {
             stats.maxExp = Math.floor(100 * Math.pow(1.2, stats.level - 1));
         }
         
-        saveStats(stats);
         return stats;
     }
 
@@ -94,6 +102,9 @@ const Stats = (function() {
             stats.playedTypes.push(result.mahjongType);
         }
         
+        // 确保history存在（防御损坏的存储）
+        stats.history = stats.history || [];
+        
         // 添加历史记录
         stats.history.unshift({
             date: new Date().toISOString(),
@@ -109,9 +120,9 @@ const Stats = (function() {
             stats.history = stats.history.slice(0, 50);
         }
         
-        // 加经验
+        // 加经验（内联到同一个stats对象，避免竞态）
         const expGain = result.isWin ? 20 + (result.fan || 0) * 2 : 5;
-        addExp(expGain);
+        _addExpToStats(stats, expGain);
         
         // 检查成就
         checkAchievements(stats, result);

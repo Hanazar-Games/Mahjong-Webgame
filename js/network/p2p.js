@@ -22,12 +22,17 @@ class P2PNetwork extends Utils.EventEmitter {
      */
     async discoverRooms() {
         return new Promise(resolve => {
-            // 读取其他玩家创建的房间
-            const allRooms = JSON.parse(localStorage.getItem('mahjong_network_rooms') || '[]');
+            let allRooms = [];
+            try {
+                const data = localStorage.getItem('mahjong_network_rooms');
+                if (data) allRooms = JSON.parse(data);
+            } catch (e) {
+                console.warn('discoverRooms: malformed data', e);
+            }
             const now = Date.now();
             
             // 过滤过期房间（30秒内活跃）
-            this.rooms = allRooms.filter(r => now - r.lastSeen < 30000);
+            this.rooms = Array.isArray(allRooms) ? allRooms.filter(r => now - r.lastSeen < 30000) : [];
             
             resolve(this.rooms);
         });
@@ -37,6 +42,11 @@ class P2PNetwork extends Utils.EventEmitter {
      * 创建房间
      */
     async createRoom(name, mahjongType) {
+        // 清理旧的定时器
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
         this.isHost = true;
         this.roomId = Utils.uuid();
         
@@ -69,7 +79,15 @@ class P2PNetwork extends Utils.EventEmitter {
      * 广播房间信息
      */
     broadcastRoom(room) {
-        const allRooms = JSON.parse(localStorage.getItem('mahjong_network_rooms') || '[]');
+        let allRooms = [];
+        try {
+            const data = localStorage.getItem('mahjong_network_rooms');
+            if (data) allRooms = JSON.parse(data);
+        } catch (e) {
+            console.warn('broadcastRoom: malformed data', e);
+        }
+        if (!Array.isArray(allRooms)) allRooms = [];
+        
         const existingIndex = allRooms.findIndex(r => r.id === room.id);
         
         if (existingIndex >= 0) {
@@ -91,6 +109,7 @@ class P2PNetwork extends Utils.EventEmitter {
     async joinRoom(roomId) {
         const room = this.rooms.find(r => r.id === roomId);
         if (!room) throw new Error('房间不存在');
+        if (!room.maxPlayers) room.maxPlayers = 4;
         if (room.players >= room.maxPlayers) throw new Error('房间已满');
         
         this.roomId = roomId;
@@ -112,12 +131,19 @@ class P2PNetwork extends Utils.EventEmitter {
      */
     sendToHost(message) {
         const key = `mahjong_room_${this.roomId}_host`;
-        const messages = JSON.parse(localStorage.getItem(key) || '[]');
+        let messages = [];
+        try {
+            const data = localStorage.getItem(key);
+            if (data) messages = JSON.parse(data);
+        } catch (e) { /* ignore */ }
+        if (!Array.isArray(messages)) messages = [];
         messages.push({
             ...message,
             timestamp: Date.now(),
             sender: this.playerId
         });
+        // 限制队列大小防止localStorage溢出
+        if (messages.length > 50) messages = messages.slice(-50);
         localStorage.setItem(key, JSON.stringify(messages));
     }
 
@@ -126,12 +152,18 @@ class P2PNetwork extends Utils.EventEmitter {
      */
     broadcast(message) {
         const key = `mahjong_room_${this.roomId}_broadcast`;
-        const messages = JSON.parse(localStorage.getItem(key) || '[]');
+        let messages = [];
+        try {
+            const data = localStorage.getItem(key);
+            if (data) messages = JSON.parse(data);
+        } catch (e) { /* ignore */ }
+        if (!Array.isArray(messages)) messages = [];
         messages.push({
             ...message,
             timestamp: Date.now(),
             sender: this.playerId
         });
+        if (messages.length > 50) messages = messages.slice(-50);
         localStorage.setItem(key, JSON.stringify(messages));
     }
 
@@ -140,12 +172,18 @@ class P2PNetwork extends Utils.EventEmitter {
      */
     sendTo(playerId, message) {
         const key = `mahjong_msg_${this.roomId}_${playerId}`;
-        const messages = JSON.parse(localStorage.getItem(key) || '[]');
+        let messages = [];
+        try {
+            const data = localStorage.getItem(key);
+            if (data) messages = JSON.parse(data);
+        } catch (e) { /* ignore */ }
+        if (!Array.isArray(messages)) messages = [];
         messages.push({
             ...message,
             timestamp: Date.now(),
             sender: this.playerId
         });
+        if (messages.length > 50) messages = messages.slice(-50);
         localStorage.setItem(key, JSON.stringify(messages));
     }
 
@@ -159,7 +197,14 @@ class P2PNetwork extends Utils.EventEmitter {
             ? `mahjong_room_${this.roomId}_host`
             : `mahjong_room_${this.roomId}_broadcast`;
         
-        const messages = JSON.parse(localStorage.getItem(key) || '[]');
+        let messages = [];
+        try {
+            const data = localStorage.getItem(key);
+            if (data) messages = JSON.parse(data);
+        } catch (e) {
+            console.warn('receiveMessages: malformed data', e);
+        }
+        if (!Array.isArray(messages)) messages = [];
         
         // 清空已读消息
         localStorage.setItem(key, '[]');
@@ -173,6 +218,11 @@ class P2PNetwork extends Utils.EventEmitter {
     leaveRoom() {
         if (this.pingInterval) {
             clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
+        if (this.discoveryInterval) {
+            clearInterval(this.discoveryInterval);
+            this.discoveryInterval = null;
         }
         
         if (this.isHost && this.roomId) {

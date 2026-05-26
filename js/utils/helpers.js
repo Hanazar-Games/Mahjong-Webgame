@@ -7,6 +7,7 @@ const Utils = {
      * 生成随机整数 [min, max)
      */
     randomInt(min, max) {
+        if (max <= min) return min;
         return Math.floor(Math.random() * (max - min)) + min;
     },
 
@@ -14,9 +15,10 @@ const Utils = {
      * 洗牌算法 (Fisher-Yates)
      */
     shuffle(array) {
+        if (!Array.isArray(array)) return [];
         const arr = [...array];
         for (let i = arr.length - 1; i > 0; i--) {
-            const j = this.randomInt(0, i + 1);
+            const j = Utils.randomInt(0, i + 1);
             [arr[i], arr[j]] = [arr[j], arr[i]];
         }
         return arr;
@@ -85,6 +87,7 @@ const Utils = {
      */
     toast(message, duration = 3000) {
         const container = document.getElementById('toast-container');
+        if (!container) return;
         const toast = document.createElement('div');
         toast.className = 'toast';
         toast.textContent = message;
@@ -106,6 +109,7 @@ const Utils = {
      * 数组分组
      */
     groupBy(array, key) {
+        if (!Array.isArray(array)) return {};
         return array.reduce((result, item) => {
             const group = item[key];
             result[group] = result[group] || [];
@@ -118,6 +122,7 @@ const Utils = {
      * 数组计数
      */
     countBy(array, key) {
+        if (!Array.isArray(array)) return {};
         return array.reduce((result, item) => {
             const val = item[key];
             result[val] = (result[val] || 0) + 1;
@@ -129,14 +134,16 @@ const Utils = {
      * 扁平化数组
      */
     flatten(array) {
+        if (!Array.isArray(array)) return [];
         return array.reduce((flat, item) => 
-            flat.concat(Array.isArray(item) ? this.flatten(item) : item), []);
+            flat.concat(Array.isArray(item) ? Utils.flatten(item) : item), []);
     },
 
     /**
      * 比较两个数组是否相等（忽略顺序）
      */
     arraysEqual(a, b) {
+        if (!a || !b) return a === b;
         if (a.length !== b.length) return false;
         const sortedA = [...a].sort();
         const sortedB = [...b].sort();
@@ -147,13 +154,14 @@ const Utils = {
      * 获取对象所有可能的组合
      */
     combinations(array, k) {
+        if (!Array.isArray(array)) return [];
         if (k === 0) return [[]];
         if (array.length < k) return [];
         if (k === 1) return array.map(x => [x]);
         
         const result = [];
         for (let i = 0; i <= array.length - k; i++) {
-            const subCombinations = this.combinations(array.slice(i + 1), k - 1);
+            const subCombinations = Utils.combinations(array.slice(i + 1), k - 1);
             for (const sub of subCombinations) {
                 result.push([array[i], ...sub]);
             }

@@ -223,9 +223,11 @@
      * 开始AI对战
      */
     async function startAIGame() {
+        const mahjongType = App.settings.mahjongType || 'guangdong';
+        const typeConfig = Tiles.getConfig(mahjongType);
         const config = {
-            mahjongType: App.settings.mahjongType || 'guangdong',
-            playerCount: 4,
+            mahjongType: mahjongType,
+            playerCount: typeConfig?.playerCount || 4,
             aiDifficulty: App.settings.aiDifficulty,
             speed: App.settings.gameSpeed,
             maxRounds: parseInt(App.settings.gameRounds)
@@ -495,8 +497,10 @@
         engine.on('roundEnd', (data) => {
             console.log('一局结束', data);
             // 更新所有玩家分数显示
+            if (!data.players || data.players.length === 0) return;
             for (let i = 0; i < engine.config.playerCount; i++) {
-                updatePlayerScore(i, data.players[i].score);
+                const p = data.players[i];
+                if (p) updatePlayerScore(i, p.score);
             }
         });
     }
@@ -511,6 +515,7 @@
         
         // 渲染所有玩家
         for (let i = 0; i < App.engine.config.playerCount; i++) {
+            if (!state.players[i]) continue;
             renderPlayerHand(i, state.players[i].handSize);
             renderPlayerMelds(i);
             updatePlayerScore(i, state.players[i].score);
@@ -552,6 +557,7 @@
                     onClick: handleTileClick,
                     draggable: true,
                     onDragEnd: (t) => {
+                        if (!App.engine || App.engine.state !== 'playing') return;
                         App.engine.playerDiscard(t.id);
                         enablePlayerActions(false);
                     }
@@ -690,7 +696,10 @@
         if (!App.engine || App.engine.state !== 'playing') return;
         if (App.engine.currentPlayerIndex !== 0) return;
         
-        const selected = document.querySelector('.mahjong-tile.selected');
+        // 限定查询范围到手牌区域，避免选中副露区的牌
+        const handEl = document.getElementById('hand-bottom');
+        if (!handEl) return;
+        const selected = handEl.querySelector('.mahjong-tile.selected');
         
         if (selected) {
             const selectedId = selected.dataset.id;
@@ -703,13 +712,13 @@
                 // 选择另一张牌
                 AudioManager.SFX.selectTile();
                 selected.classList.remove('selected');
-                const targetEl = document.querySelector(`[data-id="${CSS.escape(tile.id)}"]`);
+                const targetEl = handEl.querySelector(`[data-id="${CSS.escape(tile.id)}"]`);
                 if (targetEl) targetEl.classList.add('selected');
             }
         } else {
             // 选择牌
             AudioManager.SFX.selectTile();
-            const targetEl = document.querySelector(`[data-id="${CSS.escape(tile.id)}"]`);
+            const targetEl = handEl.querySelector(`[data-id="${CSS.escape(tile.id)}"]`);
             if (targetEl) targetEl.classList.add('selected');
         }
     }
@@ -722,6 +731,7 @@
         
         const engine = App.engine;
         const player = engine.players[0];
+        if (!player) return;
         
         switch (type) {
             case 'chi':
@@ -777,6 +787,7 @@
      * 启用操作按钮（增量模式，允许多个按钮同时启用）
      */
     function enableActionButtons(action) {
+        if (!action || !action.type) return;
         const buttonMap = {
             'chi': 'btn-chi',
             'peng': 'btn-peng',
@@ -836,6 +847,7 @@
      * 显示游戏结果
      */
     function showGameResult(data) {
+        if (!data.players || data.players.length === 0) return;
         const sorted = [...data.players].sort((a, b) => b.score - a.score);
         let resultHtml = '<div style="text-align:left;margin:10px 0">';
         
@@ -849,7 +861,7 @@
         
         resultHtml += '</div>';
         
-        const isWin = sorted[0].position === 0;
+        const isWin = sorted[0]?.position === 0;
         
         UIComponents.createModal(
             isWin ? '🏆 胜利!' : '游戏结束',
@@ -865,6 +877,7 @@
      * 保存游戏结果
      */
     function saveGameResult(data) {
+        if (!data.players || data.players.length === 0) return;
         const player = data.players.find(p => p.position === 0);
         const isWin = data.winner?.position === 0;
         
@@ -1316,6 +1329,7 @@
     function renderRoomList(rooms) {
         const list = document.getElementById('room-list');
         if (!list) return;
+        if (!rooms || !Array.isArray(rooms)) rooms = [];
         
         if (rooms.length === 0) {
             list.innerHTML = '<div class="empty-state">暂无可用房间</div>';
@@ -1337,6 +1351,7 @@
      */
     function handleKeydown(e) {
         if (App.currentScreen !== 'game-screen') return;
+        if (!App.engine) return;
         
         // 如果有模态框打开，忽略游戏快捷键（ESC除外）
         const hasModal = document.querySelector('.modal');

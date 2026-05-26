@@ -11,6 +11,7 @@ const AIPlayer = (function() {
      * AI选择打哪张牌
      */
     function chooseDiscard(player, difficulty = 'normal') {
+        if (!player || !player.hand) return null;
         const hand = player.hand;
         const melds = player.melds;
         
@@ -38,7 +39,10 @@ const AIPlayer = (function() {
             return true;
         });
         
-        if (candidates.length === 0) return hand[0];
+        if (candidates.length === 0) {
+            // 所有牌都是候选（包括花牌），至少返回一张
+            return hand[0] || null;
+        }
         
         // 优先打孤张风牌和箭牌
         const honorTiles = candidates.filter(t => t.isHonor);
@@ -53,7 +57,9 @@ const AIPlayer = (function() {
      * 普通AI：基本策略
      */
     function chooseDiscardNormal(hand, melds) {
+        if (!hand || hand.length === 0) return null;
         const scores = evaluateHand(hand, melds, 'normal');
+        if (scores.length === 0) return null;
         const sorted = scores.sort((a, b) => a.score - b.score);
         return sorted[0].tile;
     }
@@ -62,11 +68,14 @@ const AIPlayer = (function() {
      * 困难AI：进阶策略
      */
     function chooseDiscardHard(hand, melds) {
+        if (!hand || hand.length === 0) return null;
         const scores = evaluateHand(hand, melds, 'hard');
+        if (scores.length === 0) return null;
         const sorted = scores.sort((a, b) => a.score - b.score);
         
         // 考虑听牌效率
         const bestTiles = sorted.slice(0, 3);
+        if (bestTiles.length === 0) return null;
         let bestTile = bestTiles[0].tile;
         let bestTingCount = -1;
         
@@ -87,7 +96,9 @@ const AIPlayer = (function() {
      * 专家AI：最优策略
      */
     function chooseDiscardExpert(hand, melds, player) {
+        if (!hand || hand.length === 0) return null;
         const scores = evaluateHand(hand, melds, 'expert');
+        if (scores.length === 0) return null;
         
         // 考虑多种因素
         const weightedScores = scores.map(item => {
@@ -116,7 +127,7 @@ const AIPlayer = (function() {
         });
         
         weightedScores.sort((a, b) => a.score - b.score);
-        return weightedScores[0].tile;
+        return weightedScores.length > 0 ? weightedScores[0].tile : null;
     }
 
     /**
@@ -127,6 +138,7 @@ const AIPlayer = (function() {
         const results = [];
         
         for (const tile of hand) {
+            if (!tile) continue;
             let score = 0;
             const key = `${tile.suit}-${tile.value}`;
             const count = counts[key] || 0;
@@ -190,7 +202,8 @@ const AIPlayer = (function() {
                         suitCounts[t.suit] = (suitCounts[t.suit] || 0) + 1;
                     }
                 }
-                const maxSuitCount = Math.max(...Object.values(suitCounts));
+                const suitValues = Object.values(suitCounts);
+                const maxSuitCount = suitValues.length > 0 ? Math.max(...suitValues) : 0;
                 if (!tile.isHonor && suitCounts[tile.suit] < maxSuitCount - 3) {
                     score += 3; // 倾向于打少数花色
                 }
@@ -225,6 +238,7 @@ const AIPlayer = (function() {
      * 判断是否暗杠
      */
     function shouldAnGang(player, options, difficulty = 'normal') {
+        if (!options || options.length === 0) return false;
         if (difficulty === 'easy') {
             return Math.random() < 0.3;
         }
@@ -259,6 +273,7 @@ const AIPlayer = (function() {
      * AI选择吃碰杠
      */
     function shouldAction(player, action, tile, difficulty = 'normal') {
+        if (!player || !action) return false;
         if (difficulty === 'easy') {
             return Math.random() < 0.5;
         }
@@ -278,6 +293,7 @@ const AIPlayer = (function() {
     }
 
     function shouldChi(player, action, difficulty) {
+        if (!player || !action) return false;
         if (difficulty === 'normal') {
             return Math.random() < 0.6;
         }
@@ -289,12 +305,13 @@ const AIPlayer = (function() {
     }
 
     function shouldPeng(player, action, difficulty) {
+        if (!player || !action) return false;
         if (difficulty === 'normal') {
             return Math.random() < 0.7;
         }
         
         // 风牌/箭牌优先碰
-        if (action.tile.isHonor) {
+        if (action.tile && action.tile.isHonor) {
             return true;
         }
         

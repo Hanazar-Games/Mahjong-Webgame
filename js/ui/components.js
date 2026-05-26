@@ -9,6 +9,7 @@ const UIComponents = (function() {
      * 创建麻将牌DOM元素（真实大号牌面版）
      */
     function createTileElement(tile, options = {}) {
+        if (!tile) return document.createElement('div');
         const div = document.createElement('div');
         div.className = `mahjong-tile suit-${tile.suit || 'unknown'}`;
         if (tile.id) div.dataset.id = tile.id;
@@ -145,12 +146,13 @@ const UIComponents = (function() {
      * 创建玩家信息面板
      */
     function createPlayerInfo(player, isCurrent = false) {
+        if (!player) return document.createElement('div');
         const div = document.createElement('div');
         div.className = `player-info ${isCurrent ? 'current-turn' : ''}`;
         div.innerHTML = `
             <div class="player-avatar">${player.isAI ? '🤖' : '👤'}</div>
-            <div class="player-name">${player.name}</div>
-            <div class="player-score">${player.score}</div>
+            <div class="player-name">${player.name || ''}</div>
+            <div class="player-score">${player.score || 0}</div>
         `;
         return div;
     }
@@ -162,8 +164,10 @@ const UIComponents = (function() {
         const div = document.createElement('div');
         div.className = 'hand-area';
         
-        for (const tile of tiles) {
-            div.appendChild(createTileElement(tile, options));
+        if (Array.isArray(tiles)) {
+            for (const tile of tiles) {
+                div.appendChild(createTileElement(tile, options));
+            }
         }
         
         return div;
@@ -176,16 +180,19 @@ const UIComponents = (function() {
         const div = document.createElement('div');
         div.className = 'melds-area';
         
-        for (const meld of melds) {
-            const group = document.createElement('div');
-            group.className = 'meld-group';
-            
-            for (const tile of meld.tiles) {
-                const tileEl = createTileElement(tile, { small: true });
-                group.appendChild(tileEl);
+        if (Array.isArray(melds)) {
+            for (const meld of melds) {
+                if (!meld || !Array.isArray(meld.tiles)) continue;
+                const group = document.createElement('div');
+                group.className = 'meld-group';
+                
+                for (const tile of meld.tiles) {
+                    const tileEl = createTileElement(tile, { small: true });
+                    group.appendChild(tileEl);
+                }
+                
+                div.appendChild(group);
             }
-            
-            div.appendChild(group);
         }
         
         return div;
@@ -319,10 +326,12 @@ const UIComponents = (function() {
      * 显示动作效果
      */
     function showActionEffect(text) {
+        const app = document.getElementById('app');
+        if (!app) return;
         const div = document.createElement('div');
         div.className = 'action-effect';
         div.textContent = text;
-        document.getElementById('app').appendChild(div);
+        app.appendChild(div);
         setTimeout(() => div.remove(), 1000);
     }
 
@@ -330,10 +339,12 @@ const UIComponents = (function() {
      * 显示连击效果
      */
     function showCombo(text) {
+        const app = document.getElementById('app');
+        if (!app) return;
         const div = document.createElement('div');
         div.className = 'combo-text';
         div.textContent = text;
-        document.getElementById('app').appendChild(div);
+        app.appendChild(div);
         setTimeout(() => div.remove(), 1000);
     }
 
@@ -380,12 +391,14 @@ const UIComponents = (function() {
      * 分数浮动效果
      */
     function showScoreFloat(element, delta, x, y) {
+        const app = document.getElementById('app');
+        if (!app) return;
         const float = document.createElement('div');
         float.className = `score-float ${delta >= 0 ? 'positive' : 'negative'}`;
         float.textContent = delta >= 0 ? `+${delta}` : `${delta}`;
         float.style.left = (x || window.innerWidth / 2) + 'px';
         float.style.top = (y || window.innerHeight / 2) + 'px';
-        document.getElementById('app').appendChild(float);
+        app.appendChild(float);
         setTimeout(() => float.remove(), 1200);
     }
 
@@ -403,6 +416,7 @@ const UIComponents = (function() {
      * 更新统计面板
      */
     function updateStatsPanel(stats) {
+        if (!stats) return;
         const els = {
             'player-level': stats.level,
             'current-exp': stats.exp,

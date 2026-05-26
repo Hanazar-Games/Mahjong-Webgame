@@ -10,7 +10,8 @@ const Storage = (function() {
     function get(key, defaultValue = null) {
         try {
             const data = localStorage.getItem(PREFIX + key);
-            return data ? JSON.parse(data) : defaultValue;
+            if (data === null) return defaultValue;
+            return JSON.parse(data);
         } catch (e) {
             console.error('Storage get error:', e);
             return defaultValue;

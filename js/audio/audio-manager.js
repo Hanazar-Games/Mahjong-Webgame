@@ -83,9 +83,9 @@ const AudioManager = (function() {
 
         const envelope = audioCtx.createGain();
         envelope.gain.setValueAtTime(0, now);
-        envelope.gain.linearRampToValueAtTime(amp, now + attack);
-        envelope.gain.exponentialRampToValueAtTime(Math.max(amp * sustain, 0.0001), now + attack + decay);
-        envelope.gain.exponentialRampToValueAtTime(0.001, now + attack + decay + release);
+        envelope.gain.linearRampToValueAtTime(amp, now + Math.max(attack, 0.001));
+        envelope.gain.exponentialRampToValueAtTime(Math.max(amp * sustain, 0.0001), now + Math.max(attack, 0.001) + Math.max(decay, 0.001));
+        envelope.gain.exponentialRampToValueAtTime(0.001, now + Math.max(attack, 0.001) + Math.max(decay, 0.001) + Math.max(release, 0.001));
 
         modOsc.connect(modGain);
         modGain.connect(carrierOsc.frequency);
@@ -116,7 +116,8 @@ const AudioManager = (function() {
         if (amp <= 0.0001) return;
 
         const now = audioCtx.currentTime;
-        const bufferSize = audioCtx.sampleRate * duration;
+        const safeDuration = Math.min(Math.max(duration, 0.001), 5);
+        const bufferSize = audioCtx.sampleRate * safeDuration;
         const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
         const data = buffer.getChannelData(0);
 
@@ -134,14 +135,14 @@ const AudioManager = (function() {
 
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(amp, now + attack);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + attack + decay);
+        gain.gain.linearRampToValueAtTime(amp, now + Math.max(attack, 0.001));
+        gain.gain.exponentialRampToValueAtTime(0.001, now + Math.max(attack, 0.001) + Math.max(decay, 0.001));
 
         noise.connect(filter);
         filter.connect(gain);
         gain.connect(sfxGain);
         noise.start(now);
-        noise.stop(now + duration);
+        noise.stop(now + safeDuration);
     }
 
     /**
