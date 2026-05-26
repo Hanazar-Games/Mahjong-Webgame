@@ -1296,15 +1296,17 @@
         if (createRoomBtn && !createRoomBtn._listenerAttached) {
             createRoomBtn._listenerAttached = true;
             createRoomBtn.addEventListener('click', () => {
-            AudioManager.SFX.buttonClick();
-            const name = document.getElementById('room-name').value;
-            const type = document.getElementById('room-mahjong-type').value;
-            
-            App.network.createRoom(name, type).then(room => {
-                Utils.toast(`房间 ${name} 已创建`);
-                // 等待玩家加入
+                AudioManager.SFX.buttonClick();
+                const nameInput = document.getElementById('room-name');
+                const typeSelect = document.getElementById('room-mahjong-type');
+                const name = nameInput ? nameInput.value : '我的麻将房';
+                const type = typeSelect ? typeSelect.value : 'guangdong';
+                
+                App.network.createRoom(name, type).then(room => {
+                    Utils.toast(`房间 ${name} 已创建`);
+                    // 等待玩家加入
+                });
             });
-        });
         }
     }
 
