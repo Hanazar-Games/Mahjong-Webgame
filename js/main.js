@@ -24,14 +24,14 @@
         renderAchievements();
         renderReplays();
         
-        // 初始化主题和动画级别
+        // 初始化主题
         applyTheme(App.settings.tableTheme);
-        applyAnimationLevel(App.settings.animationLevel);
         
         // 初始化音频系统
         AudioManager.setupUserInteraction();
         AudioManager.setBgmVolume(App.settings.bgmVolume / 100);
         AudioManager.setSfxVolume(App.settings.sfxVolume / 100);
+        AudioManager.setSfxEnabled(App.settings.sfxEnabled !== false);
         
         // 隐藏加载画面
         setTimeout(() => {
@@ -61,15 +61,12 @@
             'table-theme': App.settings.tableTheme,
             'game-rounds': String(App.settings.gameRounds),
             'game-speed': App.settings.gameSpeed,
-            'ui-density': App.settings.uiDensity,
             'bgm-volume': App.settings.bgmVolume,
             'sfx-volume': App.settings.sfxVolume,
             'sfx-enabled': App.settings.sfxEnabled,
             'bgm-style': App.settings.bgmStyle,
-            'animation-level': App.settings.animationLevel,
+
             'opponent-display': App.settings.opponentDisplay,
-            'table-zoom': App.settings.tableZoom,
-            'hand-size': App.settings.handSize,
             'show-tile-names': App.settings.showTileNames,
             'auto-sort': App.settings.autoSort
         };
@@ -111,6 +108,11 @@
         document.querySelectorAll('.back-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 AudioManager.SFX.buttonClick();
+                // 网络大厅返回：如果在房间内先离开
+                if (btn.id === 'network-lobby-back' && App.network?.roomId) {
+                    App.network.leaveRoom().catch(() => {});
+                    showLobbyContent();
+                }
                 const screen = btn.dataset.screen;
                 if (screen) UIComponents.switchScreen(screen);
             });
@@ -144,23 +146,35 @@
             handleResetStats();
         });
         
-        // 游戏控制按钮
-        document.getElementById('btn-menu')?.addEventListener('click', showIngameMenu);
-        document.getElementById('btn-settings')?.addEventListener('click', () => {
+        // 设置弹窗
+        document.getElementById('btn-open-settings')?.addEventListener('click', () => {
             AudioManager.SFX.buttonClick();
-            endGame();
+            showSettingsModal();
         });
-        document.getElementById('btn-exit')?.addEventListener('click', () => {
+        document.getElementById('settings-close')?.addEventListener('click', () => {
             AudioManager.SFX.buttonClick();
-            if (confirm('确定要退出当前游戏吗？')) {
-                endGame();
+            hideSettingsModal();
+        });
+        document.getElementById('settings-modal')?.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal-overlay')) {
+                hideSettingsModal();
             }
         });
         
-        // 游戏内菜单
+        // 游戏内暂停菜单
+        document.getElementById('btn-menu')?.addEventListener('click', showIngameMenu);
         document.getElementById('btn-resume')?.addEventListener('click', () => {
             AudioManager.SFX.buttonClick();
             hideIngameMenu();
+        });
+        document.getElementById('btn-resume-main')?.addEventListener('click', () => {
+            AudioManager.SFX.buttonClick();
+            hideIngameMenu();
+        });
+        document.getElementById('btn-ingame-settings')?.addEventListener('click', () => {
+            AudioManager.SFX.buttonClick();
+            hideIngameMenu();
+            showSettingsModal();
         });
         document.getElementById('btn-restart')?.addEventListener('click', () => {
             AudioManager.SFX.buttonClick();
@@ -223,6 +237,11 @@
                 App.currentScreen = 'achievements';
                 UIComponents.switchScreen('achievements');
                 break;
+            case 'stats':
+                App.currentScreen = 'stats-page';
+                UIComponents.switchScreen('stats-page');
+                renderStatsPage();
+                break;
         }
     }
 
@@ -237,7 +256,8 @@
             playerCount: typeConfig?.playerCount || 4,
             aiDifficulty: App.settings.aiDifficulty,
             speed: App.settings.gameSpeed,
-            maxRounds: Math.max(1, parseInt(App.settings.gameRounds) || 4)
+            maxRounds: Math.max(1, parseInt(App.settings.gameRounds) || 4),
+            autoSort: App.settings.autoSort !== false
         };
         
         await startGame(config);
@@ -264,7 +284,8 @@
             playerCount: typeConfig.playerCount,
             aiDifficulty: App.settings.aiDifficulty,
             speed: App.settings.gameSpeed,
-            maxRounds: Math.max(1, parseInt(App.settings.gameRounds) || 4)
+            maxRounds: Math.max(1, parseInt(App.settings.gameRounds) || 4),
+            autoSort: App.settings.autoSort !== false
         };
         
         await startGame(config);
@@ -317,9 +338,10 @@
         const selfNameEl = document.getElementById('self-name');
         if (selfNameEl) selfNameEl.textContent = App.settings.playerName || '玩家';
         
-        // 牌桌入场动画
+        // 根据人数调整座位布局 + 牌桌入场动画
         const table = document.getElementById('game-table');
         if (table) {
+            table.classList.toggle('three-player', config.playerCount === 3);
             table.style.opacity = '0';
             table.style.transform = 'scale(0.9) rotateX(10deg)';
             if (App._tableEnterTimeout) clearTimeout(App._tableEnterTimeout);
@@ -348,7 +370,7 @@
             Utils.toast(`${typeName} · 第${data.round}局`);
             AudioManager.SFX.gameStart();
             if (!AudioManager.isPlaying) {
-                AudioManager.startBgm('calm');
+                AudioManager.startBgm(App.settings.bgmStyle || 'calm');
             }
         });
         
@@ -365,7 +387,7 @@
             updatePlayerHighlight(data.index);
             
             if (data.index === 0) {
-                // 玩家回合：摸牌
+                // 本地玩家回合：摸牌
                 engine.playerDraw().then((result) => {
                     // 防御引擎被销毁或替换的竞态
                     if (!App.engine || App.engine !== engine || engine.state !== 'playing') {
@@ -375,9 +397,14 @@
                         enablePlayerActions(true);
                         engine.startTimer();
                     }
+                    // 联机模式：广播状态
+                    if (App.isNetworkGame) broadcastGameState();
                 }).catch(err => {
                     console.warn('playerDraw error:', err);
                 });
+            } else if (App.isNetworkGame) {
+                // 联机模式下远程AI回合：广播状态让远程玩家可以观看
+                broadcastGameState();
             }
         });
         
@@ -386,6 +413,7 @@
             renderPlayerHand(data.index, data.player.handSize, true, data.tile?.id);
             updateDeckCount(data.deckCount);
             AudioManager.SFX.draw();
+            if (App.isNetworkGame) broadcastGameState();
         });
         
         engine.on('discard', (data) => {
@@ -393,6 +421,7 @@
             renderDiscardPile(true);
             renderPlayerHand(data.player.position, data.player.handSize);
             AudioManager.SFX.discard();
+            if (App.isNetworkGame) broadcastGameState();
         });
         
         engine.on('actionAvailable', (data) => {
@@ -410,6 +439,7 @@
             renderPlayerHand(data.player.position, data.player.handSize);
             AudioManager.SFX.chi();
             UIComponents.createParticles(window.innerWidth / 2, window.innerHeight / 2, { count: 8, color: '#4caf50' });
+            if (App.isNetworkGame) broadcastGameState();
         });
         
         engine.on('peng', (data) => {
@@ -419,6 +449,7 @@
             renderPlayerHand(data.player.position, data.player.handSize);
             AudioManager.SFX.peng();
             UIComponents.createParticles(window.innerWidth / 2, window.innerHeight / 2, { count: 12, color: '#2196f3' });
+            if (App.isNetworkGame) broadcastGameState();
         });
         
         engine.on('gang', (data) => {
@@ -429,6 +460,7 @@
             AudioManager.SFX.gang();
             UIComponents.createParticles(window.innerWidth / 2, window.innerHeight / 2, { count: 30, color: '#ff9800', spread: 180, duration: 1200, type: 'star' });
             UIComponents.screenShake(5, 300);
+            if (App.isNetworkGame) broadcastGameState();
         });
         
         engine.on('anGang', (data) => {
@@ -438,6 +470,7 @@
             renderPlayerHand(data.player.position, data.player.handSize);
             AudioManager.SFX.anGang();
             UIComponents.createParticles(window.innerWidth / 2, window.innerHeight / 2, { count: 16, color: '#9c27b0', spread: 120 });
+            if (App.isNetworkGame) broadcastGameState();
         });
         
         engine.on('hu', (data) => {
@@ -460,6 +493,7 @@
                 UIComponents.createParticles(window.innerWidth / 2, window.innerHeight / 2, { count: 40, color: '#d4a843', spread: 220, duration: 1400, type: 'star' });
                 UIComponents.screenShake(6, 400);
             }
+            if (App.isNetworkGame) broadcastGameState();
         });
         
         engine.on('gameEnd', (data) => {
@@ -467,11 +501,13 @@
             saveGameResult(data);
             AudioManager.SFX.gameEnd(data.winner?.position === 0);
             AudioManager.stopBgm();
+            App.isNetworkGame = false;
         });
         
         engine.on('drawGame', (data) => {
             Utils.toast('流局');
             AudioManager.SFX.drawGame();
+            if (App.isNetworkGame) broadcastGameState();
         });
         
         engine.on('ziMo', (data) => {
@@ -528,6 +564,7 @@
                 const p = data.players[i];
                 if (p) updatePlayerScore(i, p.score);
             }
+            if (App.isNetworkGame) broadcastGameState();
         });
     }
 
@@ -583,6 +620,7 @@
                 const tileEl = UIComponents.createTileElement(tile, {
                     onClick: handleTileClick,
                     draggable: true,
+                    showName: App.settings.showTileNames,
                     onDragEnd: (t) => {
                         if (!App.engine || App.engine.state !== 'playing') return;
                         App.engine.playerDiscard(t.id);
@@ -615,7 +653,7 @@
             // 完整显示对手手牌（旁观/调试模式）
             if (!player.hand) return;
             player.hand.forEach((tile, index) => {
-                const tileEl = UIComponents.createTileElement(tile, { small: true });
+                const tileEl = UIComponents.createTileElement(tile, { small: true, showName: App.settings.showTileNames });
                 if (animateLast && index === player.hand.length - 1) {
                     tileEl.classList.add('tile-drawn');
                 }
@@ -701,10 +739,16 @@
         document.querySelectorAll('.player-area').forEach(el => {
             el.classList.remove('current-turn');
         });
+        document.querySelectorAll('.turn-indicator').forEach(el => {
+            el.classList.remove('active');
+        });
         
         const position = getPositionName(index);
         const playerEl = document.getElementById(`player-${position}`);
         if (playerEl) playerEl.classList.add('current-turn');
+        
+        const turnEl = document.getElementById(`turn-${position}`);
+        if (turnEl) turnEl.classList.add('active');
     }
 
     /**
@@ -886,47 +930,120 @@
     function showGameResult(data) {
         if (!data.players || data.players.length === 0) return;
         const sorted = [...data.players].sort((a, b) => b.score - a.score);
-        let resultHtml = '<div style="text-align:left;margin:10px 0">';
-        
-        sorted.forEach((p, i) => {
-            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '•';
-            resultHtml += `<div style="padding:6px 0;display:flex;justify-content:space-between">
-                <span>${medal} ${Utils.escapeHtml(p.name)}</span>
-                <span style="color:${(p.score || 0) > 0 ? 'var(--win-color)' : 'var(--lose-color)'}">${p.score || 0}</span>
-            </div>`;
-        });
-        
-        resultHtml += '</div>';
-        
+        const targetScore = App.engine?.config?.targetScore || 1000;
+        const selfPlayer = sorted.find(p => p.position === 0);
         const isWin = sorted[0]?.position === 0;
+        const netScore = (selfPlayer?.score || 0) - targetScore;
         
-        UIComponents.createModal(
-            isWin ? '🏆 胜利!' : '游戏结束',
-            resultHtml,
-            [
-                { text: '再来一局', onClick: restartGame },
-                { text: '返回主菜单', onClick: endGame }
-            ]
-        );
+        // 渲染结算页
+        const resultScreen = document.getElementById('game-result');
+        if (!resultScreen) return;
+        
+        // 图标和标题
+        const iconEl = document.getElementById('result-icon');
+        const titleEl = document.getElementById('result-title');
+        const subtitleEl = document.getElementById('result-subtitle');
+        
+        if (iconEl) iconEl.textContent = isWin ? '🏆' : '🎭';
+        if (titleEl) {
+            titleEl.textContent = isWin ? '胜利' : '对局结束';
+            titleEl.className = 'result-title ' + (isWin ? 'win' : 'lose');
+        }
+        if (subtitleEl) {
+            const sign = netScore >= 0 ? '+' : '';
+            subtitleEl.textContent = `净胜 ${sign}${netScore} 分`;
+        }
+        
+        // 渲染玩家列表
+        const playersEl = document.getElementById('result-players');
+        if (playersEl) {
+            playersEl.innerHTML = sorted.map((p, i) => {
+                const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'normal';
+                const rankText = i + 1;
+                const pNet = (p.score || 0) - targetScore;
+                const scoreClass = pNet >= 0 ? 'positive' : 'negative';
+                const scoreSign = pNet >= 0 ? '+' : '';
+                const avatar = p.isAI ? '🤖' : '👤';
+                return `
+                    <div class="result-player-row ${p.position === 0 ? 'winner' : ''}">
+                        <div class="result-rank ${rankClass}">${rankText}</div>
+                        <div class="result-p-avatar">${avatar}</div>
+                        <div class="result-p-name">${Utils.escapeHtml(p.name)}</div>
+                        <div class="result-p-score ${scoreClass}">${scoreSign}${pNet}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // 渲染奖励（经验）
+        const rewardsEl = document.getElementById('result-rewards');
+        if (rewardsEl) {
+            const expGain = isWin ? 20 + (data.fan || 0) * 2 : 5;
+            rewardsEl.innerHTML = `
+                <div class="result-reward-chip">✨ +${expGain} EXP</div>
+            `;
+        }
+        
+        // 绑定按钮
+        const restartBtn = document.getElementById('btn-result-restart');
+        const exitBtn = document.getElementById('btn-result-exit');
+        if (restartBtn) {
+            restartBtn.onclick = () => {
+                AudioManager.SFX.buttonClick();
+                restartGame();
+            };
+        }
+        if (exitBtn) {
+            exitBtn.onclick = () => {
+                AudioManager.SFX.buttonClick();
+                endGame();
+            };
+        }
+        
+        // 切换到结算页
+        UIComponents.switchScreen('game-result');
     }
 
     /**
      * 保存游戏结果
+     * 
+     * 语义说明：
+     * - finalScore: 玩家最终总分（含初始 targetScore，如 1200）
+     * - netScore: 净胜分 = finalScore - targetScore（如 +200）
+     * - wonRounds: 玩家在这场比赛中赢的局数
      */
     function saveGameResult(data) {
         if (!data.players || data.players.length === 0) return;
         const player = data.players.find(p => p.position === 0);
         const isWin = data.winner?.position === 0;
         
-        // 从gameHistory统计自摸次数和最大番
+        const targetScore = App.engine?.config?.targetScore || 1000;
+        const finalScore = player?.score || 0;
+        const netScore = finalScore - targetScore;
+        const totalRounds = App.engine?.round || 1;
+        
+        // 从所有对局历史统计（matchHistory 包含已完成的所有局，gameHistory 可能包含当前未结束的局）
+        const allHistory = [];
+        for (const round of (App.engine?.matchHistory || [])) {
+            if (round.history) allHistory.push(...round.history);
+        }
+        if (App.engine?.gameHistory?.length > 0) {
+            allHistory.push(...App.engine.gameHistory);
+        }
+
         let ziMoCount = 0;
+        let huCount = 0;
         let maxFan = 0;
         let hasQingYiSe = false;
         let winType = null;
-        
-        for (const entry of App.engine?.gameHistory || []) {
+        let wonRounds = 0;
+        const seenRounds = new Set();
+
+        for (const entry of allHistory) {
             if (!entry || !entry.data) continue;
-            if (entry.action === 'hu' && entry.data.playerId === 0) {
+
+            if (entry.action === 'hu' && entry.data.playerId === player?.id) {
+                huCount++;
                 if (entry.data.isZiMo) ziMoCount++;
                 if (entry.data.fan) {
                     maxFan = Math.max(maxFan, entry.data.fan.total || 0);
@@ -935,21 +1052,42 @@
                     }
                 }
                 if (entry.data.winType) winType = entry.data.winType;
+                // 按 round 去重统计赢的局数
+                if (entry.round && !seenRounds.has(entry.round)) {
+                    seenRounds.add(entry.round);
+                    wonRounds++;
+                }
             }
         }
+
+        // 如果没有 round 标记，退化为：有胡就算赢1局
+        if (wonRounds === 0 && huCount > 0) wonRounds = 1;
         
-        Stats.recordGame({
+        const result = Stats.recordGame({
             isWin,
-            score: player?.score || 0,
+            finalScore,
+            netScore,
             fan: maxFan,
             mahjongType: App.engine?.config?.mahjongType || 'guangdong',
-            rounds: App.engine?.round || 1,
+            rounds: totalRounds,
+            wonRounds,
             gangCount: player?.gangCount || 0,
-            huCount: player?.isHu ? 1 : 0,
+            huCount,
             ziMoCount,
             winType,
             hasQingYiSe
         });
+        
+        // 显示升级和成就解锁提示
+        if (result.levelResult?.levelsGained > 0) {
+            Utils.toast(`🎉 升级到 Lv.${result.levelResult.newLevel}！`, 3000);
+        }
+        if (result.newlyUnlocked?.length > 0) {
+            for (const ach of result.newlyUnlocked) {
+                Utils.toast(`🏆 解锁成就「${ach.name}」：${ach.desc}`, 4000);
+                UIComponents.flashAchievement?.(ach);
+            }
+        }
         
         // 保存回放
         if (App.engine) {
@@ -1000,6 +1138,7 @@
         }
         // 清理过时的杠选项
         App.anGangOptions = null;
+        App.isNetworkGame = false;
         
         // 立即销毁引擎（不延迟），避免竞态
         if (App.engine) {
@@ -1029,16 +1168,86 @@
     }
 
     /**
+     * 显示/隐藏设置弹窗
+     */
+    function showSettingsModal() {
+        const modal = document.getElementById('settings-modal');
+        if (modal) modal.classList.remove('hidden');
+    }
+
+    function hideSettingsModal() {
+        const modal = document.getElementById('settings-modal');
+        if (modal) modal.classList.add('hidden');
+        // 保存设置
+        saveAllSettings();
+    }
+
+    /**
+     * 保存所有设置
+     */
+    function saveAllSettings() {
+        const fields = {
+            'player-name': 'playerName',
+            'ai-difficulty': 'aiDifficulty',
+            'table-theme': 'tableTheme',
+            'game-rounds': 'gameRounds',
+            'game-speed': 'gameSpeed',
+
+            'opponent-display': 'opponentDisplay',
+            'sfx-enabled': 'sfxEnabled',
+            'bgm-style': 'bgmStyle',
+            'show-tile-names': 'showTileNames',
+            'auto-sort': 'autoSort',
+            'bgm-volume': 'bgmVolume',
+            'sfx-volume': 'sfxVolume'
+        };
+        for (const [id, key] of Object.entries(fields)) {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            let value = el.value;
+            if (el.type === 'checkbox') value = el.checked;
+            else if (el.type === 'range') value = parseInt(value);
+            else if (value === 'true' || value === 'false') value = value === 'true';
+            App.settings[key] = value;
+        }
+        Stats.saveSettings(App.settings);
+    }
+
+    /**
      * 显示/隐藏游戏内菜单
      */
+    let _wasTimerRunning = false;
+
     function showIngameMenu() {
         const menu = document.getElementById('ingame-menu');
         if (menu) menu.classList.remove('hidden');
+        // 暂停回合计时器，防止玩家在菜单打开时被自动出牌
+        _wasTimerRunning = !!(App.engine?.timer);
+        App.engine?.stopTimer();
     }
 
     function hideIngameMenu() {
         const menu = document.getElementById('ingame-menu');
         if (menu) menu.classList.add('hidden');
+        // 恢复回合计时器（仅当暂停前计时器在运行、且仍是玩家回合时）
+        if (_wasTimerRunning && App.engine && App.engine.state === 'playing') {
+            const player = App.engine.players[App.engine.currentPlayerIndex];
+            if (player && !player.isAI) {
+                App.engine.startTimer();
+            }
+        }
+        _wasTimerRunning = false;
+    }
+
+    /**
+     * 显示动作反馈文字
+     */
+    function showActionFeedback(text, duration = 800) {
+        const el = document.getElementById('action-feedback');
+        if (!el) return;
+        el.textContent = text;
+        el.classList.add('show');
+        setTimeout(() => el.classList.remove('show'), duration);
     }
 
     /**
@@ -1151,6 +1360,196 @@
     }
 
     /**
+     * 渲染战绩页
+     */
+    function renderStatsPage() {
+        const container = document.getElementById('stats-page-content');
+        if (!container) return;
+
+        const summary = Stats.getMatchSummary();
+        const level = Stats.getLevelProgress();
+        const achievements = Stats.getAchievements();
+        const unlockedCount = achievements.filter(a => a.unlocked).length;
+
+        // 等级卡片
+        const levelCard = `
+            <div class="stats-card level-card">
+                <div class="level-header">
+                    <div class="level-big">Lv.${level.level}</div>
+                    <div class="level-exp-detail">
+                        <span>${level.currentExp} / ${level.nextLevelExp} EXP</span>
+                        <span class="level-percent">${level.percent}%</span>
+                    </div>
+                </div>
+                <div class="exp-bar-large">
+                    <div class="exp-fill-large" style="width:${level.percent}%"></div>
+                </div>
+                <div class="level-hint">累计获得 ${level.totalExpEarned} 点经验 · 再赢 ${Math.ceil((level.nextLevelExp - level.currentExp) / 20)} 场即可升级</div>
+            </div>
+        `;
+
+        // 概览卡片
+        const overviewCard = `
+            <div class="stats-card overview-card">
+                <h3>📊 战绩概览</h3>
+                <div class="overview-grid">
+                    <div class="overview-item">
+                        <div class="overview-value ${summary.wins > summary.losses ? 'win' : ''}">${summary.totalGames}</div>
+                        <div class="overview-label">总场数</div>
+                    </div>
+                    <div class="overview-item">
+                        <div class="overview-value win">${summary.wins}</div>
+                        <div class="overview-label">胜场</div>
+                    </div>
+                    <div class="overview-item">
+                        <div class="overview-value lose">${summary.losses}</div>
+                        <div class="overview-label">负场</div>
+                    </div>
+                    <div class="overview-item">
+                        <div class="overview-value">${summary.winRate}%</div>
+                        <div class="overview-label">胜率</div>
+                    </div>
+                    <div class="overview-item">
+                        <div class="overview-value">${summary.totalRounds}</div>
+                        <div class="overview-label">总局数</div>
+                    </div>
+                    <div class="overview-item">
+                        <div class="overview-value">${summary.maxStreak}</div>
+                        <div class="overview-label">最高连胜</div>
+                    </div>
+                </div>
+                <div class="overview-detail">
+                    <div class="detail-row">
+                        <span>累计净胜分</span>
+                        <span class="${summary.totalScore >= 0 ? 'win' : 'lose'}">${summary.totalScore >= 0 ? '+' : ''}${summary.totalScore}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span>单场最高净胜</span>
+                        <span class="win">+${summary.bestGame}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span>场均净胜</span>
+                        <span class="${summary.avgNetScore >= 0 ? 'win' : 'lose'}">${summary.avgNetScore >= 0 ? '+' : ''}${summary.avgNetScore}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span>近7场胜率</span>
+                        <span>${summary.recentWinRate}%</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 成就进度
+        const achievementCard = `
+            <div class="stats-card achievement-card">
+                <h3>🏆 成就进度 (${unlockedCount}/${achievements.length})</h3>
+                <div class="achievement-mini-list">
+                    ${achievements.map(ach => `
+                        <div class="achievement-mini ${ach.unlocked ? 'unlocked' : 'locked'}">
+                            <span class="ach-mini-icon">${ach.icon}</span>
+                            <div class="ach-mini-info">
+                                <span class="ach-mini-name">${ach.name}</span>
+                                <span class="ach-mini-desc">${ach.desc}</span>
+                                ${!ach.unlocked ? `
+                                    <div class="ach-mini-bar-wrap">
+                                        <div class="ach-mini-bar" style="width:${ach.progress}%"></div>
+                                    </div>
+                                ` : '<span class="ach-mini-unlocked">✓ 已解锁</span>'}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        // 历史战绩表
+        let historyTable = '';
+        if (summary.history.length > 0) {
+            historyTable = `
+                <div class="stats-card history-card">
+                    <h3>📜 近期战绩</h3>
+                    <div class="history-table-wrap">
+                        <table class="history-table">
+                            <thead>
+                                <tr>
+                                    <th>日期</th>
+                                    <th>类型</th>
+                                    <th>结果</th>
+                                    <th>净胜分</th>
+                                    <th>总局/胜局</th>
+                                    <th>最高番</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${summary.history.map(h => {
+                                    const date = new Date(h.date);
+                                    const dateStr = `${date.getMonth()+1}/${date.getDate()} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+                                    return `
+                                        <tr class="${h.isWin ? 'win-row' : 'lose-row'}">
+                                            <td>${dateStr}</td>
+                                            <td>${Utils.escapeHtml(h.mahjongType || '')}</td>
+                                            <td><span class="result-badge ${h.isWin ? 'win' : 'lose'}">${h.isWin ? '胜' : '负'}</span></td>
+                                            <td class="${(h.netScore || 0) >= 0 ? 'win' : 'lose'}">${(h.netScore || 0) >= 0 ? '+' : ''}${h.netScore || 0}</td>
+                                            <td>${h.wonRounds || 0}/${h.rounds || 1}</td>
+                                            <td>${h.fan || 0}番</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        } else {
+            historyTable = `
+                <div class="stats-card history-card empty">
+                    <h3>📜 近期战绩</h3>
+                    <div class="empty-state">暂无对局记录，快去开一局吧！</div>
+                </div>
+            `;
+        }
+
+        // 经验来源说明
+        const expSourceCard = `
+            <div class="stats-card exp-source-card">
+                <h3>💡 经验与成就说明</h3>
+                <div class="exp-source-list">
+                    <div class="exp-source-item">
+                        <span class="exp-source-icon">🏆</span>
+                        <div>
+                            <strong>胜利</strong>：基础 20 EXP + 番数×2
+                            <span class="exp-source-example">例：胡出8番 → 20 + 16 = 36 EXP</span>
+                        </div>
+                    </div>
+                    <div class="exp-source-item">
+                        <span class="exp-source-icon">🥔</span>
+                        <div>
+                            <strong>失败</strong>：基础 5 EXP
+                            <span class="exp-source-example">虽败犹荣，每局都有成长</span>
+                        </div>
+                    </div>
+                    <div class="exp-source-item">
+                        <span class="exp-source-icon">📈</span>
+                        <div>
+                            <strong>升级</strong>：每级所需经验递增 20%
+                            <span class="exp-source-example">Lv.1→2 需 100 EXP，Lv.2→3 需 120 EXP</span>
+                        </div>
+                    </div>
+                    <div class="exp-source-item">
+                        <span class="exp-source-icon">🎯</span>
+                        <div>
+                            <strong>净胜分</strong>：最终总分 − 初始分（默认1000分）
+                            <span class="exp-source-example">避免初始分干扰，真实反映战绩</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = levelCard + overviewCard + achievementCard + historyTable + expSourceCard;
+    }
+
+    /**
      * 渲染回放列表
      */
     function renderReplays() {
@@ -1166,15 +1565,595 @@
         
         container.innerHTML = '';
         for (const replay of replays) {
-            container.appendChild(UIComponents.createReplayItem(replay,
-                (r) => Utils.toast('回放功能开发中...'),
-                (r) => {
+            // 适配新数据格式：rounds 是数组
+            const roundCount = Array.isArray(replay.rounds) ? replay.rounds.length : (replay.rounds || 1);
+            container.appendChild(UIComponents.createReplayItem(
+                { ...replay, rounds: roundCount },
+                () => openReplayPlayer(replay),
+                () => {
                     if (confirm('确定删除这条记录？')) {
-                        Replay.deleteReplay(r.id);
+                        Replay.deleteReplay(replay.id);
                         renderReplays();
                     }
                 }
             ));
+        }
+    }
+
+    // ===== 回放播放器 =====
+
+    let _replayPlayer = null;
+
+    function openReplayPlayer(replay) {
+        _replayPlayer = new ReplayPlayer(replay);
+        UIComponents.switchScreen('replay-player');
+        _replayPlayer.init();
+    }
+
+    class ReplayPlayer {
+        constructor(replayData) {
+            this.data = replayData;
+            this.rounds = Array.isArray(replayData.rounds) ? replayData.rounds : [];
+            this.currentRoundIdx = 0;
+            this.currentStep = -1;
+            this.isPlaying = false;
+            this.playTimer = null;
+            this.speed = 1;
+            this.speeds = [1, 2, 4];
+            this.speedIdx = 0;
+            this.players = replayData.players || [];
+            this.playerStates = [];
+            this.discardPile = [];
+        }
+
+        init() {
+            this._bindEvents();
+            this._updateHeader();
+            if (this.rounds.length > 0) {
+                this.loadRound(0);
+            } else {
+                document.getElementById('replay-action-text').textContent = '无回放数据';
+            }
+        }
+
+        destroy() {
+            this.pause();
+            if (this.playTimer) { clearTimeout(this.playTimer); this.playTimer = null; }
+            _replayPlayer = null;
+        }
+
+        _bindEvents() {
+            document.getElementById('replay-back-btn')?.addEventListener('click', () => {
+                this.destroy();
+                UIComponents.switchScreen('replay-list');
+            });
+            document.getElementById('replay-play-pause')?.addEventListener('click', () => {
+                AudioManager.SFX.buttonClick();
+                if (this.isPlaying) this.pause(); else this.play();
+            });
+            document.getElementById('replay-step-forward')?.addEventListener('click', () => {
+                AudioManager.SFX.buttonClick();
+                this.stepForward();
+            });
+            document.getElementById('replay-step-back')?.addEventListener('click', () => {
+                AudioManager.SFX.buttonClick();
+                this.stepBack();
+            });
+            document.getElementById('replay-speed')?.addEventListener('click', () => {
+                AudioManager.SFX.buttonClick();
+                this.speedIdx = (this.speedIdx + 1) % this.speeds.length;
+                this.speed = this.speeds[this.speedIdx];
+                const btn = document.getElementById('replay-speed');
+                if (btn) btn.textContent = this.speed + '×';
+            });
+            document.getElementById('replay-progress')?.addEventListener('input', (e) => {
+                const max = this._getTotalSteps() - 1;
+                const val = parseInt(e.target.value);
+                if (max > 0) this.goToStep(Math.round(val / 100 * max));
+            });
+            document.getElementById('replay-round-prev')?.addEventListener('click', () => {
+                AudioManager.SFX.buttonClick();
+                if (this.currentRoundIdx > 0) this.loadRound(this.currentRoundIdx - 1);
+            });
+            document.getElementById('replay-round-next')?.addEventListener('click', () => {
+                AudioManager.SFX.buttonClick();
+                if (this.currentRoundIdx < this.rounds.length - 1) this.loadRound(this.currentRoundIdx + 1);
+            });
+        }
+
+        _getTotalSteps() {
+            const round = this.rounds[this.currentRoundIdx];
+            return round?.history?.length || 0;
+        }
+
+        loadRound(idx) {
+            this.pause();
+            this.currentRoundIdx = idx;
+            this.currentStep = -1;
+            this.playerStates = [];
+            this.discardPile = [];
+            this._updateHeader();
+            this._buildTimeline();
+            this._resetTable();
+            this._updateProgress();
+
+            const round = this.rounds[idx];
+            if (round?.history?.length > 0) {
+                this.goToStep(0);
+            }
+        }
+
+        _updateHeader() {
+            const typeConfig = Tiles.getConfig(this.data.mahjongType);
+            const typeName = typeConfig?.name || this.data.mahjongType || '未知';
+            const round = this.rounds[this.currentRoundIdx];
+            const winds = ['东', '南', '西', '北'];
+            const windName = winds[round?.wind ?? 0] || '东';
+
+            const titleEl = document.getElementById('replay-type-name');
+            if (titleEl) titleEl.textContent = typeName;
+
+            const metaEl = document.getElementById('replay-meta');
+            if (metaEl) metaEl.textContent = `第${this.currentRoundIdx + 1}/${this.rounds.length}局 · ${windName}风圈`;
+
+            const roundLabel = document.getElementById('replay-round-label');
+            if (roundLabel) roundLabel.textContent = `局 ${this.currentRoundIdx + 1}`;
+
+            const scoresEl = document.getElementById('replay-scores');
+            if (scoresEl && this.data.finalScores) {
+                scoresEl.innerHTML = this.data.finalScores.map(s =>
+                    `<span class="score-tag${s.isWin ? ' win' : ''}">${Utils.escapeHtml(s.name)}: ${s.score}</span>`
+                ).join('');
+            }
+
+            const roundInfoEl = document.getElementById('replay-round-info');
+            if (roundInfoEl) roundInfoEl.textContent = `${this.currentRoundIdx + 1}/${this.rounds.length}局`;
+
+            const windEl = document.getElementById('replay-wind');
+            if (windEl) windEl.textContent = windName;
+        }
+
+        _buildTimeline() {
+            const container = document.getElementById('replay-timeline');
+            if (!container) return;
+            container.innerHTML = '';
+
+            const round = this.rounds[this.currentRoundIdx];
+            if (!round?.history) return;
+
+            round.history.forEach((item, idx) => {
+                const desc = this._describeAction(item);
+                const el = document.createElement('div');
+                el.className = 'replay-timeline-item';
+                el.dataset.index = idx;
+                el.innerHTML = `
+                    <span class="step-num">${idx + 1}</span>
+                    <span class="step-action">${desc.icon} ${desc.text}</span>
+                    <span class="step-player">${Utils.escapeHtml(desc.player || '')}</span>
+                `;
+                el.addEventListener('click', () => {
+                    AudioManager.SFX.buttonClick();
+                    this.goToStep(idx);
+                });
+                container.appendChild(el);
+            });
+        }
+
+        _describeAction(item) {
+            if (!item) return { icon: '', text: '', player: '' };
+            const action = item.action;
+            const data = item.data || {};
+
+            const nameMap = {};
+            for (const p of this.players) {
+                if (p.id) nameMap[p.id] = p.name;
+                if (p.position !== undefined) nameMap[p.position] = p.name;
+            }
+            const pid = data.playerId !== undefined ? data.playerId : data.player;
+            const playerName = nameMap[pid] || this.players[pid]?.name || pid || '';
+
+            switch (action) {
+                case 'gameStart': return { icon: '🎮', text: `第${data.round}局开始`, player: '' };
+                case 'draw': return { icon: '🃏', text: '摸牌', player: playerName };
+                case 'discard': {
+                    const tileName = this._getTileName(data.tile);
+                    return { icon: '🎯', text: `打出 ${tileName}`, player: playerName };
+                }
+                case 'chi': {
+                    const tiles = (data.tiles || []).map(t => this._getTileName(t)).join('');
+                    return { icon: '🍽', text: `吃 ${tiles}`, player: playerName };
+                }
+                case 'peng': {
+                    const tiles = (data.tiles || []).map(t => this._getTileName(t)).join('');
+                    return { icon: '👏', text: `碰 ${tiles}`, player: playerName };
+                }
+                case 'gang': {
+                    const tiles = (data.tiles || []).map(t => this._getTileName(t)).join('');
+                    return { icon: '💥', text: `杠 ${tiles}`, player: playerName };
+                }
+                case 'anGang': {
+                    const tiles = (data.tiles || []).map(t => this._getTileName(t)).join('');
+                    return { icon: '🕶', text: `暗杠 ${tiles}`, player: playerName };
+                }
+                case 'jiaGang': {
+                    const tileName = this._getTileName(data.meldId);
+                    return { icon: '➕', text: `加杠 ${tileName}`, player: playerName };
+                }
+                case 'hu': {
+                    const ziMo = data.isZiMo ? '自摸' : '点炮';
+                    const fan = data.fan?.total || 0;
+                    return { icon: '🎉', text: `${ziMo}胡牌 ${fan}番`, player: playerName };
+                }
+                case 'drawGame': return { icon: '🤝', text: '流局', player: '' };
+                case 'roundEnd': return { icon: '🏁', text: `第${data.round}局结束`, player: '' };
+                default: return { icon: '•', text: action, player: playerName };
+            }
+        }
+
+        _getTileName(tileIdOrObj) {
+            if (!tileIdOrObj) return '?';
+            if (typeof tileIdOrObj === 'object') {
+                return tileIdOrObj.name || tileIdOrObj.shortName || `${tileIdOrObj.suit}${tileIdOrObj.value}`;
+            }
+            const tile = this._findTile(tileIdOrObj);
+            if (tile) return tile.name || tile.shortName || '?';
+            return '?';
+        }
+
+        _findTile(tileId) {
+            if (!tileId) return null;
+            if (typeof tileId === 'object') return tileId;
+
+            for (const p of this.playerStates) {
+                for (const t of (p.hand || [])) {
+                    if ((t.id || t) === tileId) return t.id ? t : null;
+                }
+                for (const t of (p.discards || [])) {
+                    if ((t.id || t) === tileId) return t.id ? t : null;
+                }
+                for (const meld of (p.melds || [])) {
+                    for (const t of (meld.tiles || meld)) {
+                        if ((t.id || t) === tileId) return t.id ? t : null;
+                    }
+                }
+            }
+
+            for (const t of this.discardPile) {
+                if ((t.id || t) === tileId) return t.id ? t : null;
+            }
+
+            const round = this.rounds[this.currentRoundIdx];
+            if (round?.players) {
+                for (const p of round.players) {
+                    if (p.hand) {
+                        for (const t of p.hand) {
+                            if ((t.id || t) === tileId) return t.id ? t : null;
+                        }
+                    }
+                    if (p.melds) {
+                        for (const meld of p.melds) {
+                            for (const t of (meld.tiles || meld)) {
+                                if ((t.id || t) === tileId) return t.id ? t : null;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (typeof tileId === 'string') {
+                const parts = tileId.split('_');
+                if (parts.length >= 2) {
+                    return Tiles.createTile(parts[0], parseInt(parts[1]), tileId);
+                }
+            }
+            return null;
+        }
+
+        _resetTable() {
+            ['top', 'left', 'right', 'bottom'].forEach(pos => {
+                document.getElementById(`replay-hand-${pos}`).innerHTML = '';
+                document.getElementById(`replay-melds-${pos}`).innerHTML = '';
+            });
+            document.getElementById('replay-discard-pile').innerHTML = '';
+        }
+
+        goToStep(stepIdx) {
+            const round = this.rounds[this.currentRoundIdx];
+            if (!round?.history) return;
+            if (stepIdx < 0) stepIdx = 0;
+            if (stepIdx >= round.history.length) stepIdx = round.history.length - 1;
+
+            this.playerStates = [];
+            this.discardPile = [];
+            this._resetTable();
+
+            const hasGameStart = round.history.some(h => h.action === 'gameStart');
+            if (!hasGameStart && round.players) {
+                this.playerStates = round.players.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    score: p.score ?? 1000,
+                    position: p.position ?? 0,
+                    hand: [],
+                    melds: Array.isArray(p.melds) ? p.melds.map(m => ({...m, tiles: [...(m.tiles || [])]})) : [],
+                    discards: [],
+                    isHu: p.isHu || false,
+                    isDealer: p.isDealer || false
+                }));
+            }
+
+            for (let i = 0; i <= stepIdx; i++) {
+                this._applyStep(round.history[i]);
+            }
+
+            this.currentStep = stepIdx;
+            this._renderState();
+            this._updateUI(stepIdx);
+        }
+
+        stepForward() {
+            if (this.currentStep < this._getTotalSteps() - 1) {
+                this.goToStep(this.currentStep + 1);
+            } else if (this.currentRoundIdx < this.rounds.length - 1) {
+                this.loadRound(this.currentRoundIdx + 1);
+            }
+        }
+
+        stepBack() {
+            if (this.currentStep > 0) {
+                this.goToStep(this.currentStep - 1);
+            } else if (this.currentRoundIdx > 0) {
+                this.loadRound(this.currentRoundIdx - 1);
+                const prevRound = this.rounds[this.currentRoundIdx];
+                if (prevRound?.history?.length > 0) {
+                    this.goToStep(prevRound.history.length - 1);
+                }
+            }
+        }
+
+        play() {
+            if (this.isPlaying) return;
+            this.isPlaying = true;
+            const btn = document.getElementById('replay-play-pause');
+            if (btn) btn.textContent = '⏸';
+            this._scheduleNext();
+        }
+
+        pause() {
+            this.isPlaying = false;
+            const btn = document.getElementById('replay-play-pause');
+            if (btn) btn.textContent = '▶';
+            if (this.playTimer) { clearTimeout(this.playTimer); this.playTimer = null; }
+        }
+
+        _scheduleNext() {
+            if (!this.isPlaying) return;
+            const delay = Math.max(200, 1200 / this.speed);
+            this.playTimer = setTimeout(() => {
+                if (!this.isPlaying) return;
+                if (this.currentStep < this._getTotalSteps() - 1) {
+                    this.stepForward();
+                    this._scheduleNext();
+                } else if (this.currentRoundIdx < this.rounds.length - 1) {
+                    this.loadRound(this.currentRoundIdx + 1);
+                    this.isPlaying = true;
+                    const btn = document.getElementById('replay-play-pause');
+                    if (btn) btn.textContent = '⏸';
+                    this._scheduleNext();
+                } else {
+                    this.pause();
+                }
+            }, delay);
+        }
+
+        _applyStep(item) {
+            if (!item) return;
+            const action = item.action;
+            const data = item.data || {};
+
+            const _removeFromHand = (p, tileId) => {
+                const idx = p.hand.findIndex(t => (t.id || t) === tileId);
+                if (idx >= 0) {
+                    const obj = p.hand[idx];
+                    p.hand.splice(idx, 1);
+                    return obj;
+                }
+                return tileId;
+            };
+
+            switch (action) {
+                case 'gameStart': {
+                    this.playerStates = (data.players || []).map(p => ({
+                        id: p.id,
+                        name: p.name,
+                        score: p.score ?? 1000,
+                        position: p.position ?? 0,
+                        hand: Array.isArray(p.hand) ? [...p.hand] : [],
+                        melds: Array.isArray(p.melds) ? p.melds.map(m => ({...m, tiles: [...(m.tiles || [])]})) : [],
+                        discards: Array.isArray(p.discards) ? [...p.discards] : [],
+                        isHu: p.isHu || false,
+                        isDealer: p.isDealer || false
+                    }));
+                    this.discardPile = [];
+                    break;
+                }
+                case 'draw':
+                    // 引擎不记录 draw，但测试数据可能有；不做任何事
+                    break;
+                case 'discard': {
+                    const p = this._findPlayerState(data.playerId);
+                    if (p) {
+                        const tileObj = _removeFromHand(p, data.tile);
+                        this.discardPile.push(tileObj);
+                    }
+                    break;
+                }
+                case 'chi':
+                case 'peng':
+                case 'gang': {
+                    const p = this._findPlayerState(data.playerId);
+                    if (p) {
+                        const meldTiles = [];
+                        for (const tileId of (data.tiles || [])) {
+                            const obj = _removeFromHand(p, tileId);
+                            meldTiles.push(obj);
+                        }
+                        if (data.from !== undefined && this.discardPile.length > 0) {
+                            const lastDiscard = this.discardPile[this.discardPile.length - 1];
+                            const lastId = lastDiscard.id || lastDiscard;
+                            const consumedId = data.tiles[data.tiles.length - 1];
+                            if (lastId === consumedId) {
+                                this.discardPile.pop();
+                            }
+                        }
+                        p.melds.push({
+                            type: action === 'chi' ? 'sequence' : (action === 'peng' ? 'triplet' : 'gang'),
+                            tiles: meldTiles
+                        });
+                    }
+                    break;
+                }
+                case 'anGang': {
+                    const p = this._findPlayerState(data.playerId);
+                    if (p) {
+                        const meldTiles = [];
+                        for (const tileId of (data.tiles || [])) {
+                            const obj = _removeFromHand(p, tileId);
+                            meldTiles.push(obj);
+                        }
+                        p.melds.push({ type: 'gang', tiles: meldTiles, isAnGang: true });
+                    }
+                    break;
+                }
+                case 'jiaGang': {
+                    const p = this._findPlayerState(data.playerId);
+                    if (p) {
+                        const obj = _removeFromHand(p, data.meldId);
+                        for (const meld of p.melds) {
+                            const tiles = meld.tiles || [];
+                            if (tiles.length === 3 && tiles.some(t => (t.id || t) === data.meldId)) {
+                                tiles.push(obj);
+                                meld.type = 'gang';
+                                meld.isJiaGang = true;
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
+                case 'hu': {
+                    const p = this._findPlayerState(data.playerId);
+                    if (p) p.isHu = true;
+                    break;
+                }
+                case 'roundEnd': {
+                    if (data.players) {
+                        for (const dp of data.players) {
+                            const p = this._findPlayerState(dp.id);
+                            if (p) p.score = dp.score;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        _findPlayerState(id) {
+            return this.playerStates.find(p => p.id === id);
+        }
+
+        _getPositionName(index) {
+            const count = this.players.length || 4;
+            if (count === 3) {
+                return ['bottom', 'left', 'right'][index];
+            }
+            return ['bottom', 'right', 'top', 'left'][index];
+        }
+
+        _renderState() {
+            for (let i = 0; i < this.players.length; i++) {
+                const state = this.playerStates[i];
+                const pos = this._getPositionName(i);
+
+                const handEl = document.getElementById(`replay-hand-${pos}`);
+                if (handEl && state?.hand) {
+                    handEl.innerHTML = '';
+                    for (const t of state.hand) {
+                        const tile = this._findTile(t.id || t);
+                        if (tile) {
+                            handEl.appendChild(UIComponents.createTileElement(tile, { small: true }));
+                        }
+                    }
+                }
+
+                const meldsEl = document.getElementById(`replay-melds-${pos}`);
+                if (meldsEl && state?.melds) {
+                    meldsEl.innerHTML = '';
+                    for (const meld of state.melds) {
+                        const group = document.createElement('div');
+                        group.className = 'meld-group';
+                        const tiles = meld.tiles || meld;
+                        for (const t of tiles) {
+                            const tile = this._findTile(t.id || t);
+                            if (tile) {
+                                group.appendChild(UIComponents.createTileElement(tile, { small: true }));
+                            }
+                        }
+                        meldsEl.appendChild(group);
+                    }
+                }
+
+                this._updatePlayerInfo(i, state);
+            }
+
+            const pileEl = document.getElementById('replay-discard-pile');
+            if (pileEl) {
+                pileEl.innerHTML = '';
+                for (const t of this.discardPile) {
+                    const tile = this._findTile(t.id || t);
+                    if (tile) {
+                        pileEl.appendChild(UIComponents.createTileElement(tile, { small: true }));
+                    }
+                }
+                pileEl.scrollTop = pileEl.scrollHeight;
+            }
+        }
+
+        _updatePlayerInfo(index, playerData) {
+            const pos = this._getPositionName(index);
+            const nameEl = document.getElementById(`replay-name-${pos}`);
+            const scoreEl = document.getElementById(`replay-score-${pos}`);
+            if (nameEl) nameEl.textContent = playerData?.name || `玩家${index + 1}`;
+            if (scoreEl) scoreEl.textContent = playerData?.score ?? 1000;
+        }
+
+        _updateUI(stepIdx) {
+            document.querySelectorAll('.replay-timeline-item').forEach(el => {
+                el.classList.toggle('active', parseInt(el.dataset.index) === stepIdx);
+            });
+            const activeItem = document.querySelector(`.replay-timeline-item[data-index="${stepIdx}"]`);
+            if (activeItem) activeItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+            const round = this.rounds[this.currentRoundIdx];
+            const item = round?.history?.[stepIdx];
+            const desc = item ? this._describeAction(item) : { text: '', sub: '' };
+            const detailEl = document.getElementById('replay-action-text');
+            if (detailEl) detailEl.innerHTML = `${desc.icon} <strong>${Utils.escapeHtml(desc.text)}</strong>`;
+
+            const subEl = document.getElementById('replay-action-sub');
+            if (subEl) subEl.textContent = desc.player ? `玩家: ${Utils.escapeHtml(desc.player)}` : '';
+
+            const counter = document.getElementById('replay-step-counter');
+            if (counter) counter.textContent = `${stepIdx + 1} / ${this._getTotalSteps()}`;
+
+            this._updateProgress();
+        }
+
+        _updateProgress() {
+            const total = this._getTotalSteps();
+            const val = total > 1 ? Math.round(this.currentStep / (total - 1) * 100) : 0;
+            const bar = document.getElementById('replay-progress');
+            if (bar) bar.value = val;
         }
     }
 
@@ -1202,15 +2181,12 @@
             'table-theme': 'tableTheme',
             'game-rounds': 'gameRounds',
             'game-speed': 'gameSpeed',
-            'ui-density': 'uiDensity',
             'bgm-volume': 'bgmVolume',
             'sfx-volume': 'sfxVolume',
             'sfx-enabled': 'sfxEnabled',
             'bgm-style': 'bgmStyle',
-            'animation-level': 'animationLevel',
+
             'opponent-display': 'opponentDisplay',
-            'table-zoom': 'tableZoom',
-            'hand-size': 'handSize',
             'show-tile-names': 'showTileNames',
             'auto-sort': 'autoSort'
         };
@@ -1236,8 +2212,21 @@
                     AudioManager.startBgm(value);
                 }
             }
-            if (key === 'animation-level') {
-                applyAnimationLevel(value);
+
+            if (key === 'auto-sort') {
+                const enabled = value === 'true' || value === true;
+                App.settings[settingKey] = enabled;
+                if (App.engine?.players) {
+                    App.engine.players.forEach(p => { p.autoSort = enabled; });
+                }
+            }
+            if (key === 'show-tile-names') {
+                const enabled = value === 'true' || value === true;
+                App.settings[settingKey] = enabled;
+                // 如果正在游戏中，重新渲染自己的手牌
+                if (App.engine && App.currentScreen === 'game-screen') {
+                    renderPlayerHand(0, App.engine.players[0]?.hand?.length || 0);
+                }
             }
         }
     }
@@ -1258,9 +2247,7 @@
         // 更新内存中的设置，但延迟保存到localStorage
         const keyMap = {
             'bgm-volume': 'bgmVolume',
-            'sfx-volume': 'sfxVolume',
-            'table-zoom': 'tableZoom',
-            'hand-size': 'handSize'
+            'sfx-volume': 'sfxVolume'
         };
         const settingKey = keyMap[el.id];
         if (settingKey) {
@@ -1291,17 +2278,6 @@
     /**
      * 应用动画级别
      */
-    function applyAnimationLevel(level) {
-        document.body.classList.remove('anim-minimal', 'anim-normal', 'anim-rich');
-        if (level === 'minimal') {
-            document.body.classList.add('anim-minimal');
-        } else if (level === 'rich') {
-            document.body.classList.add('anim-rich');
-        } else {
-            document.body.classList.add('anim-normal');
-        }
-    }
-
     /**
      * 应用主题
      */
@@ -1357,41 +2333,222 @@
         }
     }
 
+    // ===== 网络相关 =====
+
     /**
-     * 初始化网络
+     * 初始化网络大厅
      */
     function initNetwork() {
         if (!App.network) {
             App.network = new P2PNetwork();
+            bindNetworkEvents();
         }
-        
-        // 搜索房间
-        App.network.discoverRooms().then(rooms => {
-            renderRoomList(rooms);
-        }).catch(err => {
-            console.warn('discoverRooms error:', err);
-            renderRoomList([]);
-        });
-        
-        // 创建房间按钮（使用{once:true}防止重复绑定）
-        const createRoomBtn = document.getElementById('create-room');
-        if (createRoomBtn && !createRoomBtn._listenerAttached) {
-            createRoomBtn._listenerAttached = true;
-            createRoomBtn.addEventListener('click', () => {
+
+        // 默认连接本地服务器
+        const serverInput = document.getElementById('signal-server');
+        const serverUrl = serverInput?.value?.trim() || 'http://localhost:8081';
+        App.network.setServerUrl(serverUrl);
+
+        // 刷新连接状态
+        updateConnectionStatus(App.network.connected ? 'online' : 'offline');
+
+        // 如果已连接则刷新房间列表
+        if (App.network.connected) {
+            refreshRoomList();
+        }
+
+        // 绑定网络大厅按钮（一次性）
+        bindNetworkLobbyEvents();
+    }
+
+    let _networkLobbyEventsBound = false;
+
+    function bindNetworkLobbyEvents() {
+        if (_networkLobbyEventsBound) return;
+        _networkLobbyEventsBound = true;
+
+        // 连接/断开按钮（动态生成）
+        const configRow = document.querySelector('#network-config .config-row');
+        if (configRow && !document.getElementById('btn-connect-server')) {
+            const btn = document.createElement('button');
+            btn.id = 'btn-connect-server';
+            btn.className = 'room-item-join';
+            btn.textContent = '连接';
+            btn.style.padding = '6px 16px';
+            configRow.appendChild(btn);
+
+            btn.addEventListener('click', async () => {
                 AudioManager.SFX.buttonClick();
-                const nameInput = document.getElementById('room-name');
-                const typeSelect = document.getElementById('room-mahjong-type');
-                let name = nameInput ? nameInput.value.trim() : '';
-                if (!name) name = '我的麻将房';
-                const type = typeSelect ? typeSelect.value : 'guangdong';
-                
-                App.network.createRoom(name, type).then(room => {
-                    Utils.toast(`房间 ${Utils.escapeHtml(name)} 已创建`);
-                    // 等待玩家加入
-                }).catch(err => {
-                    Utils.toast('创建房间失败: ' + (err.message || '未知错误'));
-                });
+                const serverInput = document.getElementById('signal-server');
+                const url = serverInput?.value?.trim();
+                if (!url) {
+                    showNetworkError('请输入服务器地址');
+                    return;
+                }
+                hideNetworkError();
+                App.network.setServerUrl(url);
+                updateConnectionStatus('connecting');
+                try {
+                    // 测试连接：discoverRooms 可以验证服务器可达
+                    await App.network.discoverRooms();
+                    updateConnectionStatus('online');
+                    Utils.toast('已连接到服务器');
+                    refreshRoomList();
+                } catch (err) {
+                    updateConnectionStatus('offline');
+                    showNetworkError('连接失败: ' + (err.message || '无法连接到服务器'));
+                }
             });
+        }
+
+        // 创建房间
+        document.getElementById('create-room')?.addEventListener('click', async () => {
+            AudioManager.SFX.buttonClick();
+            if (!App.network.connected) {
+                showNetworkError('请先连接到服务器');
+                return;
+            }
+            hideNetworkError();
+            const nameInput = document.getElementById('room-name');
+            const typeSelect = document.getElementById('room-mahjong-type');
+            let name = nameInput?.value?.trim() || '我的麻将房';
+            const type = typeSelect?.value || 'guangdong';
+            const playerName = App.settings?.playerName || '玩家';
+
+            try {
+                await App.network.createRoom(name, type, playerName);
+                Utils.toast(`房间 ${Utils.escapeHtml(name)} 已创建`);
+            } catch (err) {
+                showNetworkError('创建房间失败: ' + (err.message || '未知错误'));
+            }
+        });
+
+        // 刷新房间列表
+        document.getElementById('refresh-rooms')?.addEventListener('click', () => {
+            AudioManager.SFX.buttonClick();
+            refreshRoomList();
+        });
+
+        // 离开房间
+        document.getElementById('btn-leave-room')?.addEventListener('click', async () => {
+            AudioManager.SFX.buttonClick();
+            try {
+                await App.network.leaveRoom();
+            } catch (e) {}
+            showLobbyContent();
+            updateConnectionStatus(App.network.connected ? 'online' : 'offline');
+        });
+
+        // 开始游戏（房主）
+        document.getElementById('btn-start-network')?.addEventListener('click', async () => {
+            AudioManager.SFX.buttonClick();
+            if (!App.network.isHost) return;
+            if (App.network.players.length < 2) {
+                showNetworkError('至少需要2名玩家');
+                return;
+            }
+            hideNetworkError();
+
+            const typeSelect = document.getElementById('room-mahjong-type');
+            const mahjongType = typeSelect?.value || 'guangdong';
+            const typeConfig = Tiles.getConfig(mahjongType);
+            const config = {
+                mahjongType: mahjongType,
+                playerCount: App.network.players.length,
+                aiDifficulty: 'normal',
+                speed: App.settings?.gameSpeed || 'normal',
+                maxRounds: Math.max(1, parseInt(App.settings?.gameRounds) || 4),
+                networkMode: true
+            };
+
+            try {
+                await App.network.startGame(config);
+            } catch (err) {
+                showNetworkError('开始游戏失败: ' + (err.message || '未知错误'));
+            }
+        });
+    }
+
+    /**
+     * 绑定 P2PNetwork 事件
+     */
+    function bindNetworkEvents() {
+        const net = App.network;
+
+        net.on('connecting', () => {
+            updateConnectionStatus('connecting');
+        });
+
+        net.on('connected', () => {
+            updateConnectionStatus('online');
+            hideNetworkError();
+        });
+
+        net.on('disconnected', () => {
+            updateConnectionStatus('offline');
+        });
+
+        net.on('roomCreated', (data) => {
+            showRoomPanel(data);
+            renderLobbyPlayers(net.players);
+        });
+
+        net.on('roomJoined', (data) => {
+            showRoomPanel({ roomId: data.roomId, name: '房间 ' + data.roomId });
+            // 玩家列表由 SSE 推送
+        });
+
+        net.on('playerListUpdated', (players) => {
+            renderLobbyPlayers(players);
+            // 更新房间状态
+            const statusEl = document.getElementById('room-status');
+            if (statusEl) {
+                const ready = players.length >= 2;
+                statusEl.textContent = ready
+                    ? `已就绪 ${players.length}/${players.length} 人`
+                    : `等待玩家加入... (${players.length}人)`;
+            }
+            // 只有房主且>=2人时显示开始按钮
+            const startBtn = document.getElementById('btn-start-network');
+            if (startBtn) {
+                startBtn.classList.toggle('hidden', !(net.isHost && players.length >= 2));
+            }
+        });
+
+        net.on('playerDisconnected', (playerId) => {
+            Utils.toast('玩家断开连接');
+        });
+
+        net.on('gameStart', (config) => {
+            startNetworkGame(config);
+        });
+
+        net.on('data', ({ from, type, data }) => {
+            handleNetworkData(type, data, from);
+        });
+
+        net.on('left', () => {
+            showLobbyContent();
+        });
+    }
+
+    /**
+     * 刷新房间列表
+     */
+    async function refreshRoomList() {
+        const list = document.getElementById('room-list');
+        if (!list) return;
+        if (!App.network.connected) {
+            list.innerHTML = '<div class="empty-state">请先连接服务器</div>';
+            return;
+        }
+        list.innerHTML = '<div class="empty-state">搜索中...</div>';
+        try {
+            const rooms = await App.network.discoverRooms();
+            renderRoomList(rooms);
+        } catch (err) {
+            list.innerHTML = '<div class="empty-state">搜索失败，请检查服务器</div>';
+            console.warn('discoverRooms error:', err);
         }
     }
 
@@ -1402,22 +2559,340 @@
         const list = document.getElementById('room-list');
         if (!list) return;
         if (!rooms || !Array.isArray(rooms)) rooms = [];
-        
+
         if (rooms.length === 0) {
             list.innerHTML = '<div class="empty-state">暂无可用房间</div>';
             return;
         }
-        
+
         list.innerHTML = '';
         for (const room of rooms) {
-            list.appendChild(UIComponents.createRoomItem(room, (r) => {
-                App.network.joinRoom(r.id).then(() => {
-                    Utils.toast(`已加入房间 ${Utils.escapeHtml(r.name || '')}`);
-                }).catch(err => {
-                    Utils.toast('加入房间失败: ' + (err.message || '未知错误'));
+            const item = document.createElement('div');
+            item.className = 'room-item';
+            const typeName = getMahjongTypeName(room.type);
+            const playerText = `${room.players || 0}/${room.maxPlayers || 4}`;
+            item.innerHTML = `
+                <div class="room-item-info">
+                    <span class="room-item-name">${Utils.escapeHtml(room.name || '未命名房间')}</span>
+                    <span class="room-item-meta">${typeName} · ${playerText}人</span>
+                </div>
+                <button class="room-item-join" data-room-id="${Utils.escapeHtml(room.id)}">加入</button>
+            `;
+            const joinBtn = item.querySelector('.room-item-join');
+            if (joinBtn) {
+                joinBtn.addEventListener('click', async () => {
+                    AudioManager.SFX.buttonClick();
+                    hideNetworkError();
+                    const playerName = App.settings?.playerName || '玩家';
+                    try {
+                        await App.network.joinRoom(room.id, playerName);
+                        Utils.toast(`已加入房间`);
+                    } catch (err) {
+                        showNetworkError('加入房间失败: ' + (err.message || '未知错误'));
+                    }
                 });
-            }));
+            }
+            list.appendChild(item);
         }
+    }
+
+    function getMahjongTypeName(type) {
+        const map = { guangdong: '广东麻将', sichuan: '四川麻将', shanghai: '上海麻将', beijing: '北京麻将', taiwan: '台湾麻将' };
+        return map[type] || type || '未知';
+    }
+
+    /**
+     * 显示房间面板（已进入房间）
+     */
+    function showRoomPanel(roomData) {
+        const lobbyContent = document.getElementById('lobby-content');
+        const inRoomPanel = document.getElementById('in-room-panel');
+        if (lobbyContent) lobbyContent.classList.add('hidden');
+        if (inRoomPanel) inRoomPanel.classList.remove('hidden');
+
+        const codeEl = document.getElementById('room-code-display');
+        if (codeEl) codeEl.textContent = roomData.roomId || '----';
+
+        const statusEl = document.getElementById('room-status');
+        if (statusEl) statusEl.textContent = '等待玩家加入...';
+    }
+
+    /**
+     * 显示大厅内容（未进入房间）
+     */
+    function showLobbyContent() {
+        const lobbyContent = document.getElementById('lobby-content');
+        const inRoomPanel = document.getElementById('in-room-panel');
+        if (lobbyContent) lobbyContent.classList.remove('hidden');
+        if (inRoomPanel) inRoomPanel.classList.add('hidden');
+
+        const startBtn = document.getElementById('btn-start-network');
+        if (startBtn) startBtn.classList.add('hidden');
+
+        const playerList = document.getElementById('lobby-player-list');
+        if (playerList) playerList.innerHTML = '';
+
+        // 重置房间码
+        const codeEl = document.getElementById('room-code-display');
+        if (codeEl) codeEl.textContent = '----';
+    }
+
+    /**
+     * 渲染房间内的玩家列表
+     */
+    function renderLobbyPlayers(players) {
+        const list = document.getElementById('lobby-player-list');
+        if (!list) return;
+        list.innerHTML = '';
+
+        const net = App.network;
+        if (!players || players.length === 0) return;
+
+        for (const p of players) {
+            const isSelf = p.id === net.playerId;
+            const isHost = p.isHost;
+            const el = document.createElement('div');
+            el.className = 'lobby-player' + (isHost ? ' host' : '') + (isSelf ? ' self' : '');
+            const tags = [];
+            if (isHost) tags.push('<span class="lobby-player-tag">房主</span>');
+            if (isSelf) tags.push('<span class="lobby-player-tag">我</span>');
+            el.innerHTML = `
+                <span class="lobby-player-avatar">🀄</span>
+                <div class="lobby-player-info">
+                    <span class="lobby-player-name">${Utils.escapeHtml(p.name || '未知')}${tags.join('')}</span>
+                    <span class="lobby-player-status">${isHost ? '房主' : '玩家'}</span>
+                </div>
+                <span class="lobby-player-state connected">在线</span>
+            `;
+            list.appendChild(el);
+        }
+    }
+
+    /**
+     * 更新连接状态UI
+     */
+    function updateConnectionStatus(status) {
+        const el = document.getElementById('conn-status');
+        if (!el) return;
+        el.className = 'conn-status ' + status;
+        const textMap = { offline: '未连接', connecting: '连接中...', online: '已连接' };
+        el.textContent = textMap[status] || status;
+    }
+
+    /**
+     * 显示/隐藏网络错误
+     */
+    function showNetworkError(msg) {
+        const el = document.getElementById('network-error');
+        if (el) { el.textContent = msg; el.classList.remove('hidden'); }
+    }
+
+    function hideNetworkError() {
+        const el = document.getElementById('network-error');
+        if (el) el.classList.add('hidden');
+    }
+
+    // ===== 联机游戏逻辑 =====
+
+    /**
+     * 开始联机游戏
+     */
+    async function startNetworkGame(config) {
+        hideNetworkError();
+        const net = App.network;
+
+        if (net.isHost) {
+            // 房主：正常启动引擎，广播状态
+            await startGameAsHost(config);
+        } else {
+            // 访客：创建引擎实例用于渲染，等待状态同步
+            App.isNetworkGame = true;
+            App.currentScreen = 'game-screen';
+            UIComponents.switchScreen('game-screen');
+            Utils.toast('等待房主开始游戏...');
+        }
+    }
+
+    async function startGameAsHost(config) {
+        App.isNetworkGame = true;
+
+        // 创建玩家配置：房主是人类，其他人是AI（但允许远程覆盖）
+        const net = App.network;
+        const playerConfigs = [];
+        const names = ['下家', '对家', '上家'];
+        let nameIdx = 0;
+
+        for (let i = 0; i < net.players.length; i++) {
+            const p = net.players[i];
+            const isHost = i === 0;
+            playerConfigs.push({
+                name: p.name || (isHost ? '房主' : names[nameIdx++] || '玩家'),
+                isAI: !isHost,  // 非房主用AI，远程玩家可通过消息覆盖
+                networkId: isHost ? null : p.id
+            });
+        }
+
+        // 清理旧游戏
+        if (App._endGameTimeout) { clearTimeout(App._endGameTimeout); App._endGameTimeout = null; }
+        if (App.engine) { App.engine.destroy(); }
+
+        App.engine = new MahjongEngine(config);
+        App.engine.initPlayers(playerConfigs);
+        bindEngineEvents();
+
+        // 切换到游戏界面
+        UIComponents.switchScreen('game-screen');
+        App.currentScreen = 'game-screen';
+
+        // 开始游戏
+        await App.engine.start();
+
+        // 广播初始状态给所有访客
+        broadcastGameState();
+    }
+
+    /**
+     * 广播游戏状态（房主）
+     */
+    function broadcastGameState() {
+        if (!App.engine || !App.network || !App.network.isHost) return;
+        const state = App.engine.getState();
+        // 同时发送config以便访客正确初始化引擎
+        App.network.broadcast({ type: 'stateSync', state, config: App.engine.config });
+    }
+
+    /**
+     * 处理网络数据（P2P DataChannel）
+     */
+    function handleNetworkData(type, data, fromPlayerId) {
+        const net = App.network;
+        if (!net) return;
+
+        if (net.isHost) {
+            // 房主接收访客动作
+            if (type === 'playerAction') {
+                handleRemotePlayerAction(fromPlayerId, data);
+            }
+        } else {
+            // 访客接收房主状态同步
+            if (type === 'stateSync') {
+                applyRemoteState(data);
+            }
+        }
+    }
+
+    /**
+     * 房主处理远程玩家动作
+     */
+    async function handleRemotePlayerAction(fromPlayerId, action) {
+        const engine = App.engine;
+        if (!engine || engine.state !== 'playing') return;
+
+        // 找到对应玩家索引
+        const net = App.network;
+        const playerIdx = net.players.findIndex(p => p.id === fromPlayerId);
+        if (playerIdx < 0) return;
+        const player = engine.players[playerIdx];
+        if (!player) return;
+
+        // 安全检查：只接受当前回合玩家的动作
+        if (engine.currentPlayerIndex !== playerIdx) {
+            console.warn('Remote action from non-current player ignored');
+            return;
+        }
+
+        try {
+            switch (action.type) {
+                case 'discard':
+                    await engine.playerDiscard(action.tileId);
+                    break;
+                case 'chi':
+                    if (engine.pendingAction?.action?.type === 'chi') {
+                        await engine.executeAction(player, engine.pendingAction.action);
+                    }
+                    break;
+                case 'peng':
+                    if (engine.pendingAction?.action?.type === 'peng') {
+                        await engine.executeAction(player, engine.pendingAction.action);
+                    }
+                    break;
+                case 'gang':
+                    if (engine.pendingAction?.action?.type === 'gang') {
+                        await engine.executeAction(player, engine.pendingAction.action);
+                    }
+                    break;
+                case 'hu':
+                    if (engine.pendingAction?.action?.type === 'hu' && engine.lastDiscard) {
+                        await engine.executeAction(player, engine.pendingAction.action);
+                    }
+                    break;
+                case 'skip':
+                    if (engine.pendingAction) {
+                        engine.pendingAction = null;
+                        engine.nextTurn();
+                    }
+                    break;
+            }
+        } catch (err) {
+            console.warn('远程动作处理失败:', err);
+        }
+
+        // 广播更新后的状态
+        broadcastGameState();
+    }
+
+    /**
+     * 访客应用远程状态
+     */
+    function applyRemoteState(data) {
+        if (!data || !data.state) return;
+        const state = data.state;
+
+        // 如果还没有engine，创建一个用于渲染
+        if (!App.engine) {
+            try {
+                const config = state.config || { mahjongType: 'guangdong', playerCount: 4 };
+                App.engine = new MahjongEngine(config);
+                // 初始化玩家（名字从状态中恢复）
+                const playerConfigs = (state.players || []).map((p, i) => ({
+                    name: p.name || `玩家${i+1}`,
+                    isAI: p.isAI !== false
+                }));
+                App.engine.initPlayers(playerConfigs);
+                bindEngineEvents();
+            } catch (err) {
+                console.error('创建访客引擎失败:', err);
+                return;
+            }
+        }
+
+        // 同步引擎状态（轻量同步，不触发事件）
+        const engine = App.engine;
+        engine.state = state.state || 'playing';
+        engine.currentPlayerIndex = state.currentPlayer ?? 0;
+        engine.currentWind = state.currentWind ?? 0;
+        engine.round = state.round ?? 1;
+        engine.deckCount = state.deckCount ?? 0;
+        engine.discardPile = state.discardPile || [];
+        engine.lastDiscard = state.lastDiscard || null;
+
+        // 同步玩家状态
+        if (state.players && Array.isArray(state.players)) {
+            for (let i = 0; i < Math.min(state.players.length, engine.players.length); i++) {
+                const sp = state.players[i];
+                const ep = engine.players[i];
+                if (!sp || !ep) continue;
+                ep.score = sp.score ?? ep.score;
+                ep.handSize = sp.handSize ?? ep.handSize;
+                ep.melds = sp.melds || ep.melds;
+                ep.isDealer = sp.isDealer ?? ep.isDealer;
+                ep.isHu = sp.isHu ?? ep.isHu;
+                ep.gangCount = sp.gangCount ?? ep.gangCount;
+            }
+        }
+
+        // 渲染
+        renderGameState();
     }
 
     /**

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 系统测试</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee; }
+        h2 { color: #4ecca3; }
+        .test { margin: 10px 0; padding: 10px; background: #16213e; border-radius: 6px; }
+        .pass { color: #4ecca3; }
+        .fail { color: #e74c3c; }
+        .info { color: #f39c12; }
+        pre { white-space: pre-wrap; word-break: break-all; }
+    </style>
+</head>
+<body>
+    <h1>🤖 AI 系统重构验证</h1>
+    <div id="results"></div>
+
+    <script src="../js/utils/helpers.js"></script>
+    <script src="../js/core/tiles.js"></script>
+    <script src="../js/core/rules.js"></script>
+    <script src="../js/ai/ai-utils.js"></script>
+    <script src="../js/ai/ai-player.js"></script>
+
+    <script>
+        const results = document.getElementById('results');
+        function log(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = 'test ' + type;
+            div.innerHTML = msg;
+            results.appendChild(div);
+        }
+
+        function createTestHand() {
+            return [
+                Tiles.createTile('wan', 1), Tiles.createTile('wan', 2), Tiles.createTile('wan', 3),
+                Tiles.createTile('wan', 5), Tiles.createTile('wan', 5),
+                Tiles.createTile('tong', 2), Tiles.createTile('tong', 3),
+                Tiles.createTile('tiao', 7), Tiles.createTile('tiao', 8), Tiles.createTile('tiao', 9),
+                Tiles.createTile('feng', 1), Tiles.createTile('feng', 3),
+                Tiles.createTile('jian', 2)
+            ];
+        }
+
+        function makePlayer(hand) {
+            return { hand, melds: [], queYiMen: null, id: 0, position: 0 };
+        }
+
+        // ===== Test 1: Module loaded =====
+        log('✅ AIUtils 已加载: ' + (typeof AIUtils === 'object' ? '通过' : '失败'), 'pass');
+        log('✅ AIPlayer 已加载: ' + (typeof AIPlayer === 'object' ? '通过' : '失败'), 'pass');
+        log('✅ 策略数量: ' + Object.keys(AIPlayer.strategies || {}).join(', '), 'pass');
+
+        // ===== Test 2: Shanten calculation =====
+        const hand1 = [
+            Tiles.createTile('wan', 1), Tiles.createTile('wan', 1), Tiles.createTile('wan', 2),
+            Tiles.createTile('wan', 3), Tiles.createTile('wan', 4), Tiles.createTile('wan', 5),
+            Tiles.createTile('wan', 6), Tiles.createTile('wan', 7), Tiles.createTile('wan', 8),
+            Tiles.createTile('wan', 9), Tiles.createTile('wan', 9),
+            Tiles.createTile('tong', 1), Tiles.createTile('tong', 1)
+        ];
+        const s1 = AIUtils.calculateStandardShanten(hand1, []);
+        log('Test 2a - 近完整手牌(13张)向听数: ' + s1 + ' (期望 0~1) ' + (s1 >= 0 && s1 <= 1 ? '✅' : '❌'), s1 >= 0 && s1 <= 1 ? 'pass' : 'fail');
+
+        const hand1b = [...hand1, Tiles.createTile('tong', 1)];
+        const s1b = AIUtils.calculateStandardShanten(hand1b, []);
+        log('Test 2b - 完整手牌(14张)向听数: ' + s1b + ' (期望 -1~0) ' + (s1b <= 0 ? '✅' : '❌'), s1b <= 0 ? 'pass' : 'fail');
+
+        const hand2 = [
+            Tiles.createTile('wan', 1), Tiles.createTile('wan', 3), Tiles.createTile('wan', 5),
+            Tiles.createTile('wan', 7), Tiles.createTile('wan', 9),
+            Tiles.createTile('tong', 1), Tiles.createTile('tong', 3), Tiles.createTile('tong', 5),
+            Tiles.createTile('tong', 7), Tiles.createTile('tong', 9),
+            Tiles.createTile('tiao', 1), Tiles.createTile('tiao', 3), Tiles.createTile('tiao', 5)
+        ];
+        const s2 = AIUtils.calculateStandardShanten(hand2, []);
+        log('Test 2c - 散乱手牌向听数: ' + s2 + ' (期望 >=5) ' + (s2 >= 5 ? '✅' : '❌'), s2 >= 5 ? 'pass' : 'fail');
+
+        // ===== Test 3: Difficulty differentiation =====
+        const ctx = { deckCount: 60, discardPile: [], players: [], config: {}, ruleConfig: {}, selfIndex: 0 };
+        const testHand = createTestHand();
+        const discards = {};
+        ['easy', 'normal', 'hard', 'expert'].forEach(diff => {
+            const player = makePlayer([...testHand]);
+            const tile = AIPlayer.chooseDiscard(player, diff, ctx);
+            discards[diff] = tile ? (tile.suit + '-' + tile.value) : 'null';
+        });
+        log('Test 3 - 各难度弃牌:', 'info');
+        Object.entries(discards).forEach(([d, t]) => {
+            log('  ' + d + ' → ' + t, 'info');
+        });
+
+        // ===== Test 4: Easy randomness =====
+        const easyDiscards = [];
+        for (let i = 0; i < 5; i++) {
+            const player = makePlayer(createTestHand());
+            const tile = AIPlayer.chooseDiscard(player, 'easy', ctx);
+            easyDiscards.push(tile ? (tile.suit + '-' + tile.value) : 'null');
+        }
+        const allSame = easyDiscards.every(d => d === easyDiscards[0]);
+        log('Test 4 - Easy 随机性: [' + easyDiscards.join(', ') + '] ' + (!allSame ? '✅ 有变化' : '❌ 无变化'), !allSame ? 'pass' : 'fail');
+
+        // ===== Test 5: Action decisions =====
+        log('Test 5 - 吃牌决策:', 'info');
+        const chiTile = Tiles.createTile('wan', 3);
+        const actionChi = { type: 'chi', options: [[testHand[0], testHand[1], chiTile]] };
+        ['easy', 'normal', 'hard', 'expert'].forEach(diff => {
+            const player = makePlayer([...testHand]);
+            const wants = AIPlayer.shouldAction(player, actionChi, chiTile, diff, ctx);
+            log('  ' + diff + ' wants chi: ' + wants, 'info');
+        });
+
+        // ===== Test 6: Sichuan que-yi-men =====
+        const sichuanHand = [
+            Tiles.createTile('wan', 1), Tiles.createTile('wan', 2), Tiles.createTile('wan', 3),
+            Tiles.createTile('wan', 4), Tiles.createTile('wan', 5),
+            Tiles.createTile('tong', 1), Tiles.createTile('tong', 2),
+            Tiles.createTile('tiao', 7), Tiles.createTile('tiao', 8), Tiles.createTile('tiao', 9),
+            Tiles.createTile('tiao', 1), Tiles.createTile('tiao', 2),
+            Tiles.createTile('wan', 7)
+        ];
+        const choice = AIUtils.evaluateQueYiMenChoice(sichuanHand, { mahjongType: 'sichuan' });
+        log('Test 6 - 四川缺门选择: ' + choice.suit + ' (张数:' + choice.tileCount + ') ' + (choice.suit === 'tong' ? '✅' : '❌'), choice.suit === 'tong' ? 'pass' : 'fail');
+
+        // ===== Test 7: Danger evaluation =====
+        const dangerTile = Tiles.createTile('wan', 5);
+        const dangerCtx = {
+            deckCount: 60,
+            discardPile: [Tiles.createTile('wan', 2), Tiles.createTile('wan', 8)],
+            players: [],
+            doraIndicators: [Tiles.createTile('wan', 4)],
+            selfIndex: 0
+        };
+        const danger = AIUtils.evaluateDanger(dangerTile, dangerCtx);
+        log('Test 7 - 危险度评估 wan-5: ' + danger + ' (dora邻居, 应较高) ' + (danger > 30 ? '✅' : '❌'), danger > 30 ? 'pass' : 'fail');
+
+        log('<br>🎉 所有核心测试完成', 'pass');
+    </script>
+</body>
+</html>

@@ -1,5 +1,12 @@
 /**
- * 万能麻将 - 统计数据系统
+ * 万能麻将 - 统计数据系统 v2
+ * 
+ * 数据语义规范：
+ * - totalGames / wins / losses: 场数（一场 = 多局比赛）
+ * - totalRounds: 累计总局数
+ * - totalScore: 累计净胜分（不含初始分）
+ * - bestGame: 单场最高净胜分
+ * - currentStreak / maxStreak: 连胜场数
  */
 
 const Stats = (function() {
@@ -9,26 +16,38 @@ const Stats = (function() {
         level: 1,
         exp: 0,
         maxExp: 100,
-        totalGames: 0,
-        wins: 0,
-        losses: 0,
+        totalGames: 0,      // 总场数
+        totalRounds: 0,     // 累计总局数
+        wins: 0,            // 胜场数
+        losses: 0,          // 负场数
         winRate: 0,
-        currentStreak: 0,
-        maxStreak: 0,
-        totalScore: 0,
-        bestGame: 0,
-        mostBombs: 0,
+        currentStreak: 0,   // 当前连胜场数
+        maxStreak: 0,       // 最高连胜场数
+        totalScore: 0,      // 累计净胜分（不含初始分）
+        bestGame: 0,        // 单场最高净胜分
+        mostBombs: 0,       // 单场最多杠次数
         playedTypes: [],
-        totalGang: 0,
-        totalHu: 0,
-        totalZiMo: 0,
-        achievements: [],
+        totalGang: 0,       // 累计杠次数
+        totalHu: 0,         // 累计胡次数
+        totalZiMo: 0,       // 累计自摸次数
         unlockedAchievements: [],
-        history: []
+        history: []         // 每场比赛的历史记录
     };
 
     function getStats() {
-        return Storage.get('stats', Utils.deepClone(DEFAULT_STATS));
+        let stats = Storage.get('stats', null);
+        // 防御：null 或损坏的数据
+        if (!stats || typeof stats !== 'object') {
+            stats = Utils.deepClone(DEFAULT_STATS);
+        }
+        // 防御：确保新字段存在（兼容旧数据）
+        if (stats.totalRounds === undefined) stats.totalRounds = 0;
+        if (stats.history === undefined) stats.history = [];
+        if (stats.playedTypes === undefined) stats.playedTypes = [];
+        if (stats.unlockedAchievements === undefined) stats.unlockedAchievements = [];
+        // 旧数据的 totalScore / bestGame 可能包含了初始分，需要纠正
+        // 但无法自动纠正，只能在后续游戏中用正确的语义覆盖
+        return stats;
     }
 
     function saveStats(stats) {
@@ -42,10 +61,14 @@ const Stats = (function() {
 
     function addExp(amount) {
         const stats = getStats();
-        return _addExpToStats(stats, amount);
+        const result = _addExpToStats(stats, amount);
+        saveStats(stats);
+        return result;
     }
     
     function _addExpToStats(stats, amount) {
+        const prevLevel = stats.level;
+        const prevExp = stats.exp;
         stats.exp += amount;
         
         // 防御：maxExp为0或负数时防止无限循环
@@ -53,19 +76,46 @@ const Stats = (function() {
             stats.maxExp = 100;
         }
         
+        let levelsGained = 0;
         // 升级检查
         while (stats.exp >= stats.maxExp) {
             stats.exp -= stats.maxExp;
             stats.level++;
+            levelsGained++;
             stats.maxExp = Math.floor(100 * Math.pow(1.2, stats.level - 1));
         }
         
-        return stats;
+        return {
+            prevLevel,
+            newLevel: stats.level,
+            levelsGained,
+            gained: amount,
+            prevExp,
+            newExp: stats.exp,
+            maxExp: stats.maxExp
+        };
     }
 
+    /**
+     * 记录一场比赛的结果
+     * @param {Object} result
+     *   - isWin: boolean 整场是否获胜
+     *   - finalScore: number 最终总分（含初始分，如 1200）
+     *   - netScore: number 净胜分（finalScore - 初始分，如 +200）
+     *   - fan: number 本场最高番数
+     *   - mahjongType: string
+     *   - rounds: number 本场总局数
+     *   - wonRounds: number 玩家赢的局数
+     *   - gangCount: number 本场杠次数
+     *   - huCount: number 本场胡次数
+     *   - ziMoCount: number 本场自摸次数
+     *   - winType: string 胡牌类型
+     *   - hasQingYiSe: boolean
+     */
     function recordGame(result) {
         const stats = getStats();
         stats.totalGames++;
+        stats.totalRounds += result.rounds || 1;
         
         if (result.isWin) {
             stats.wins++;
@@ -82,10 +132,12 @@ const Stats = (function() {
             ? Math.round((stats.wins / stats.totalGames) * 100) 
             : 0;
         
-        stats.totalScore += result.score || 0;
+        // 净胜分（不含初始分）
+        const netScore = result.netScore || 0;
+        stats.totalScore += netScore;
         
-        if (result.score > stats.bestGame) {
-            stats.bestGame = result.score;
+        if (netScore > stats.bestGame) {
+            stats.bestGame = netScore;
         }
         
         if (result.gangCount > stats.mostBombs) {
@@ -110,9 +162,14 @@ const Stats = (function() {
             date: new Date().toISOString(),
             mahjongType: result.mahjongType,
             isWin: result.isWin,
-            score: result.score,
+            finalScore: result.finalScore || 0,
+            netScore: netScore,
             fan: result.fan,
-            rounds: result.rounds
+            rounds: result.rounds || 1,
+            wonRounds: result.wonRounds || (result.isWin ? 1 : 0),
+            gangCount: result.gangCount || 0,
+            huCount: result.huCount || 0,
+            ziMoCount: result.ziMoCount || 0
         });
         
         // 只保留最近50条
@@ -120,34 +177,41 @@ const Stats = (function() {
             stats.history = stats.history.slice(0, 50);
         }
         
-        // 加经验（内联到同一个stats对象，避免竞态）
+        // 加经验：胜场基础20 + 番数*2，负场基础5
         const expGain = result.isWin ? 20 + (result.fan || 0) * 2 : 5;
-        _addExpToStats(stats, expGain);
+        const levelResult = _addExpToStats(stats, expGain);
         
         // 检查成就
-        checkAchievements(stats, result);
+        const newlyUnlocked = checkAchievements(stats, result);
         
         saveStats(stats);
-        return stats;
+        return {
+            stats,
+            expGain,
+            levelResult,
+            newlyUnlocked
+        };
     }
 
     // 成就定义
     const ACHIEVEMENTS = [
-        { id: 'first_win', name: '初战告捷', desc: '赢得第一局游戏', icon: '🏆', condition: s => s.wins >= 1 },
-        { id: 'win_10', name: '十连胜手', desc: '累计赢得10局', icon: '🥇', condition: s => s.wins >= 10 },
-        { id: 'win_100', name: '百战百胜', desc: '累计赢得100局', icon: '👑', condition: s => s.wins >= 100 },
-        { id: 'streak_5', name: '五连胜', desc: '连胜5局', icon: '🔥', condition: s => s.maxStreak >= 5 },
-        { id: 'streak_10', name: '十连胜', desc: '连胜10局', icon: '⚡', condition: s => s.maxStreak >= 10 },
-        { id: 'gang_master', name: '杠上开花', desc: '单局杠3次以上', icon: '💣', condition: (s, r) => r.gangCount >= 3 },
-        { id: 'big_win', name: '大满贯', desc: '单局得分超过1000', icon: '💰', condition: (s, r) => r.score >= 1000 },
-        { id: 'zi_mo_king', name: '自摸王', desc: '单局自摸3次以上', icon: '🎯', condition: (s, r) => r.ziMoCount >= 3 },
-        { id: 'veteran', name: '老手', desc: '累计进行50局', icon: '🎖️', condition: s => s.totalGames >= 50 },
-        { id: 'master', name: '麻将大师', desc: '达到10级', icon: '🌟', condition: s => s.level >= 10 },
-        { id: 'seven_pairs', name: '七对专家', desc: '胡出七对', icon: '🎲', condition: (s, r) => r.winType === 'seven_pairs' },
-        { id: 'qing_yi_se', name: '清一色', desc: '胡出清一色', icon: '🎨', condition: (s, r) => r.hasQingYiSe },
-        { id: 'thirteen_orphans', name: '国士无双', desc: '胡出十三幺', icon: '👑', condition: (s, r) => r.winType === 'thirteen_orphans' },
-        { id: 'all_types', name: '全能选手', desc: '玩遍所有麻将种类', icon: '🌍', condition: (s, r) => s.playedTypes?.length >= 10 },
-        { id: 'perfect', name: '完美对局', desc: '赢得满局比赛', icon: '💎', condition: (s, r) => r.isWin && r.rounds >= 4 }
+        { id: 'first_win',    name: '初战告捷',   desc: '赢得第一场对局',           icon: '🏆', condition: s => s.wins >= 1 },
+        { id: 'win_10',       name: '十连胜手',   desc: '累计赢得10场对局',         icon: '🥇', condition: s => s.wins >= 10 },
+        { id: 'win_100',      name: '百战百胜',   desc: '累计赢得100场对局',        icon: '👑', condition: s => s.wins >= 100 },
+        { id: 'streak_3',     name: '三连胜',     desc: '连胜3场',                   icon: '🔥', condition: s => s.maxStreak >= 3 },
+        { id: 'streak_5',     name: '五连胜',     desc: '连胜5场',                   icon: '🔥', condition: s => s.maxStreak >= 5 },
+        { id: 'streak_10',    name: '十连胜',     desc: '连胜10场',                  icon: '⚡', condition: s => s.maxStreak >= 10 },
+        { id: 'gang_master',  name: '杠上开花',   desc: '单场杠3次以上',             icon: '💣', condition: (s, r) => (r.gangCount || 0) >= 3 },
+        { id: 'big_win',      name: '大满贯',     desc: '单场净胜分超过200',         icon: '💰', condition: (s, r) => (r.netScore || 0) >= 200 },
+        { id: 'zi_mo_king',   name: '自摸王',     desc: '单场自摸3次以上',           icon: '🎯', condition: (s, r) => (r.ziMoCount || 0) >= 3 },
+        { id: 'veteran',      name: '老手',       desc: '累计进行50场对局',          icon: '🎖️', condition: s => s.totalGames >= 50 },
+        { id: 'master',       name: '麻将大师',   desc: '达到10级',                  icon: '🌟', condition: s => s.level >= 10 },
+        { id: 'seven_pairs',  name: '七对专家',   desc: '胡出七对',                  icon: '🎲', condition: (s, r) => r.winType === 'seven_pairs' },
+        { id: 'qing_yi_se',   name: '清一色',     desc: '胡出清一色',                icon: '🎨', condition: (s, r) => r.hasQingYiSe },
+        { id: 'thirteen_orphans', name: '国士无双', desc: '胡出十三幺',              icon: '👑', condition: (s, r) => r.winType === 'thirteen_orphans' },
+        { id: 'all_types',    name: '全能选手',   desc: '玩遍10种麻将',              icon: '🌍', condition: (s, r) => (s.playedTypes?.length || 0) >= 10 },
+        { id: 'perfect',      name: '完美对局',   desc: '打满4局且全胜',             icon: '💎', condition: (s, r) => r.isWin && (r.wonRounds || 0) >= (r.rounds || 1) && (r.rounds || 0) >= 4 },
+        { id: 'big_loser',    name: '虽败犹荣',   desc: '单场净负分超过200',         icon: '🥔', condition: (s, r) => (r.netScore || 0) <= -200 }
     ];
 
     function getAchievements() {
@@ -160,15 +224,19 @@ const Stats = (function() {
     }
 
     function getAchievementProgress(achievement, stats) {
-        // 简单的进度估算
         switch (achievement.id) {
-            case 'first_win': return Math.min(stats.wins / 1 * 100, 100);
-            case 'win_10': return Math.min(stats.wins / 10 * 100, 100);
-            case 'win_100': return Math.min(stats.wins / 100 * 100, 100);
-            case 'streak_5': return Math.min(stats.maxStreak / 5 * 100, 100);
-            case 'streak_10': return Math.min(stats.maxStreak / 10 * 100, 100);
-            case 'veteran': return Math.min(stats.totalGames / 50 * 100, 100);
-            case 'master': return Math.min(stats.level / 10 * 100, 100);
+            case 'first_win':       return Math.min(stats.wins / 1 * 100, 100);
+            case 'win_10':          return Math.min(stats.wins / 10 * 100, 100);
+            case 'win_100':         return Math.min(stats.wins / 100 * 100, 100);
+            case 'streak_3':        return Math.min(stats.maxStreak / 3 * 100, 100);
+            case 'streak_5':        return Math.min(stats.maxStreak / 5 * 100, 100);
+            case 'streak_10':       return Math.min(stats.maxStreak / 10 * 100, 100);
+            case 'veteran':         return Math.min(stats.totalGames / 50 * 100, 100);
+            case 'master':          return Math.min(stats.level / 10 * 100, 100);
+            case 'all_types':       {
+                const totalTypes = Tiles.getMahjongTypes?.().length || 12;
+                return Math.min((stats.playedTypes?.length || 0) / Math.min(10, totalTypes) * 100, 100);
+            }
             default: return stats.unlockedAchievements.includes(achievement.id) ? 100 : 0;
         }
     }
@@ -188,6 +256,71 @@ const Stats = (function() {
         return newlyUnlocked;
     }
 
+    /**
+     * 获取等级进度信息（用于战绩页展示）
+     */
+    function getLevelProgress() {
+        const stats = getStats();
+        const nextLevelExp = stats.maxExp;
+        const currentExp = stats.exp;
+        const percent = nextLevelExp > 0 ? Math.round((currentExp / nextLevelExp) * 100) : 0;
+        
+        return {
+            level: stats.level,
+            currentExp,
+            nextLevelExp,
+            percent,
+            totalExpEarned: _calcTotalExp(stats)
+        };
+    }
+
+    function _calcTotalExp(stats) {
+        // 估算总获得经验：当前等级总经验 + 当前经验
+        let total = stats.exp;
+        for (let lv = 1; lv < stats.level; lv++) {
+            total += Math.floor(100 * Math.pow(1.2, lv - 1));
+        }
+        return total;
+    }
+
+    /**
+     * 获取战绩摘要（用于战绩页）
+     */
+    function getMatchSummary() {
+        const stats = getStats();
+        const history = stats.history || [];
+        
+        // 最近7场
+        const recent = history.slice(0, 7);
+        const recentWins = recent.filter(h => h.isWin).length;
+        
+        // 最佳单场
+        const bestMatch = history.reduce((best, h) => {
+            return (h.netScore > (best?.netScore || -Infinity)) ? h : best;
+        }, null);
+        
+        // 平均每场净胜
+        const avgNetScore = history.length > 0
+            ? Math.round(history.reduce((sum, h) => sum + (h.netScore || 0), 0) / history.length)
+            : 0;
+        
+        return {
+            totalGames: stats.totalGames,
+            totalRounds: stats.totalRounds,
+            wins: stats.wins,
+            losses: stats.losses,
+            winRate: stats.winRate,
+            currentStreak: stats.currentStreak,
+            maxStreak: stats.maxStreak,
+            totalScore: stats.totalScore,
+            bestGame: stats.bestGame,
+            avgNetScore,
+            recentWinRate: recent.length > 0 ? Math.round((recentWins / recent.length) * 100) : 0,
+            bestMatch,
+            history: history.slice(0, 20)
+        };
+    }
+
     function getSettings() {
         return Storage.get('settings', {
             playerName: '玩家',
@@ -195,15 +328,12 @@ const Stats = (function() {
             tableTheme: 'classic-green',
             gameRounds: 4,
             gameSpeed: 'normal',
-            uiDensity: 'comfortable',
             bgmVolume: 50,
             sfxVolume: 50,
             sfxEnabled: true,
             bgmStyle: 'calm',
-            animationLevel: 'normal',
+
             opponentDisplay: 'small',
-            tableZoom: 100,
-            handSize: 100,
             mahjongType: 'guangdong',
             showTileNames: false,
             autoSort: true
@@ -222,6 +352,8 @@ const Stats = (function() {
         recordGame,
         getAchievements,
         checkAchievements,
+        getLevelProgress,
+        getMatchSummary,
         getSettings,
         saveSettings,
         ACHIEVEMENTS

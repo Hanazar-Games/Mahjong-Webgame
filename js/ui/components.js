@@ -25,6 +25,14 @@ const UIComponents = (function() {
             div.appendChild(face);
             if (tile.name) div.title = tile.name;
             
+            // 显示牌名
+            if (options.showName && tile.name) {
+                const nameLabel = document.createElement('span');
+                nameLabel.className = 'tile-name-label';
+                nameLabel.textContent = tile.name;
+                div.appendChild(nameLabel);
+            }
+            
             // 添加牌面装饰线（真实麻将牌特征）
             const decoTop = document.createElement('div');
             decoTop.className = 'tile-deco tile-deco-top';

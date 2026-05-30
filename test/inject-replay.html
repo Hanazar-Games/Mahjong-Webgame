@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>注入测试数据</title></head>
+<body style="background:#1a3a1a;color:#f0e6d2;font-family:monospace;padding:20px;">
+    <h2>正在注入回放测试数据...</h2>
+    <pre id="log"></pre>
+    <script src="replay-mock-data.js"></script>
+    <script>
+        document.getElementById('log').textContent = '数据已注入！\n请返回主页面，点击"牌局回放"查看。';
+        setTimeout(() => { window.location.href = '../index.html'; }, 1500);
+    </script>
+</body>
+</html>

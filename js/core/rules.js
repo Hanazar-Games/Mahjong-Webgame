@@ -8,6 +8,85 @@ const Rules = (function() {
 
     const { SUIT_TYPES, createTile, isSameTile, canFormSequence, canFormTriplet, sortTiles } = Tiles;
 
+    // ===== 番数体系 =====
+    // 默认番数表（地方麻将通用）
+    const DEFAULT_FAN_TABLE = {
+        seven_pairs: 2,
+        thirteen_orphans: 13,
+        qing_yi_se: 6,
+        hun_yi_se: 3,
+        peng_peng_hu: 3,
+        ping_hu: 1,
+        duan_yao: 1,
+        men_qing: 1,
+        zi_mo: 1,
+        gang_shang_kai_hua: 1,
+        hai_di_lao_yue: 1,
+        quan_qiu_ren: 3,
+        gang: 1,
+        da_san_yuan: 0,
+        xiao_san_yuan: 0,
+        da_si_xi: 0,
+        xiao_si_xi: 0,
+        zi_yi_se: 0,
+        lv_yi_se: 0,
+        qing_yao_jiu: 0,
+        hun_yao_jiu: 0,
+        quan_dai_yao: 1,
+    };
+
+    // 变体特定番数表
+    const FAN_TABLES = {
+        guobiao: {
+            ...DEFAULT_FAN_TABLE,
+            seven_pairs: 24,
+            thirteen_orphans: 88,
+            qing_yi_se: 24,
+            hun_yi_se: 6,
+            peng_peng_hu: 6,
+            ping_hu: 2,
+            men_qing: 2,
+            zi_mo: 0,         // 国标自摸不计番
+            gang_shang_kai_hua: 8,
+            hai_di_lao_yue: 8,
+            duan_yao: 2,
+            quan_qiu_ren: 0,  // 国标无此叫法
+            gang: 2,
+            da_san_yuan: 88,
+            xiao_san_yuan: 64,
+            da_si_xi: 88,
+            xiao_si_xi: 64,
+            zi_yi_se: 64,
+            lv_yi_se: 88,
+            qing_yao_jiu: 64,
+            hun_yao_jiu: 32,
+            quan_dai_yao: 4,
+        },
+        guangdong: {
+            ...DEFAULT_FAN_TABLE,
+            // 广东推倒胡基本与默认相同
+        },
+        sichuan: {
+            ...DEFAULT_FAN_TABLE,
+            zi_mo: 1, // 四川自摸加番在上下文处理
+        },
+        shanghai: {
+            ...DEFAULT_FAN_TABLE,
+            hua_pai: 1, // 每花1番
+        }
+    };
+
+    /**
+     * 获取番数值
+     * @param {Object|string} configOrType - 配置对象或变体名称
+     * @param {string} key - 番型键
+     */
+    function getFanValue(configOrType, key) {
+        const type = (typeof configOrType === 'string' ? configOrType : configOrType?.mahjongType) || '';
+        const table = FAN_TABLES[type] || DEFAULT_FAN_TABLE;
+        return table[key] ?? DEFAULT_FAN_TABLE[key] ?? 0;
+    }
+
     /**
      * 判断一手牌是否可以胡牌
      * 使用递归分解法
@@ -314,90 +393,130 @@ const Rules = (function() {
         if (!winInfo) return { total: 0, fans: [] };
         let fan = 0;
         const fans = [];
-        
-        // 基础番数
-        if (winInfo.type === 'seven_pairs') {
-            fan += 2;
-            fans.push({ name: '七对', fan: 2 });
+        const allTiles = getAllTiles(hand, melds);
+
+        function addFan(key, name) {
+            const value = getFanValue(config, key);
+            if (value > 0) {
+                fan += value;
+                fans.push({ name, fan: value });
+            }
         }
-        
-        if (winInfo.type === 'thirteen_orphans') {
-            fan += 13;
-            fans.push({ name: '十三幺', fan: 13 });
+
+        // ===== 最高番型（独立番种，不叠加） =====
+        // 大四喜
+        if (isDaSiXi(hand, melds)) {
+            addFan('da_si_xi', '大四喜');
             return { total: fan, fans };
         }
-        
+        // 大三元
+        if (isDaSanYuan(hand, melds)) {
+            addFan('da_san_yuan', '大三元');
+            return { total: fan, fans };
+        }
+        // 字一色
+        if (isZiYiSe(hand, melds)) {
+            addFan('zi_yi_se', '字一色');
+            return { total: fan, fans };
+        }
+        // 绿一色
+        if (isLvYiSe(hand, melds)) {
+            addFan('lv_yi_se', '绿一色');
+            return { total: fan, fans };
+        }
+        // 清幺九
+        if (isQingYaoJiu(hand, melds)) {
+            addFan('qing_yao_jiu', '清幺九');
+            return { total: fan, fans };
+        }
+        // 十三幺
+        if (winInfo.type === 'thirteen_orphans') {
+            addFan('thirteen_orphans', '十三幺');
+            return { total: fan, fans };
+        }
+
+        // ===== 高番叠加型 =====
+        // 小四喜
+        if (isXiaoSiXi(hand, melds)) {
+            addFan('xiao_si_xi', '小四喜');
+        }
+        // 小三元
+        if (isXiaoSanYuan(hand, melds)) {
+            addFan('xiao_san_yuan', '小三元');
+        }
+        // 混幺九
+        if (isHunYaoJiu(hand, melds)) {
+            addFan('hun_yao_jiu', '混幺九');
+        }
+
+        // ===== 牌型番种 =====
+        // 七对
+        if (winInfo.type === 'seven_pairs') {
+            addFan('seven_pairs', '七对');
+        }
+
+        // 清一色 / 混一色（互斥）
+        if (isQingYiSe(hand, melds)) {
+            addFan('qing_yi_se', '清一色');
+        } else if (isHunYiSe(hand, melds)) {
+            addFan('hun_yi_se', '混一色');
+        }
+
+        // 碰碰胡
+        if (isPengPengHu(winInfo, melds)) {
+            addFan('peng_peng_hu', '碰碰胡');
+        }
+
+        // 平和
+        if (isPingHu(winInfo, melds)) {
+            addFan('ping_hu', '平和');
+        }
+
+        // 断幺
+        if (isDuanYao(hand, melds)) {
+            addFan('duan_yao', '断幺');
+        }
+
+        // 全带幺
+        if (isQuanDaiYao(winInfo, melds)) {
+            addFan('quan_dai_yao', '全带幺');
+        }
+
+        // ===== 情境番种 =====
         // 门清
         if (context.isMenQing) {
-            fan += 1;
-            fans.push({ name: '门清', fan: 1 });
+            addFan('men_qing', '门清');
         }
-        
+
         // 自摸
         if (context.isZiMo) {
-            fan += 1;
-            fans.push({ name: '自摸', fan: 1 });
+            addFan('zi_mo', '自摸');
         }
-        
+
         // 杠上开花
         if (context.isGangShangKaiHua) {
-            fan += 1;
-            fans.push({ name: '杠上开花', fan: 1 });
+            addFan('gang_shang_kai_hua', '杠上开花');
         }
-        
+
         // 海底捞月
         if (context.isHaiDiLaoYue) {
-            fan += 1;
-            fans.push({ name: '海底捞月', fan: 1 });
+            addFan('hai_di_lao_yue', '海底捞月');
         }
-        
-        // 清一色（考虑手牌+副露）
-        if (isQingYiSe(hand, melds)) {
-            fan += 6;
-            fans.push({ name: '清一色', fan: 6 });
-        }
-        // 混一色（考虑手牌+副露）
-        else if (isHunYiSe(hand, melds)) {
-            fan += 3;
-            fans.push({ name: '混一色', fan: 3 });
-        }
-        
-        // 碰碰胡（考虑手牌+副露）
-        if (isPengPengHu(winInfo, melds)) {
-            fan += 3;
-            fans.push({ name: '碰碰胡', fan: 3 });
-        }
-        
+
         // 全求人
         if (context.isQuanQiuRen) {
-            fan += 3;
-            fans.push({ name: '全求人', fan: 3 });
+            addFan('quan_qiu_ren', '全求人');
         }
-        
-        // 平和（不能有碰杠副露）
-        if (isPingHu(winInfo, melds)) {
-            fan += 1;
-            fans.push({ name: '平和', fan: 1 });
-        }
-        
-        // 断幺（考虑手牌+副露）
-        if (isDuanYao(hand, melds)) {
-            fan += 1;
-            fans.push({ name: '断幺', fan: 1 });
-        }
-        
-        // 幺九（考虑手牌+副露）
-        if (isYaoJiu(hand, melds)) {
-            fan += 1;
-            fans.push({ name: '幺九', fan: 1 });
-        }
-        
+
         // 杠
         if (context.gangCount) {
-            fan += context.gangCount;
-            fans.push({ name: `×${context.gangCount}杠`, fan: context.gangCount });
+            const gangFan = getFanValue(config, 'gang') * context.gangCount;
+            if (gangFan > 0) {
+                fan += gangFan;
+                fans.push({ name: `×${context.gangCount}杠`, fan: gangFan });
+            }
         }
-        
+
         return { total: fan, fans };
     }
 
@@ -459,9 +578,128 @@ const Rules = (function() {
         return all.every(t => t.isSimple);
     }
 
-    function isYaoJiu(hand, melds) {
+    /**
+     * 幺九相关番型检测
+     * 清幺九：全部由幺九牌（1、9）组成，不含字牌
+     * 混幺九：由幺九牌+字牌组成
+     */
+    function isQingYaoJiu(hand, melds) {
         const all = getAllTiles(hand, melds);
-        return all.every(t => t.isTerminal || t.isHonor);
+        if (all.length === 0) return false;
+        // 必须全是幺九牌（1或9），不能有字牌
+        return all.every(t => t.isTerminal);
+    }
+
+    function isHunYaoJiu(hand, melds) {
+        const all = getAllTiles(hand, melds);
+        if (all.length === 0) return false;
+        // 每张牌必须是幺九或字牌
+        if (!all.every(t => t.isTerminal || t.isHonor)) return false;
+        // 不能是清幺九（必须有字牌）
+        if (all.every(t => t.isTerminal)) return false;
+        // 必须同时包含字牌和幺九牌
+        const hasHonor = all.some(t => t.isHonor);
+        const hasTerminal = all.some(t => t.isTerminal);
+        return hasHonor && hasTerminal;
+    }
+
+    function isYaoJiu(hand, melds) {
+        // 旧逻辑有缺陷，改为混幺九的宽松检测（兼容旧调用）
+        return isHunYaoJiu(hand, melds);
+    }
+
+    /**
+     * 字一色：所有牌都是字牌
+     */
+    function isZiYiSe(hand, melds) {
+        const all = getAllTiles(hand, melds);
+        return all.length > 0 && all.every(t => t.isHonor);
+    }
+
+    /**
+     * 绿一色：所有牌都是绿色牌（2/3/4/6/8条 + 发财）
+     */
+    function isLvYiSe(hand, melds) {
+        const all = getAllTiles(hand, melds);
+        if (all.length === 0) return false;
+        const greenValues = { tiao: [2, 3, 4, 6, 8], jian: [2] }; // 发财是 jian value=2
+        return all.every(t => {
+            if (t.suit === 'tiao') return greenValues.tiao.includes(t.value);
+            if (t.suit === 'jian' && t.value === 2) return true;
+            return false;
+        });
+    }
+
+    /**
+     * 大三元：中发白各有刻子或杠
+     */
+    function isDaSanYuan(hand, melds) {
+        const counts = countBySuitValue(getAllTiles(hand, melds));
+        // 中(1) 发(2) 白(3) 各至少3张
+        return counts['jian-1'] >= 3 && counts['jian-2'] >= 3 && counts['jian-3'] >= 3;
+    }
+
+    /**
+     * 小三元：中发白有2个刻子+1对
+     */
+    function isXiaoSanYuan(hand, melds) {
+        const counts = countBySuitValue(getAllTiles(hand, melds));
+        const c1 = counts['jian-1'] || 0;
+        const c2 = counts['jian-2'] || 0;
+        const c3 = counts['jian-3'] || 0;
+        // 需要两个≥3，一个≥2
+        const ge3 = [c1, c2, c3].filter(c => c >= 3).length;
+        const ge2 = [c1, c2, c3].filter(c => c >= 2).length;
+        return ge3 >= 2 && ge2 >= 3;
+    }
+
+    /**
+     * 大四喜：东南西北各有刻子或杠
+     */
+    function isDaSiXi(hand, melds) {
+        const counts = countBySuitValue(getAllTiles(hand, melds));
+        return counts['feng-1'] >= 3 && counts['feng-2'] >= 3 && counts['feng-3'] >= 3 && counts['feng-4'] >= 3;
+    }
+
+    /**
+     * 小四喜：东南西北有3个刻子+1对
+     */
+    function isXiaoSiXi(hand, melds) {
+        const counts = countBySuitValue(getAllTiles(hand, melds));
+        const cs = [1,2,3,4].map(v => counts[`feng-${v}`] || 0);
+        const ge3 = cs.filter(c => c >= 3).length;
+        const ge2 = cs.filter(c => c >= 2).length;
+        return ge3 >= 3 && ge2 >= 4;
+    }
+
+    function countBySuitValue(tiles) {
+        const counts = {};
+        for (const t of tiles) {
+            const key = `${t.suit}-${t.value}`;
+            counts[key] = (counts[key] || 0) + 1;
+        }
+        return counts;
+    }
+
+    /**
+     * 全带幺：每个面子和将牌都包含幺九牌
+     */
+    function isQuanDaiYao(winInfo, melds) {
+        if (!winInfo || winInfo.type !== 'standard') return false;
+        // 将牌必须带幺九
+        if (!winInfo.pair || winInfo.pair.length === 0) return false;
+        if (!winInfo.pair[0].isTerminal && !winInfo.pair[0].isHonor) return false;
+        // 每个面子必须带幺九
+        for (const m of winInfo.melds) {
+            if (!m.tiles.some(t => t.isTerminal || t.isHonor)) return false;
+        }
+        // 副露也必须带幺九
+        if (melds) {
+            for (const m of melds) {
+                if (!m.tiles.some(t => t.isTerminal || t.isHonor)) return false;
+            }
+        }
+        return true;
     }
 
     /**

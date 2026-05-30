@@ -3,11 +3,12 @@
  */
 
 class Player extends Utils.EventEmitter {
-    constructor(id, name, isAI = false) {
+    constructor(id, name, isAI = false, autoSort = true) {
         super();
         this.id = id;
         this.name = name;
         this.isAI = isAI;
+        this.autoSort = autoSort;
         this.hand = [];
         this.melds = [];
         this.discards = [];
@@ -33,7 +34,9 @@ class Player extends Utils.EventEmitter {
 
     draw(tile) {
         this.hand.push(tile);
-        this.hand = Tiles.sortTiles(this.hand);
+        if (this.autoSort) {
+            this.hand = Tiles.sortTiles(this.hand);
+        }
         this.emit('draw', tile);
         return tile;
     }
@@ -59,7 +62,9 @@ class Player extends Utils.EventEmitter {
                 this.hand.splice(index, 1);
             }
         }
-        this.hand = Tiles.sortTiles(this.hand);
+        if (this.autoSort) {
+            this.hand = Tiles.sortTiles(this.hand);
+        }
     }
 
     addScore(delta) {
@@ -88,8 +93,8 @@ class Player extends Utils.EventEmitter {
         return this.hand.filter(predicate);
     }
 
-    toJSON() {
-        return {
+    toJSON(includeHand = false) {
+        const result = {
             id: this.id,
             name: this.name,
             isAI: this.isAI,
@@ -103,5 +108,10 @@ class Player extends Utils.EventEmitter {
             isHu: this.isHu,
             gangCount: this.gangCount
         };
+        if (includeHand) {
+            result.hand = this.hand;
+            result.discards = this.discards;
+        }
+        return result;
     }
 }

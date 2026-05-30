@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>回放系统测试</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <style>
+        body { padding: 20px; background: var(--bg-dark); color: var(--text-primary); }
+        .test-panel { max-width: 900px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid var(--accent-gold); border-radius: 8px; }
+        .test-btn { padding: 10px 20px; margin: 5px; background: var(--accent-gold); color: #000; border: none; border-radius: 4px; cursor: pointer; }
+        .test-btn:hover { opacity: 0.8; }
+        .log { background: #1a1a1a; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+        /* 让 replay-player screen 在测试页面中也能显示 */
+        #replay-player.screen { display: none; }
+        #replay-player.screen.active { display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 100; background: var(--bg-dark); }
+    </style>
+</head>
+<body>
+    <div class="test-panel" id="test-panel">
+        <h1>🎬 麻将回放系统测试</h1>
+        
+        <div class="test-section">
+            <h2>测试 1: 注入多局回放数据</h2>
+            <button class="test-btn" onclick="injectTestData()">注入测试数据</button>
+            <button class="test-btn" onclick="clearTestData()">清除测试数据</button>
+            <div id="inject-log" class="log"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>测试 2: 打开回放列表</h2>
+            <button class="test-btn" onclick="openReplayList()">打开回放列表</button>
+            <div id="list-log" class="log"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>测试 3: 直接打开回放播放器</h2>
+            <button class="test-btn" onclick="openPlayerDirect()">直接打开播放器</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>测试数据详情</h2>
+            <div id="data-info" class="log"></div>
+        </div>
+    </div>
+
+    <!-- 回放列表 screen -->
+    <div id="replay-list" class="screen">
+        <div class="screen-header">
+            <h2>📹 回放记录</h2>
+        </div>
+        <div class="replay-list" id="replay-container"></div>
+    </div>
+
+    <!-- 回放播放器 screen -->
+    <div id="replay-player" class="screen">
+        <div class="replay-player-header">
+            <button class="back-btn" id="replay-back-btn">← 返回列表</button>
+            <div class="replay-player-title">
+                <span id="replay-type-name">国标麻将</span>
+                <span class="replay-player-sub" id="replay-meta">第1/4局 · 东风圈</span>
+            </div>
+            <div class="replay-player-scores" id="replay-scores"></div>
+        </div>
+        <div class="replay-player-body">
+            <div class="replay-table-area">
+                <div class="replay-table" id="replay-table">
+                    <div class="replay-center">
+                        <div class="replay-discard-pile" id="replay-discard-pile"></div>
+                        <div class="replay-deck-info">
+                            <span id="replay-deck-count">剩余: 84</span>
+                            <div class="wind-indicator" id="replay-wind">东</div>
+                            <span id="replay-round-info">1/4局</span>
+                        </div>
+                    </div>
+                    <div class="replay-player-area top" id="replay-p-top">
+                        <div class="replay-player-info">
+                            <span class="replay-p-avatar">🀄</span>
+                            <span class="replay-p-name" id="replay-name-top">玩家</span>
+                            <span class="replay-p-score" id="replay-score-top">1000</span>
+                        </div>
+                        <div class="replay-hand" id="replay-hand-top"></div>
+                        <div class="replay-melds" id="replay-melds-top"></div>
+                    </div>
+                    <div class="replay-player-area left" id="replay-p-left">
+                        <div class="replay-player-info">
+                            <span class="replay-p-avatar">🀄</span>
+                            <span class="replay-p-name" id="replay-name-left">玩家</span>
+                            <span class="replay-p-score" id="replay-score-left">1000</span>
+                        </div>
+                        <div class="replay-hand" id="replay-hand-left"></div>
+                        <div class="replay-melds" id="replay-melds-left"></div>
+                    </div>
+                    <div class="replay-player-area right" id="replay-p-right">
+                        <div class="replay-player-info">
+                            <span class="replay-p-avatar">🀄</span>
+                            <span class="replay-p-name" id="replay-name-right">玩家</span>
+                            <span class="replay-p-score" id="replay-score-right">1000</span>
+                        </div>
+                        <div class="replay-hand" id="replay-hand-right"></div>
+                        <div class="replay-melds" id="replay-melds-right"></div>
+                    </div>
+                    <div class="replay-player-area bottom" id="replay-p-bottom">
+                        <div class="replay-player-info current" id="replay-info-bottom">
+                            <span class="replay-p-avatar">🀄</span>
+                            <span class="replay-p-name" id="replay-name-bottom">玩家</span>
+                            <span class="replay-p-score" id="replay-score-bottom">1000</span>
+                        </div>
+                        <div class="replay-hand" id="replay-hand-bottom"></div>
+                        <div class="replay-melds" id="replay-melds-bottom"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="replay-timeline-panel">
+                <div class="replay-timeline-header">
+                    <h4>时间轴</h4>
+                    <span class="replay-step-counter" id="replay-step-counter">0 / 0</span>
+                </div>
+                <div class="replay-timeline" id="replay-timeline"></div>
+                <div class="replay-action-detail" id="replay-action-detail">
+                    <span class="replay-action-text" id="replay-action-text">点击播放开始回放</span>
+                    <span class="replay-action-sub" id="replay-action-sub"></span>
+                </div>
+            </div>
+        </div>
+        <div class="replay-controls">
+            <div class="replay-progress-wrap">
+                <input type="range" class="replay-progress" id="replay-progress" min="0" max="100" value="0">
+            </div>
+            <div class="replay-control-bar">
+                <div class="replay-control-group">
+                    <button class="replay-ctrl-btn" id="replay-speed" title="速度">1×</button>
+                </div>
+                <div class="replay-control-group center">
+                    <button class="replay-ctrl-btn" id="replay-step-back" title="上一步">⏮</button>
+                    <button class="replay-ctrl-btn primary" id="replay-play-pause" title="播放/暂停">▶</button>
+                    <button class="replay-ctrl-btn" id="replay-step-forward" title="下一步">⏭</button>
+                </div>
+                <div class="replay-control-group">
+                    <button class="replay-ctrl-btn" id="replay-round-prev" title="上一局">⏪</button>
+                    <span class="replay-round-label" id="replay-round-label">局 1</span>
+                    <button class="replay-ctrl-btn" id="replay-round-next" title="下一局">⏩</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/utils/utils.js"></script>
+    <script src="../js/core/tiles.js"></script>
+    <script src="../js/data/storage.js"></script>
+    <script src="../js/data/replay.js"></script>
+    <script src="../js/ui/components.js"></script>
+    <script src="../js/audio/audio-manager.js"></script>
+    <script src="../js/main.js"></script>
+    
+    <script>
+        // 创建多局测试回放数据 - 使用正确的数据格式
+        function createTestReplayData() {
+            const mk = (suit, value) => {
+                const t = Tiles.createTile(suit, value, `${suit}_${value}`);
+                return { id: t.id, suit: t.suit, value: t.value, unicode: t.unicode, name: t.name, shortName: t.shortName };
+            };
+            return {
+                id: 'test-replay-' + Date.now(),
+                date: Date.now(),
+                mahjongType: 'guobiao',
+                maxRounds: 4,
+                players: [
+                    { id: 'player-0', name: '张三', isAI: false, position: 0 },
+                    { id: 'player-1', name: '李四', isAI: true, position: 1 },
+                    { id: 'player-2', name: '王五', isAI: true, position: 2 },
+                    { id: 'player-3', name: '赵六', isAI: true, position: 3 }
+                ],
+                rounds: [
+                    {
+                        round: 1,
+                        wind: 0,
+                        history: [
+                            { action: 'gameStart', data: { round: 1, wind: 0, dealer: 0, players: [
+                                { id: 'player-0', name: '张三', score: 1000, position: 0, isDealer: true, hand: [mk('wan','1'), mk('tong','2'), mk('tong','2'), mk('wan','3'), mk('wan','5'), mk('wan','5'), mk('wan','5'), mk('wan','7'), mk('tong','1'), mk('tiao','3'), mk('feng','1'), mk('jian','1'), mk('hua','1')], melds: [], discards: [] },
+                                { id: 'player-1', name: '李四', score: 1000, position: 1, hand: [mk('tong','2'), mk('wan','2'), mk('tiao','2'), mk('feng','2'), mk('jian','2'), mk('wan','4'), mk('tong','4'), mk('tiao','5'), mk('feng','3'), mk('jian','3'), mk('wan','6'), mk('tong','6'), mk('tiao','6')], melds: [], discards: [] },
+                                { id: 'player-2', name: '王五', score: 1000, position: 2, hand: [mk('tiao','4'), mk('wan','8'), mk('tong','8'), mk('tiao','7'), mk('feng','4'), mk('jian','1'), mk('wan','9'), mk('tong','9'), mk('tiao','8'), mk('feng','1'), mk('jian','2'), mk('wan','2'), mk('tong','3')], melds: [], discards: [] },
+                                { id: 'player-3', name: '赵六', score: 1000, position: 3, hand: [mk('wan','5'), mk('wan','1'), mk('tiao','9'), mk('feng','2'), mk('jian','3'), mk('wan','3'), mk('tong','5'), mk('tiao','1'), mk('feng','3'), mk('jian','1'), mk('wan','4'), mk('tong','7'), mk('tiao','2')], melds: [], discards: [] }
+                            ]}, timestamp: Date.now() - 100000, round: 1 },
+                            { action: 'draw', data: { playerId: 'player-0' }, timestamp: Date.now() - 99000, round: 1 },
+                            { action: 'discard', data: { playerId: 'player-0', tile: 'wan_1' }, timestamp: Date.now() - 98000, round: 1 },
+                            { action: 'draw', data: { playerId: 'player-1' }, timestamp: Date.now() - 97000, round: 1 },
+                            { action: 'discard', data: { playerId: 'player-1', tile: 'tong_2' }, timestamp: Date.now() - 96000, round: 1 },
+                            { action: 'peng', data: { playerId: 'player-0', tiles: ['tong_2', 'tong_2', 'tong_2'], from: 1 }, timestamp: Date.now() - 95000, round: 1 },
+                            { action: 'discard', data: { playerId: 'player-0', tile: 'wan_3' }, timestamp: Date.now() - 94000, round: 1 },
+                            { action: 'draw', data: { playerId: 'player-2' }, timestamp: Date.now() - 93000, round: 1 },
+                            { action: 'discard', data: { playerId: 'player-2', tile: 'tiao_4' }, timestamp: Date.now() - 92000, round: 1 },
+                            { action: 'draw', data: { playerId: 'player-3' }, timestamp: Date.now() - 91000, round: 1 },
+                            { action: 'discard', data: { playerId: 'player-3', tile: 'wan_5' }, timestamp: Date.now() - 90000, round: 1 },
+                            { action: 'gang', data: { playerId: 'player-0', tiles: ['wan_5', 'wan_5', 'wan_5', 'wan_5'], from: 3 }, timestamp: Date.now() - 89000, round: 1 },
+                            { action: 'roundEnd', data: { round: 1, wind: 0, players: [
+                                { id: 'player-0', name: '张三', score: 100, position: 0 },
+                                { id: 'player-1', name: '李四', score: -50, position: 1 },
+                                { id: 'player-2', name: '王五', score: -30, position: 2 },
+                                { id: 'player-3', name: '赵六', score: -20, position: 3 }
+                            ]}, timestamp: Date.now() - 88000, round: 1 }
+                        ],
+                        players: [
+                            { id: 'player-0', name: '张三', score: 100, position: 0, isDealer: true },
+                            { id: 'player-1', name: '李四', score: -50, position: 1 },
+                            { id: 'player-2', name: '王五', score: -30, position: 2 },
+                            { id: 'player-3', name: '赵六', score: -20, position: 3 }
+                        ]
+                    },
+                    {
+                        round: 2,
+                        wind: 1,
+                        history: [
+                            { action: 'gameStart', data: { round: 2, wind: 1, dealer: 1, players: [
+                                { id: 'player-0', name: '张三', score: 100, position: 0, hand: [mk('wan','1'), mk('tong','2'), mk('tiao','3'), mk('feng','4'), mk('jian','1'), mk('wan','2'), mk('tong','3'), mk('tiao','4'), mk('feng','2'), mk('jian','3'), mk('wan','5'), mk('tong','6'), mk('tiao','7')], melds: [], discards: [] },
+                                { id: 'player-1', name: '李四', score: -50, position: 1, isDealer: true, hand: [mk('tiao','6'), mk('wan','1'), mk('tong','2'), mk('feng','1'), mk('jian','1'), mk('wan','3'), mk('tong','4'), mk('tiao','5'), mk('feng','2'), mk('jian','2'), mk('wan','7'), mk('tong','8'), mk('tiao','9')], melds: [], discards: [] },
+                                { id: 'player-2', name: '王五', score: -30, position: 2, hand: [mk('wan','7'), mk('wan','2'), mk('tong','3'), mk('feng','3'), mk('jian','3'), mk('wan','5'), mk('tong','6'), mk('tiao','7'), mk('feng','4'), mk('jian','1'), mk('wan','8'), mk('tong','9'), mk('tiao','1')], melds: [], discards: [] },
+                                { id: 'player-3', name: '赵六', score: -20, position: 3, hand: [mk('tiao','9'), mk('wan','4'), mk('tong','1'), mk('feng','2'), mk('jian','3'), mk('wan','6'), mk('tong','5'), mk('tiao','3'), mk('feng','1'), mk('jian','2'), mk('wan','9'), mk('tong','7'), mk('tiao','8')], melds: [], discards: [] }
+                            ]}, timestamp: Date.now() - 50000, round: 2 },
+                            { action: 'draw', data: { playerId: 'player-1' }, timestamp: Date.now() - 49000, round: 2 },
+                            { action: 'discard', data: { playerId: 'player-1', tile: 'tiao_6' }, timestamp: Date.now() - 48000, round: 2 },
+                            { action: 'draw', data: { playerId: 'player-2' }, timestamp: Date.now() - 47000, round: 2 },
+                            { action: 'discard', data: { playerId: 'player-2', tile: 'wan_7' }, timestamp: Date.now() - 46000, round: 2 },
+                            { action: 'chi', data: { playerId: 'player-1', tiles: ['wan_7', 'wan_8', 'wan_9'], from: 2 }, timestamp: Date.now() - 45000, round: 2 },
+                            { action: 'discard', data: { playerId: 'player-1', tile: 'tong_1' }, timestamp: Date.now() - 44000, round: 2 },
+                            { action: 'draw', data: { playerId: 'player-3' }, timestamp: Date.now() - 43000, round: 2 },
+                            { action: 'discard', data: { playerId: 'player-3', tile: 'tiao_9' }, timestamp: Date.now() - 42000, round: 2 },
+                            { action: 'hu', data: { playerId: 'player-2', isZiMo: true, fan: { total: 8, breakdown: [{ name: '平胡', fan: 2 }, { name: '自摸', fan: 1 }] } }, timestamp: Date.now() - 41000, round: 2 },
+                            { action: 'roundEnd', data: { round: 2, wind: 1, players: [
+                                { id: 'player-0', name: '张三', score: 0, position: 0 },
+                                { id: 'player-1', name: '李四', score: -100, position: 1 },
+                                { id: 'player-2', name: '王五', score: 300, position: 2 },
+                                { id: 'player-3', name: '赵六', score: -200, position: 3 }
+                            ]}, timestamp: Date.now() - 40000, round: 2 }
+                        ],
+                        players: [
+                            { id: 'player-0', name: '张三', score: 0, position: 0 },
+                            { id: 'player-1', name: '李四', score: -100, position: 1, isDealer: true },
+                            { id: 'player-2', name: '王五', score: 300, position: 2 },
+                            { id: 'player-3', name: '赵六', score: -200, position: 3 }
+                        ]
+                    }
+                ],
+                finalScores: [
+                    { name: '张三', score: 0, isWin: false },
+                    { name: '李四', score: -150, isWin: false },
+                    { name: '王五', score: 270, isWin: true },
+                    { name: '赵六', score: -220, isWin: false }
+                ]
+            };
+        }
+        
+        function log(id, msg) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent += msg + '\n';
+            el.scrollTop = el.scrollHeight;
+        }
+        
+        function injectTestData() {
+            try {
+                const data = createTestReplayData();
+                Replay.saveReplay(data);
+                log('inject-log', `✅ 已注入测试数据: ${data.id}`);
+                log('inject-log', `   - 局数: ${data.rounds.length}`);
+                log('inject-log', `   - 第1局动作: ${data.rounds[0].history.length}`);
+                log('inject-log', `   - 第2局动作: ${data.rounds[1].history.length}`);
+                updateDataInfo();
+            } catch (e) {
+                log('inject-log', `❌ 错误: ${e.message}`);
+                console.error(e);
+            }
+        }
+        
+        function clearTestData() {
+            try {
+                const replays = Replay.getReplays();
+                replays.filter(r => r.id?.startsWith('test-replay')).forEach(r => Replay.deleteReplay(r.id));
+                log('inject-log', '✅ 已清除测试数据');
+                updateDataInfo();
+            } catch (e) {
+                log('inject-log', `❌ 错误: ${e.message}`);
+            }
+        }
+        
+        function updateDataInfo() {
+            try {
+                const replays = Replay.getReplays();
+                const testReplays = replays.filter(r => r.id?.startsWith('test-replay'));
+                let info = `存储中的回放数: ${replays.length}\n`;
+                info += `测试回放数: ${testReplays.length}\n\n`;
+                testReplays.forEach(r => {
+                    info += `ID: ${r.id}\n`;
+                    info += `  类型: ${r.mahjongType}\n`;
+                    info += `  局数: ${Array.isArray(r.rounds) ? r.rounds.length : r.rounds || 1}\n`;
+                    if (Array.isArray(r.rounds)) {
+                        r.rounds.forEach(round => {
+                            info += `    第${round.round}局: ${round.history?.length || 0} 个动作\n`;
+                        });
+                    }
+                    info += `  玩家: ${r.players?.map(p => p.name).join(', ') || 'N/A'}\n\n`;
+                });
+                document.getElementById('data-info').textContent = info;
+            } catch (e) {
+                document.getElementById('data-info').textContent = `错误: ${e.message}`;
+            }
+        }
+        
+        function openReplayList() {
+            try {
+                const replays = Replay.getReplays();
+                log('list-log', `找到 ${replays.length} 条回放记录`);
+                replays.forEach((r, i) => {
+                    log('list-log', `${i+1}. ${r.mahjongType} · ${Array.isArray(r.rounds) ? r.rounds.length : r.rounds || 1}局 · ${new Date(r.date).toLocaleString()}`);
+                });
+            } catch (e) {
+                log('list-log', `❌ 错误: ${e.message}`);
+            }
+        }
+        
+        function openPlayerDirect() {
+            try {
+                const replays = Replay.getReplays().filter(r => r.id?.startsWith('test-replay'));
+                if (replays.length === 0) {
+                    alert('请先注入测试数据');
+                    return;
+                }
+                if (typeof openReplayPlayer === 'function') {
+                    openReplayPlayer(replays[0]);
+                } else {
+                    alert('openReplayPlayer 未定义');
+                }
+            } catch (e) {
+                alert(`错误: ${e.message}`);
+                console.error(e);
+            }
+        }
+        
+        // 初始化
+        updateDataInfo();
+    </script>
+</body>
+</html>

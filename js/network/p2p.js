@@ -1,274 +1,372 @@
 /**
- * 万能麻将 - P2P局域网联机
- * 使用WebRTC + 本地信令服务器（通过localStorage模拟）
+ * 万能麻将 - WebRTC P2P 局域网联机
+ *
+ * 架构:
+ *   1. HTTP 信令服务器 (SSE+POST) 用于发现房间和交换 SDP
+ *   2. WebRTC DataChannel 建立后，游戏数据直接 P2P 传输
+ *   3. 房主作为权威主机，同步游戏状态给其他玩家
  */
 
 class P2PNetwork extends Utils.EventEmitter {
     constructor() {
         super();
+        this.serverUrl = '';
         this.roomId = null;
-        this.playerId = Utils.uuid();
-        this.players = [];
+        this.playerId = null;
+        this.playerName = '';
         this.isHost = false;
-        this.gameState = null;
-        this.pingInterval = null;
-        this.rooms = [];
-        this.discoveryInterval = null;
+        this.peers = new Map();   // playerId -> RTCPeerConnection
+        this.channels = new Map(); // playerId -> RTCDataChannel
+        this.players = [];         // 房间中所有玩家信息 [{id, name, isHost}]
+        this.sse = null;
+        this.sseReconnectTimer = null;
+        this.heartbeatTimer = null;
+        this.lastPong = Date.now();
+        this.connected = false;
+        this.connecting = false;
     }
 
-    /**
-     * 发现局域网房间
-     * 使用localStorage广播机制模拟局域网发现
-     */
+    // ===== 连接管理 =====
+
+    setServerUrl(url) {
+        this.serverUrl = url.replace(/\/$/, '');
+    }
+
+    async _post(path, body) {
+        const res = await fetch(this.serverUrl + path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+    }
+
+    async _get(path) {
+        const res = await fetch(this.serverUrl + path);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+    }
+
+    // ===== 房间发现 =====
+
     async discoverRooms() {
-        return new Promise(resolve => {
-            let allRooms = [];
-            try {
-                const data = localStorage.getItem('mahjong_network_rooms');
-                if (data) allRooms = JSON.parse(data);
-            } catch (e) {
-                console.warn('discoverRooms: malformed data', e);
-            }
-            const now = Date.now();
-            
-            // 过滤过期房间（30秒内活跃）
-            this.rooms = Array.isArray(allRooms) ? allRooms.filter(r => now - r.lastSeen < 30000) : [];
-            
-            resolve(this.rooms);
-        });
+        if (!this.serverUrl) throw new Error('未设置服务器地址');
+        const data = await this._get('/rooms');
+        return data.rooms || [];
     }
 
-    /**
-     * 创建房间
-     */
-    async createRoom(name, mahjongType) {
-        // 清理旧的定时器
-        if (this.pingInterval) {
-            clearInterval(this.pingInterval);
-            this.pingInterval = null;
-        }
+    // ===== 创建房间 =====
+
+    async createRoom(name, mahjongType, playerName) {
+        if (!this.serverUrl) throw new Error('未设置服务器地址');
+        this.playerName = playerName || '玩家';
+        const data = await this._post('/room/create', {
+            name, mahjongType, playerName: this.playerName, maxPlayers: 4
+        });
+        this.roomId = data.roomId;
+        this.playerId = data.playerId;
         this.isHost = true;
-        this.roomId = Utils.uuid();
-        
-        const room = {
-            id: this.roomId,
-            name: name,
-            type: mahjongType,
-            hostId: this.playerId,
-            players: 1,
-            maxPlayers: 4,
-            createdAt: Date.now(),
-            lastSeen: Date.now()
-        };
-        
-        // 广播到localStorage
-        this.broadcastRoom(room);
-        
-        // 定期更新房间状态
-        this.pingInterval = setInterval(() => {
-            room.lastSeen = Date.now();
-            room.players = this.players.length + 1;
-            this.broadcastRoom(room);
-        }, 5000);
-        
-        this.emit('roomCreated', room);
-        return room;
+        this.players = [{ id: this.playerId, name: this.playerName, isHost: true }];
+        this._startSSE();
+        this.emit('roomCreated', { roomId: this.roomId, name, players: this.players });
+        return { roomId: this.roomId, players: this.players };
     }
 
-    /**
-     * 广播房间信息
-     */
-    broadcastRoom(room) {
-        let allRooms = [];
-        try {
-            const data = localStorage.getItem('mahjong_network_rooms');
-            if (data) allRooms = JSON.parse(data);
-        } catch (e) {
-            console.warn('broadcastRoom: malformed data', e);
-        }
-        if (!Array.isArray(allRooms)) allRooms = [];
-        
-        const existingIndex = allRooms.findIndex(r => r.id === room.id);
-        
-        if (existingIndex >= 0) {
-            allRooms[existingIndex] = room;
-        } else {
-            allRooms.push(room);
-        }
-        
-        // 清理过期房间
-        const now = Date.now();
-        const activeRooms = allRooms.filter(r => now - r.lastSeen < 30000);
-        
-        localStorage.setItem('mahjong_network_rooms', JSON.stringify(activeRooms));
-    }
+    // ===== 加入房间 =====
 
-    /**
-     * 加入房间
-     */
-    async joinRoom(roomId) {
-        const room = this.rooms.find(r => r.id === roomId);
-        if (!room) throw new Error('房间不存在');
-        if (!room.maxPlayers) room.maxPlayers = 4;
-        if (room.players >= room.maxPlayers) throw new Error('房间已满');
-        
-        this.roomId = roomId;
+    async joinRoom(roomId, playerName) {
+        if (!this.serverUrl) throw new Error('未设置服务器地址');
+        this.playerName = playerName || '玩家';
+        const data = await this._post('/room/' + roomId + '/join', {
+            playerName: this.playerName
+        });
+        this.roomId = data.roomId;
+        this.playerId = data.playerId;
         this.isHost = false;
-        
-        // 通知房主
-        this.sendToHost({
-            type: 'join',
-            playerId: this.playerId,
-            name: Stats.getSettings().playerName || '玩家'
-        });
-        
-        this.emit('roomJoined', room);
-        return room;
+        // 把自己加入列表，SSE 会推送其他玩家
+        this.players = [{ id: this.playerId, name: this.playerName, isHost: false }];
+        this._startSSE();
+        this.emit('roomJoined', { roomId: this.roomId, playerId: this.playerId });
+        return { roomId: this.roomId, playerId: this.playerId };
     }
 
-    /**
-     * 发送消息给房主
-     */
-    sendToHost(message) {
-        const key = `mahjong_room_${this.roomId}_host`;
-        let messages = [];
-        try {
-            const data = localStorage.getItem(key);
-            if (data) messages = JSON.parse(data);
-        } catch (e) { /* ignore */ }
-        if (!Array.isArray(messages)) messages = [];
-        messages.push({
-            ...message,
-            timestamp: Date.now(),
-            sender: this.playerId
-        });
-        // 限制队列大小防止localStorage溢出
-        if (messages.length > 50) messages = messages.slice(-50);
-        localStorage.setItem(key, JSON.stringify(messages));
-    }
+    // ===== SSE 长连接（信令接收） =====
 
-    /**
-     * 广播消息给所有玩家
-     */
-    broadcast(message) {
-        const key = `mahjong_room_${this.roomId}_broadcast`;
-        let messages = [];
-        try {
-            const data = localStorage.getItem(key);
-            if (data) messages = JSON.parse(data);
-        } catch (e) { /* ignore */ }
-        if (!Array.isArray(messages)) messages = [];
-        messages.push({
-            ...message,
-            timestamp: Date.now(),
-            sender: this.playerId
-        });
-        if (messages.length > 50) messages = messages.slice(-50);
-        localStorage.setItem(key, JSON.stringify(messages));
-    }
-
-    /**
-     * 发送消息给指定玩家
-     */
-    sendTo(playerId, message) {
-        const key = `mahjong_msg_${this.roomId}_${playerId}`;
-        let messages = [];
-        try {
-            const data = localStorage.getItem(key);
-            if (data) messages = JSON.parse(data);
-        } catch (e) { /* ignore */ }
-        if (!Array.isArray(messages)) messages = [];
-        messages.push({
-            ...message,
-            timestamp: Date.now(),
-            sender: this.playerId
-        });
-        if (messages.length > 50) messages = messages.slice(-50);
-        localStorage.setItem(key, JSON.stringify(messages));
-    }
-
-    /**
-     * 接收消息
-     */
-    receiveMessages() {
-        if (!this.roomId) return [];
-        
-        const key = this.isHost 
-            ? `mahjong_room_${this.roomId}_host`
-            : `mahjong_room_${this.roomId}_broadcast`;
-        
-        let messages = [];
-        try {
-            const data = localStorage.getItem(key);
-            if (data) messages = JSON.parse(data);
-        } catch (e) {
-            console.warn('receiveMessages: malformed data', e);
+    _startSSE() {
+        if (this.sseReconnectTimer) {
+            clearTimeout(this.sseReconnectTimer);
+            this.sseReconnectTimer = null;
         }
-        if (!Array.isArray(messages)) messages = [];
-        
-        // 清空已读消息
-        localStorage.setItem(key, '[]');
-        
-        return messages.filter(m => m.sender !== this.playerId);
+        if (this.sse) { try { this.sse.close(); } catch (e) {} this.sse = null; }
+
+        this.connecting = true;
+        this.emit('connecting');
+
+        const sseUrl = `${this.serverUrl}/room/${this.roomId}/events?playerId=${this.playerId}`;
+        this.sse = new EventSource(sseUrl);
+
+        this.sse.onopen = () => {
+            this.connected = true;
+            this.connecting = false;
+            this.lastPong = Date.now();
+            this.emit('connected');
+            this._startHeartbeat();
+        };
+
+        this.sse.onmessage = (e) => {
+            try {
+                const msg = JSON.parse(e.data);
+                this._handleSignal(msg);
+            } catch (err) {
+                // SSE 注释行 ping 等不处理
+            }
+        };
+
+        this.sse.onerror = () => {
+            this.connected = false;
+            this.connecting = false;
+            this.emit('disconnected');
+            this._stopHeartbeat();
+            // 自动重连（3秒后）
+            if (this.roomId) {
+                this.sseReconnectTimer = setTimeout(() => this._startSSE(), 3000);
+            }
+        };
     }
 
-    /**
-     * 离开房间
-     */
-    leaveRoom() {
-        if (this.pingInterval) {
-            clearInterval(this.pingInterval);
-            this.pingInterval = null;
+    // ===== 心跳 =====
+
+    _startHeartbeat() {
+        this._stopHeartbeat();
+        this.heartbeatTimer = setInterval(() => {
+            // 5秒未收到任何消息则认为断线
+            if (Date.now() - this.lastPong > 8000) {
+                this.emit('disconnected');
+                if (this.sse) { try { this.sse.close(); } catch (e) {} this.sse = null; }
+                if (this.roomId) {
+                    this.sseReconnectTimer = setTimeout(() => this._startSSE(), 2000);
+                }
+            }
+        }, 3000);
+    }
+
+    _stopHeartbeat() {
+        if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
+    }
+
+    // ===== 信令消息处理 =====
+
+    async _handleSignal(msg) {
+        this.lastPong = Date.now();
+
+        switch (msg.type) {
+            case 'playerJoined': {
+                // 更新玩家列表
+                if (!this.players.find(p => p.id === msg.playerId)) {
+                    this.players.push({ id: msg.playerId, name: msg.name, isHost: false });
+                }
+                this.emit('playerListUpdated', this.players);
+                // 房主主动与新玩家建立 P2P
+                if (this.isHost && msg.playerId !== this.playerId) {
+                    this._createOffer(msg.playerId);
+                }
+                break;
+            }
+            case 'playerOnline': {
+                if (!this.players.find(p => p.id === msg.playerId)) {
+                    this.players.push({ id: msg.playerId, name: msg.name, isHost: false });
+                }
+                this.emit('playerListUpdated', this.players);
+                break;
+            }
+            case 'playerOffline': {
+                this._closePeer(msg.playerId);
+                this.players = this.players.filter(p => p.id !== msg.playerId);
+                this.emit('playerListUpdated', this.players);
+                this.emit('playerDisconnected', msg.playerId);
+                break;
+            }
+            case 'playerLeft': {
+                this._closePeer(msg.playerId);
+                this.players = this.players.filter(p => p.id !== msg.playerId);
+                this.emit('playerListUpdated', this.players);
+                break;
+            }
+            case 'sdp-offer': {
+                if (msg.data.targetId === this.playerId) {
+                    await this._handleOffer(msg.from, msg.data.sdp);
+                }
+                break;
+            }
+            case 'sdp-answer': {
+                if (msg.data.targetId === this.playerId) {
+                    await this._handleAnswer(msg.from, msg.data.sdp);
+                }
+                break;
+            }
+            case 'ice-candidate': {
+                if (msg.data.targetId === this.playerId) {
+                    await this._handleIce(msg.from, msg.data.candidate);
+                }
+                break;
+            }
+            case 'gameStart': {
+                this.emit('gameStart', msg.config);
+                break;
+            }
+            case 'ping': {
+                // 心跳回复，刷新 lastPong
+                break;
+            }
         }
-        if (this.discoveryInterval) {
-            clearInterval(this.discoveryInterval);
-            this.discoveryInterval = null;
-        }
-        
-        if (this.isHost && this.roomId) {
-            // 删除房间
-            const allRooms = JSON.parse(localStorage.getItem('mahjong_network_rooms') || '[]');
-            const filtered = allRooms.filter(r => r.id !== this.roomId);
-            localStorage.setItem('mahjong_network_rooms', JSON.stringify(filtered));
-        } else if (this.roomId) {
-            this.broadcast({
-                type: 'leave',
-                playerId: this.playerId
+    }
+
+    // ===== WebRTC P2P =====
+
+    _getPeer(playerId) {
+        if (!this.peers.has(playerId)) {
+            const pc = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
             });
+            pc.onicecandidate = (e) => {
+                if (e.candidate) {
+                    this._sendSignal('ice-candidate', { targetId: playerId, candidate: e.candidate.toJSON() });
+                }
+            };
+            pc.onconnectionstatechange = () => {
+                if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                    this._closePeer(playerId);
+                    this.emit('peerDisconnected', playerId);
+                }
+            };
+            pc.ondatachannel = (e) => {
+                this._attachChannel(playerId, e.channel);
+            };
+            this.peers.set(playerId, pc);
         }
-        
+        return this.peers.get(playerId);
+    }
+
+    _attachChannel(playerId, channel) {
+        this.channels.set(playerId, channel);
+        channel.onopen = () => {
+            this.emit('peerConnected', playerId);
+        };
+        channel.onmessage = (e) => {
+            try {
+                const msg = JSON.parse(e.data);
+                this.emit('data', { from: playerId, ...msg });
+            } catch (err) {}
+        };
+        channel.onclose = () => {
+            this.channels.delete(playerId);
+        };
+    }
+
+    async _createOffer(targetId) {
+        const pc = this._getPeer(targetId);
+        const channel = pc.createDataChannel('game', { ordered: true });
+        this._attachChannel(targetId, channel);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        this._sendSignal('sdp-offer', { targetId, sdp: offer });
+    }
+
+    async _handleOffer(fromId, sdp) {
+        const pc = this._getPeer(fromId);
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        this._sendSignal('sdp-answer', { targetId: fromId, sdp: answer });
+    }
+
+    async _handleAnswer(fromId, sdp) {
+        const pc = this.peers.get(fromId);
+        if (pc) await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    }
+
+    async _handleIce(fromId, candidate) {
+        const pc = this.peers.get(fromId);
+        if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    }
+
+    _sendSignal(type, data) {
+        if (!this.roomId || !this.playerId) return;
+        fetch(`${this.serverUrl}/room/${this.roomId}/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ playerId: this.playerId, type, data })
+        }).catch(() => {});
+    }
+
+    _closePeer(playerId) {
+        const pc = this.peers.get(playerId);
+        if (pc) { try { pc.close(); } catch (e) {} this.peers.delete(playerId); }
+        this.channels.delete(playerId);
+    }
+
+    // ===== 游戏状态同步 =====
+
+    broadcast(data) {
+        // 通过 DataChannel 广播给所有 peer
+        const msg = JSON.stringify(data);
+        for (const [pid, ch] of this.channels) {
+            if (ch.readyState === 'open') {
+                try { ch.send(msg); } catch (e) {}
+            }
+        }
+    }
+
+    sendTo(playerId, data) {
+        const ch = this.channels.get(playerId);
+        if (ch && ch.readyState === 'open') {
+            try { ch.send(JSON.stringify(data)); } catch (e) {}
+        }
+    }
+
+    // ===== 开始游戏 =====
+
+    async startGame(config) {
+        if (!this.isHost) throw new Error('只有房主可以开始');
+        await this._post('/room/' + this.roomId + '/start', {
+            playerId: this.playerId, config
+        });
+    }
+
+    // ===== 离开/销毁 =====
+
+    async leaveRoom() {
+        if (this.sseReconnectTimer) { clearTimeout(this.sseReconnectTimer); this.sseReconnectTimer = null; }
+        this._stopHeartbeat();
+        if (this.sse) { try { this.sse.close(); } catch (e) {} this.sse = null; }
+
+        for (const [pid] of this.peers) this._closePeer(pid);
+        this.peers.clear();
+        this.channels.clear();
+
+        if (this.roomId && this.playerId) {
+            try {
+                await fetch(`${this.serverUrl}/room/${this.roomId}/leave`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ playerId: this.playerId })
+                });
+            } catch (e) {}
+        }
+
         this.roomId = null;
+        this.playerId = null;
         this.isHost = false;
         this.players = [];
+        this.connected = false;
+        this.emit('left');
     }
 
-    /**
-     * 同步游戏状态
-     */
-    syncGameState(state) {
-        this.broadcast({
-            type: 'gameState',
-            state: state
-        });
-    }
-
-    /**
-     * 发送操作
-     */
-    sendAction(action) {
-        this.broadcast({
-            type: 'action',
-            action: action
-        });
-    }
-
-    /**
-     * 销毁
-     */
     destroy() {
         this.leaveRoom();
-        if (this.discoveryInterval) {
-            clearInterval(this.discoveryInterval);
-        }
+        this.removeAllListeners();
     }
 }

@@ -43,15 +43,32 @@ const Replay = (function() {
 
     function createReplayData(engine) {
         if (!engine || !engine.config) return {};
+
+        // 合并 matchHistory 和当前局（如果游戏还没完全结束）
+        const allRounds = [...(engine.matchHistory || [])];
+        // 如果当前局已有历史且未保存到 matchHistory，追加
+        if (engine.gameHistory && engine.gameHistory.length > 0) {
+            const lastSaved = allRounds.length > 0 ? allRounds[allRounds.length - 1].round : -1;
+            if (lastSaved !== engine.round) {
+                allRounds.push({
+                    round: engine.round,
+                    wind: engine.currentWind,
+                    history: [...engine.gameHistory],
+                    players: (engine.players || []).map(p => p.toJSON(true))
+                });
+            }
+        }
+
         return {
             mahjongType: engine.config.mahjongType,
+            maxRounds: engine.config.maxRounds,
             players: (engine.players || []).map(p => ({
+                id: p?.id || '',
                 name: p?.name || '',
                 isAI: p?.isAI || false,
                 position: p?.position || 0
             })),
-            rounds: engine.round || 1,
-            history: engine.gameHistory || [],
+            rounds: allRounds,
             finalScores: [...(engine.players || [])].sort((a, b) => (b?.score || 0) - (a?.score || 0)).map(p => ({
                 name: p?.name || '',
                 score: p?.score || 0,
