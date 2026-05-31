@@ -14,9 +14,9 @@ const Replay = (function() {
     function saveReplay(replay) {
         const replays = getReplays();
         replays.unshift({
+            ...replay,
             id: Utils.uuid(),
-            date: new Date().toISOString(),
-            ...replay
+            date: new Date().toISOString()
         });
         
         if (replays.length > MAX_REPLAYS) {

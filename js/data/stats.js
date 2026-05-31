@@ -73,6 +73,10 @@ const Stats = (function() {
     }
     
     function _addExpToStats(stats, amount) {
+        if (!isFinite(amount) || amount < 0 || amount > 1e6) {
+            console.error('_addExpToStats: invalid amount', amount);
+            amount = 0;
+        }
         const prevLevel = stats.level;
         const prevExp = stats.exp;
         stats.exp += amount;
@@ -125,7 +129,7 @@ const Stats = (function() {
         }
         const stats = getStats();
         stats.totalGames++;
-        stats.totalRounds += result.rounds || 1;
+        stats.totalRounds += Number(result.rounds) || 1;
         
         if (result.isWin) {
             stats.wins++;
@@ -143,20 +147,21 @@ const Stats = (function() {
             : 0;
         
         // 净胜分（不含初始分）
-        const netScore = result.netScore || 0;
+        const netScore = Number(result.netScore) || 0;
         stats.totalScore += netScore;
         
         if (netScore > stats.bestGame) {
             stats.bestGame = netScore;
         }
         
-        if (result.gangCount > stats.mostBombs) {
-            stats.mostBombs = result.gangCount;
+        const gangCount = Number(result.gangCount) || 0;
+        if (gangCount > stats.mostBombs) {
+            stats.mostBombs = gangCount;
         }
         
-        stats.totalGang += result.gangCount || 0;
-        stats.totalHu += result.huCount || 0;
-        stats.totalZiMo += result.ziMoCount || 0;
+        stats.totalGang += gangCount;
+        stats.totalHu += Number(result.huCount) || 0;
+        stats.totalZiMo += Number(result.ziMoCount) || 0;
         
         // 记录玩过的麻将种类
         stats.playedTypes = stats.playedTypes || [];
@@ -172,14 +177,14 @@ const Stats = (function() {
             date: new Date().toISOString(),
             mahjongType: result.mahjongType,
             isWin: result.isWin,
-            finalScore: result.finalScore || 0,
+            finalScore: Number(result.finalScore) || 0,
             netScore: netScore,
-            fan: result.fan,
-            rounds: result.rounds || 1,
-            wonRounds: result.wonRounds || (result.isWin ? 1 : 0),
-            gangCount: result.gangCount || 0,
-            huCount: result.huCount || 0,
-            ziMoCount: result.ziMoCount || 0
+            fan: Number(result.fan) || 0,
+            rounds: Number(result.rounds) || 1,
+            wonRounds: Number(result.wonRounds) || (result.isWin ? 1 : 0),
+            gangCount: gangCount,
+            huCount: Number(result.huCount) || 0,
+            ziMoCount: Number(result.ziMoCount) || 0
         });
         
         // 只保留最近50条
@@ -285,9 +290,10 @@ const Stats = (function() {
     }
 
     function _calcTotalExp(stats) {
-        // 估算总获得经验：当前等级总经验 + 当前经验
-        let total = stats.exp;
-        for (let lv = 1; lv < stats.level; lv++) {
+        // 防御：level异常大时避免无限循环
+        const level = Math.min(Math.max(1, Math.floor(stats.level || 1)), 10000);
+        let total = stats.exp || 0;
+        for (let lv = 1; lv < level; lv++) {
             total += Math.floor(100 * Math.pow(1.2, lv - 1));
         }
         return total;

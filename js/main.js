@@ -606,11 +606,14 @@
         const handEl = document.getElementById(`hand-${getPositionName(playerIndex)}`);
         if (!handEl || !App.engine) return;
         
+        // 保存自己的选中状态
+        const isSelf = playerIndex === 0;
+        const selectedId = isSelf ? handEl.querySelector('.mahjong-tile.selected')?.dataset.id : null;
+        
         handEl.innerHTML = '';
         
         const player = App.engine.players[playerIndex];
         if (!player) return;
-        const isSelf = playerIndex === 0;
         const displayMode = isSelf ? 'full' : App.settings.opponentDisplay;
         
         if (isSelf) {
@@ -638,6 +641,10 @@
             const shouldDisable = !engine || engine.currentPlayerIndex !== 0 || engine.state !== 'playing';
             handEl.querySelectorAll('.mahjong-tile').forEach(tile => {
                 tile.classList.toggle('disabled', shouldDisable);
+                // 恢复之前选中的牌
+                if (selectedId && tile.dataset.id === selectedId) {
+                    tile.classList.add('selected');
+                }
             });
         } else if (displayMode === 'small') {
             // 小牌堆显示
@@ -755,7 +762,7 @@
      * 获取位置名称
      */
     function getPositionName(index) {
-        const count = App.engine?.config.playerCount || 4;
+        const count = App.engine?.config?.playerCount || 4;
         if (count === 3) {
             return ['bottom', 'left', 'right'][index];
         }
@@ -801,6 +808,8 @@
      */
     async function handleAction(type) {
         if (!App.engine) return;
+        if (App._actionPending) return;
+        App._actionPending = true;
         
         const engine = App.engine;
         const player = engine.players[0];
@@ -861,6 +870,7 @@
             console.error('handleAction error:', e);
         } finally {
             disableActionButtons();
+            App._actionPending = false;
         }
     }
 
@@ -1063,20 +1073,27 @@
         // 如果没有 round 标记，退化为：有胡就算赢1局
         if (wonRounds === 0 && huCount > 0) wonRounds = 1;
         
-        const result = Stats.recordGame({
-            isWin,
-            finalScore,
-            netScore,
-            fan: maxFan,
-            mahjongType: App.engine?.config?.mahjongType || 'guangdong',
-            rounds: totalRounds,
-            wonRounds,
-            gangCount: player?.gangCount || 0,
-            huCount,
-            ziMoCount,
-            winType,
-            hasQingYiSe
-        });
+        let result;
+        try {
+            result = Stats.recordGame({
+                isWin,
+                finalScore,
+                netScore,
+                fan: maxFan,
+                mahjongType: App.engine?.config?.mahjongType || 'guangdong',
+                rounds: totalRounds,
+                wonRounds,
+                gangCount: player?.gangCount || 0,
+                huCount,
+                ziMoCount,
+                winType,
+                hasQingYiSe
+            });
+        } catch (e) {
+            console.error('保存游戏结果失败:', e);
+            Utils.toast('保存结果失败: ' + e.message);
+            result = null;
+        }
         
         // 显示升级和成就解锁提示
         if (result.levelResult?.levelsGained > 0) {
@@ -1107,6 +1124,11 @@
      * 重新开始
      */
     async function restartGame() {
+        // 清理所有可能残留的timeout，防止竞态腐蚀新游戏
+        if (App._endGameTimeout) { clearTimeout(App._endGameTimeout); App._endGameTimeout = null; }
+        if (App._tableEnterTimeout) { clearTimeout(App._tableEnterTimeout); App._tableEnterTimeout = null; }
+        if (App._discardScrollTimeout) { clearTimeout(App._discardScrollTimeout); App._discardScrollTimeout = null; }
+        
         if (App.engine) {
             try {
                 const config = { ...App.engine.config };
@@ -1265,9 +1287,9 @@
             card.className = 'mahjong-type-card';
             card.dataset.type = type.key;
             card.innerHTML = `
-                <div class="type-icon">${type.icon}</div>
-                <div class="type-name">${type.name}</div>
-                <div class="type-desc">${type.desc}</div>
+                <div class="type-icon">${Utils.escapeHtml(type.icon)}</div>
+                <div class="type-name">${Utils.escapeHtml(type.name)}</div>
+                <div class="type-desc">${Utils.escapeHtml(type.desc)}</div>
             `;
             
             card.addEventListener('click', () => {
@@ -1446,10 +1468,10 @@
                 <div class="achievement-mini-list">
                     ${achievements.map(ach => `
                         <div class="achievement-mini ${ach.unlocked ? 'unlocked' : 'locked'}">
-                            <span class="ach-mini-icon">${ach.icon}</span>
+                            <span class="ach-mini-icon">${Utils.escapeHtml(ach.icon)}</span>
                             <div class="ach-mini-info">
-                                <span class="ach-mini-name">${ach.name}</span>
-                                <span class="ach-mini-desc">${ach.desc}</span>
+                                <span class="ach-mini-name">${Utils.escapeHtml(ach.name)}</span>
+                                <span class="ach-mini-desc">${Utils.escapeHtml(ach.desc)}</span>
                                 ${!ach.unlocked ? `
                                     <div class="ach-mini-bar-wrap">
                                         <div class="ach-mini-bar" style="width:${ach.progress}%"></div>
@@ -1585,6 +1607,10 @@
     let _replayPlayer = null;
 
     function openReplayPlayer(replay) {
+        if (_replayPlayer) {
+            _replayPlayer.destroy();
+            _replayPlayer = null;
+        }
         _replayPlayer = new ReplayPlayer(replay);
         UIComponents.switchScreen('replay-player');
         _replayPlayer.init();
@@ -2800,10 +2826,19 @@
         const player = engine.players[playerIdx];
         if (!player) return;
 
-        // 安全检查：只接受当前回合玩家的动作
-        if (engine.currentPlayerIndex !== playerIdx) {
-            console.warn('Remote action from non-current player ignored');
-            return;
+        // 安全检查：区分回合动作和claim动作
+        const turnActions = ['draw', 'discard'];
+        const claimActions = ['chi', 'peng', 'gang', 'hu'];
+        if (turnActions.includes(action.type)) {
+            if (engine.currentPlayerIndex !== playerIdx) {
+                console.warn('Remote turn action from non-current player ignored');
+                return;
+            }
+        } else if (claimActions.includes(action.type)) {
+            if (!engine.pendingAction || engine.pendingAction.playerIndex !== playerIdx) {
+                console.warn('Remote claim action without pending action ignored');
+                return;
+            }
         }
 
         try {
@@ -2910,8 +2945,8 @@
         // 忽略重复按键（长按不触发）
         if (e.repeat) return;
         
-        // 忽略输入法/文本框中的按键
-        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) {
+        // 忽略输入法/文本框/下拉框中的按键
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable)) {
             return;
         }
         

@@ -140,8 +140,12 @@ const AIUtils = (function() {
 
         let bestValue = -Infinity;
 
-        // 无对子
-        bestValue = Math.max(bestValue, analyzeHandValue({ ...counts }));
+        // 判断手牌中是否已有任何对子
+        const hasAnyPair = Object.values(counts).some(c => c >= 2);
+
+        // 无对子分支：必须预留2张牌做对子，价值减1补偿
+        const noPairValue = analyzeHandValue({ ...counts });
+        bestValue = Math.max(bestValue, hasAnyPair ? noPairValue : noPairValue - 1);
 
         // 尝试每个对子
         for (const key of Object.keys(counts)) {
@@ -165,6 +169,8 @@ const AIUtils = (function() {
         for (const key of Object.keys(counts)) {
             if (counts[key] >= 2) pairs++;
         }
+        // 14张手牌凑齐7对子 = 已胡牌
+        if (hand.length >= 14 && pairs >= 7) return -1;
         // 七对需要7对子，向听数 = (7 - 已有对子数)
         // 手牌为14张时已胡，为13张时听牌
         const target = hand.length >= 14 ? 7 : 6;

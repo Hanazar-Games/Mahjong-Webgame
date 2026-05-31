@@ -23,18 +23,46 @@ const rooms = new Map();   // roomId -> Room
 const players = new Map(); // playerId -> { roomId, name, isHost, res, lastEventId }
 let nextMsgId = 1;
 
+// ===== 速率限制 =====
+const rateLimits = new Map(); // ip -> { count, resetTime }
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1分钟
+const RATE_LIMIT_MAX = 60; // 每分钟最多60请求
+const MAX_SSE_PER_IP = 5; // 每IP最多5个SSE连接
+
+function checkRateLimit(ip) {
+    const now = Date.now();
+    const limit = rateLimits.get(ip);
+    if (!limit || now > limit.resetTime) {
+        rateLimits.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+        return true;
+    }
+    if (limit.count >= RATE_LIMIT_MAX) return false;
+    limit.count++;
+    return true;
+}
+
+function getIpSSECount(ip) {
+    let count = 0;
+    for (const p of players.values()) {
+        if (p._clientIP === ip && p.res) count++;
+    }
+    return count;
+}
+
 // ===== 工具函数 =====
 function getCorsOrigin(req) {
     const origin = req.headers.origin;
-    if (!origin) return ALLOWED_ORIGINS[0] || 'http://localhost:8080';
-    return ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0] || 'http://localhost:8080';
+    if (!origin) return null;
+    return ALLOWED_ORIGINS.includes(origin) ? origin : null;
 }
 
 function jsonResponse(res, status, data, req) {
-    res.writeHead(status, {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': getCorsOrigin(req)
-    });
+    const headers = { 'Content-Type': 'application/json' };
+    const corsOrigin = getCorsOrigin(req);
+    if (corsOrigin) {
+        headers['Access-Control-Allow-Origin'] = corsOrigin;
+    }
+    res.writeHead(status, headers);
     res.end(JSON.stringify(data));
 }
 
@@ -113,9 +141,20 @@ setInterval(() => {
 
 // ===== HTTP 服务器 =====
 const server = http.createServer(async (req, res) => {
+    const clientIP = getClientIP(req);
+
+    // 速率限制
+    if (!checkRateLimit(clientIP)) {
+        res.writeHead(429, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Too many requests' }));
+        return;
+    }
+
     // CORS
     const corsOrigin = getCorsOrigin(req);
-    res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+    if (corsOrigin) {
+        res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -201,6 +240,11 @@ const server = http.createServer(async (req, res) => {
                 res.writeHead(403, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': corsOrigin });
                 res.end('Forbidden'); return;
             }
+            // SSE连接数限制
+            if (getIpSSECount(clientIP) >= MAX_SSE_PER_IP) {
+                res.writeHead(429, { 'Content-Type': 'text/plain' });
+                res.end('Too many SSE connections'); return;
+            }
             res.writeHead(200, {
                 'Content-Type': 'text/event-stream',
                 'Cache-Control': 'no-cache',
@@ -208,6 +252,7 @@ const server = http.createServer(async (req, res) => {
             });
             res.write(':ok\n\n');
             p.res = res;
+            p._clientIP = clientIP;
             p.lastEventId = parseInt(parsed.query.lastId) || 0;
             const room = rooms.get(roomId);
             room.lastActivity = Date.now();
@@ -303,6 +348,11 @@ const server = http.createServer(async (req, res) => {
         if (leaveMatch && req.method === 'POST') {
             const roomId = leaveMatch[1];
             const body = await readBody(req);
+            const p = players.get(body.playerId);
+            if (!p || p.roomId !== roomId) {
+                jsonResponse(res, 403, { error: '无效玩家' }, req);
+                return;
+            }
             const room = rooms.get(roomId);
             if (room) {
                 room.playerIds = room.playerIds.filter(id => id !== body.playerId);
@@ -312,8 +362,7 @@ const server = http.createServer(async (req, res) => {
                     console.log(`[解散] 房间 ${roomId} 无人，自动删除`);
                 }
             }
-            const p = players.get(body.playerId);
-            if (p && p.res && !p.res.writableEnded) { try { p.res.end(); } catch (e) {} }
+            if (p.res && !p.res.writableEnded) { try { p.res.end(); } catch (e) {} }
             players.delete(body.playerId);
             jsonResponse(res, 200, { ok: true }, req);
             return;

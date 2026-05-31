@@ -75,6 +75,7 @@ const UIComponents = (function() {
         
         element.addEventListener('mousedown', startDrag);
         element.addEventListener('touchstart', startDrag, { passive: false });
+        element.addEventListener('touchcancel', onEnd);
         
         function startDrag(e) {
             if (element.classList.contains('back')) return;
@@ -91,6 +92,7 @@ const UIComponents = (function() {
             document.addEventListener('mouseup', onEnd);
             document.addEventListener('touchmove', onMove, { passive: false });
             document.addEventListener('touchend', onEnd);
+            document.addEventListener('touchcancel', onEnd);
         }
         
         function onMove(e) {
@@ -224,7 +226,8 @@ const UIComponents = (function() {
         
         if (content) {
             const contentDiv = document.createElement('div');
-            contentDiv.innerHTML = Utils.escapeHtml(content);
+            // 调用方负责对动态内容转义；此处信任调用方传入已安全的HTML
+            contentDiv.innerHTML = content;
             modal.appendChild(contentDiv);
         }
         

@@ -102,6 +102,7 @@ class P2PNetwork extends Utils.EventEmitter {
             clearTimeout(this.sseReconnectTimer);
             this.sseReconnectTimer = null;
         }
+        this._stopHeartbeat();
         if (this.sse) { try { this.sse.close(); } catch (e) {} this.sse = null; }
 
         this._sseStarting = true;
@@ -123,7 +124,10 @@ class P2PNetwork extends Utils.EventEmitter {
         this.sse.onmessage = (e) => {
             try {
                 const msg = JSON.parse(e.data);
-                this._handleSignal(msg);
+                this._handleSignal(msg).catch(err => {
+                    console.error('Signal error:', err);
+                    this.emit('error', err);
+                });
             } catch (err) {
                 // SSE 注释行 ping 等不处理
             }
@@ -274,30 +278,50 @@ class P2PNetwork extends Utils.EventEmitter {
     }
 
     async _createOffer(targetId) {
-        const pc = this._getPeer(targetId);
-        const channel = pc.createDataChannel('game', { ordered: true });
-        this._attachChannel(targetId, channel);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        this._sendSignal('sdp-offer', { targetId, sdp: offer });
+        try {
+            const pc = this._getPeer(targetId);
+            const channel = pc.createDataChannel('game', { ordered: true });
+            this._attachChannel(targetId, channel);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            this._sendSignal('sdp-offer', { targetId, sdp: offer });
+        } catch (e) {
+            console.error('createOffer error:', e);
+            this.emit('error', e);
+        }
     }
 
     async _handleOffer(fromId, sdp) {
-        const pc = this._getPeer(fromId);
-        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        this._sendSignal('sdp-answer', { targetId: fromId, sdp: answer });
+        try {
+            const pc = this._getPeer(fromId);
+            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            this._sendSignal('sdp-answer', { targetId: fromId, sdp: answer });
+        } catch (e) {
+            console.error('handleOffer error:', e);
+            this.emit('error', e);
+        }
     }
 
     async _handleAnswer(fromId, sdp) {
-        const pc = this.peers.get(fromId);
-        if (pc) await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        try {
+            const pc = this.peers.get(fromId);
+            if (pc) await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        } catch (e) {
+            console.error('handleAnswer error:', e);
+            this.emit('error', e);
+        }
     }
 
     async _handleIce(fromId, candidate) {
-        const pc = this.peers.get(fromId);
-        if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        try {
+            const pc = this.peers.get(fromId);
+            if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+            console.error('handleIce error:', e);
+            this.emit('error', e);
+        }
     }
 
     _sendSignal(type, data) {
@@ -319,7 +343,9 @@ class P2PNetwork extends Utils.EventEmitter {
 
     broadcast(data) {
         // 通过 DataChannel 广播给所有 peer
-        const msg = JSON.stringify(data);
+        let msg;
+        try { msg = JSON.stringify(data); }
+        catch (e) { console.error('broadcast JSON.stringify error:', e); return; }
         for (const [pid, ch] of this.channels) {
             if (ch.readyState === 'open') {
                 try { ch.send(msg); } catch (e) {}
@@ -330,7 +356,10 @@ class P2PNetwork extends Utils.EventEmitter {
     sendTo(playerId, data) {
         const ch = this.channels.get(playerId);
         if (ch && ch.readyState === 'open') {
-            try { ch.send(JSON.stringify(data)); } catch (e) {}
+            let msg;
+            try { msg = JSON.stringify(data); }
+            catch (e) { console.error('sendTo JSON.stringify error:', e); return; }
+            try { ch.send(msg); } catch (e) {}
         }
     }
 

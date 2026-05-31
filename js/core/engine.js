@@ -102,30 +102,38 @@ class MahjongEngine extends Utils.EventEmitter {
         // 注意：gameHistory 和 matchHistory 不清空，跨局累积
         this.replayData = [];
         
-        // 发牌
-        await this.dealTiles();
-        
-        // 设置庄家
-        this.currentPlayerIndex = this.players.findIndex(p => p.isDealer);
-        
-        // 四川麻将：选择缺一门
-        if (this.ruleConfig.queYiMen) {
-            await this.selectQueYiMen();
+        try {
+            // 发牌
+            await this.dealTiles();
+            
+            // 设置庄家
+            this.currentPlayerIndex = this.players.findIndex(p => p.isDealer);
+            
+            // 四川麻将：选择缺一门
+            if (this.ruleConfig.queYiMen) {
+                await this.selectQueYiMen();
+            }
+            
+            // 记录开局状态（用于回放）
+            this.recordHistory('gameStart', {
+                round: this.round,
+                wind: this.currentWind,
+                dealer: this.currentPlayerIndex,
+                players: this.players.map(p => p.toJSON(true))
+            });
+            
+            this.state = 'playing';
+            this.emit('dealComplete');
+            
+            // 开始第一回合
+            await this.startTurn();
+        } catch (e) {
+            if (e.message === 'CANCELLED') {
+                this.state = 'idle';
+                return;
+            }
+            throw e;
         }
-        
-        // 记录开局状态（用于回放）
-        this.recordHistory('gameStart', {
-            round: this.round,
-            wind: this.currentWind,
-            dealer: this.currentPlayerIndex,
-            players: this.players.map(p => p.toJSON(true))
-        });
-        
-        this.state = 'playing';
-        this.emit('dealComplete');
-        
-        // 开始第一回合
-        await this.startTurn();
     }
 
     /**
@@ -1173,6 +1181,6 @@ class MahjongEngine extends Utils.EventEmitter {
         this.discardPile = [];
         this.players = [];
         this.deck = [];
-        this.state = 'idle';
+        this.state = 'destroyed';
     }
 }

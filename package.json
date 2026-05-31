@@ -1,0 +1,14 @@
+{
+  "name": "mahjong-webgame",
+  "version": "1.0.0",
+  "description": "万能麻将 - 中国麻将大全",
+  "scripts": {
+    "start": "python3 -m http.server 8080 & node server/signaling-server.js",
+    "server": "node server/signaling-server.js",
+    "test": "node test/rules-test-node.js && node test/stats-test.js",
+    "lint": "echo 'ESLint not configured yet'"
+  },
+  "devDependencies": {},
+  "keywords": ["mahjong", "game", "browser"],
+  "license": "MIT"
+}
