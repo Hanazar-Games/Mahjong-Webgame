@@ -68,6 +68,9 @@ class MahjongEngine extends Utils.EventEmitter {
      * 开始游戏
      */
     async start() {
+        // 每次开始游戏时创建新的 CancelToken，确保旧游戏的取消状态不影响新游戏
+        this._token = new Utils.CancelToken();
+        
         // 防御：玩家必须已初始化
         if (!this.players || this.players.length === 0) {
             console.error('Engine start: players not initialized');
@@ -105,6 +108,11 @@ class MahjongEngine extends Utils.EventEmitter {
         try {
             // 发牌
             await this.dealTiles();
+            // 防御：dealTiles 内部吞掉 CANCELLED 后 return，此处需二次检查
+            if (this._token.isCancelled || this.state === 'destroyed') {
+                this.state = 'idle';
+                return;
+            }
             
             // 设置庄家
             this.currentPlayerIndex = this.players.findIndex(p => p.isDealer);
@@ -140,6 +148,7 @@ class MahjongEngine extends Utils.EventEmitter {
      * 发牌
      */
     async dealTiles() {
+        if (this.state === 'destroyed') return;
         const handSize = this.typeConfig.handSize;
         const drawOrder = [];
         
@@ -183,6 +192,7 @@ class MahjongEngine extends Utils.EventEmitter {
      * 四川麻将：选择缺一门
      */
     async selectQueYiMen() {
+        if (this.state === 'destroyed') return;
         const suits = ['wan', 'tong', 'tiao'];
         
         for (const player of this.players) {
@@ -271,6 +281,7 @@ class MahjongEngine extends Utils.EventEmitter {
      * 开始回合
      */
     async startTurn() {
+        if (this.state === 'destroyed') return;
         const player = this.players[this.currentPlayerIndex];
         if (!player) {
             console.error('startTurn: invalid player index', this.currentPlayerIndex);
@@ -1175,7 +1186,7 @@ class MahjongEngine extends Utils.EventEmitter {
             round: this.round,
             deckCount: this.deckCount,
             discardPile: [...this.discardPile],
-            lastDiscard: this.lastDiscard,
+            lastDiscard: this.lastDiscard ? { ...this.lastDiscard } : null,
             players: this.players.map(p => p.toJSON())
         };
     }
@@ -1185,7 +1196,8 @@ class MahjongEngine extends Utils.EventEmitter {
      */
     destroy() {
         this._token.cancel();
-        this._token = new Utils.CancelToken();
+        // 注意：不立即替换 token，让正在执行的异步操作看到取消状态
+        // 新 token 在 start() 中创建
         this.stopTimer();
         this.removeAllListeners();
         this.pendingAction = null;
