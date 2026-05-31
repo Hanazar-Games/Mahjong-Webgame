@@ -95,15 +95,15 @@ function readBody(req, maxSize = MAX_BODY_SIZE) {
 function broadcast(roomId, msg, excludePlayerId) {
     const room = rooms.get(roomId);
     if (!room) return;
-    msg.id = nextMsgId++;
-    room.messages.push(msg);
+    const msgWithId = { ...msg, id: nextMsgId++ };
+    room.messages.push(msgWithId);
     if (room.messages.length > 200) room.messages = room.messages.slice(-100);
 
     for (const pid of room.playerIds) {
         if (pid === excludePlayerId) continue;
         const p = players.get(pid);
         if (p && p.res && !p.res.writableEnded) {
-            try { p.res.write(`data: ${JSON.stringify(msg)}\n\n`); }
+            try { p.res.write(`data: ${JSON.stringify(msgWithId)}\n\n`); }
             catch (e) { /* SSE 写入失败 */ }
         }
     }

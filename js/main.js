@@ -626,7 +626,7 @@
                     showName: App.settings.showTileNames,
                     onDragEnd: (t) => {
                         if (!App.engine || App.engine.state !== 'playing') return;
-                        App.engine.playerDiscard(t.id);
+                        _doDiscard(t.id);
                         enablePlayerActions(false);
                     }
                 });
@@ -785,7 +785,7 @@
             const selectedId = selected.dataset.id;
             if (selectedId === tile.id) {
                 // 双击或再次点击同一牌：打出
-                App.engine.playerDiscard(tile.id);
+                _doDiscard(tile.id);
                 selected.classList.remove('selected');
                 enablePlayerActions(false);
             } else {
@@ -800,6 +800,15 @@
             AudioManager.SFX.selectTile();
             const targetEl = handEl.querySelector(`[data-id="${CSS.escape(tile.id)}"]`);
             if (targetEl) targetEl.classList.add('selected');
+        }
+    }
+
+    async function _doDiscard(tileId) {
+        try {
+            if (!App.engine || App.engine.state !== 'playing') return;
+            await App.engine.playerDiscard(tileId);
+        } catch (e) {
+            console.warn('playerDiscard error:', e);
         }
     }
 
@@ -2564,7 +2573,11 @@
     /**
      * 绑定 P2PNetwork 事件
      */
+    let _networkEventsBound = false;
+
     function bindNetworkEvents() {
+        if (_networkEventsBound) return;
+        _networkEventsBound = true;
         const net = App.network;
 
         net.on('connecting', () => {

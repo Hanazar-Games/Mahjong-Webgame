@@ -912,7 +912,9 @@ class MahjongEngine extends Utils.EventEmitter {
             }
         } else {
             const discardPlayer = this.players[this.currentPlayerIndex];
-            discardPlayer.addScore(-totalScore);
+            if (discardPlayer) {
+                discardPlayer.addScore(-totalScore);
+            }
             player.addScore(totalScore);
         }
         
@@ -1013,8 +1015,11 @@ class MahjongEngine extends Utils.EventEmitter {
 
             // 轮换庄家
             const currentDealer = this.players.findIndex(p => p.isDealer);
-            this.players[currentDealer].isDealer = false;
-            this.players[(currentDealer + 1) % this.config.playerCount].isDealer = true;
+            if (currentDealer >= 0) {
+                this.players[currentDealer].isDealer = false;
+            }
+            const nextDealer = (currentDealer >= 0 ? currentDealer : 0);
+            this.players[(nextDealer + 1) % this.config.playerCount].isDealer = true;
 
             try { await Utils.sleep(1500, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
             await this.start();
@@ -1120,16 +1125,22 @@ class MahjongEngine extends Utils.EventEmitter {
         const token = this._token;
         
         this.timer = setTimeout(async () => {
-            if (token.isCancelled || this.state === 'destroyed') return;
-            if (this.state !== 'playing' || this.currentPlayerIndex !== playerIndex) return;
-            if (!this.players || !this.players[this.currentPlayerIndex]) return;
-            const currentPlayer = this.players[this.currentPlayerIndex];
-            if (!currentPlayer) return;
-            
-            this.emit('turnTimeout', { player: currentPlayer.toJSON() });
-            const tile = currentPlayer.hand[0];
-            if (tile) {
-                await this.playerDiscard(tile.id);
+            try {
+                if (token.isCancelled || this.state === 'destroyed') return;
+                if (this.state !== 'playing' || this.currentPlayerIndex !== playerIndex) return;
+                if (!this.players || !this.players[this.currentPlayerIndex]) return;
+                const currentPlayer = this.players[this.currentPlayerIndex];
+                if (!currentPlayer) return;
+                
+                this.emit('turnTimeout', { player: currentPlayer.toJSON() });
+                const tile = currentPlayer.hand[0];
+                if (tile) {
+                    await this.playerDiscard(tile.id);
+                }
+            } catch (e) {
+                if (e.message !== 'CANCELLED') {
+                    console.error('Timer callback error:', e);
+                }
             }
         }, this.turnTimeout);
     }
