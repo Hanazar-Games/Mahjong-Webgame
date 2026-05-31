@@ -16,6 +16,12 @@ class MahjongEngine extends Utils.EventEmitter {
         };
         
         this.typeConfig = Tiles.getConfig(this.config.mahjongType);
+        // 防御：无效的 mahjongType 回退到 guangdong 默认配置
+        if (!this.typeConfig) {
+            console.warn('Invalid mahjongType:', this.config.mahjongType, 'falling back to guangdong');
+            this.typeConfig = Tiles.getConfig('guangdong');
+            this.config.mahjongType = 'guangdong';
+        }
         this.ruleConfig = { mahjongType: this.config.mahjongType, ...(this.typeConfig?.rules || {}) };
         
         this.state = 'idle'; // idle, dealing, playing, waiting, action, ended
@@ -320,7 +326,7 @@ class MahjongEngine extends Utils.EventEmitter {
         this.deckCount = this.deck.length;
         player.draw(tile);
         
-        this.emit('draw', { player: player.toJSON(), tile, index: this.currentPlayerIndex, deckCount: this.deckCount });
+        this.emit('draw', { player: player.toJSON(), tile: tile ? { ...tile } : null, index: this.currentPlayerIndex, deckCount: this.deckCount });
         
         // 花牌补牌
         if (tile.isFlower && this.ruleConfig.huaPai) {
@@ -370,7 +376,7 @@ class MahjongEngine extends Utils.EventEmitter {
         this.discardPile.push(tile);
         
         this.recordHistory('discard', { playerId: player.id, tile: tile.id });
-        this.emit('discard', { player: player.toJSON(), tile });
+        this.emit('discard', { player: player.toJSON(), tile: tile ? { ...tile } : null });
         
         // 等待其他玩家响应
         await this.waitForActions(tile);
@@ -434,8 +440,8 @@ class MahjongEngine extends Utils.EventEmitter {
         this.pendingAction = winner;
         this.emit('actionAvailable', {
             player: winner.player.toJSON(),
-            action: winner.action,
-            tile
+            action: winner.action ? { ...winner.action, winInfo: winner.action.winInfo ? { ...winner.action.winInfo } : undefined } : null,
+            tile: tile ? { ...tile } : null
         });
         
         if (winner.player.isAI) {
@@ -444,7 +450,7 @@ class MahjongEngine extends Utils.EventEmitter {
         } else {
             this.emit('playerAction', {
                 player: winner.player.toJSON(),
-                action: winner.action
+                action: winner.action ? { ...winner.action, winInfo: winner.action.winInfo ? { ...winner.action.winInfo } : undefined } : null
             });
         }
     }
@@ -937,15 +943,20 @@ class MahjongEngine extends Utils.EventEmitter {
             winType: winInfo.type
         });
         
-        this.emit('hu', {
-            player: player.toJSON(),
-            isZiMo,
-            fan: fanResult,
-            score: totalScore,
-            hand: player.hand.map(t => t.id),
-            winType: winInfo.type,
-            isGangShangKaiHua: action.isGangShangKaiHua || false
-        });
+        // 防御：emit 监听器可能抛出异常，确保 endRound/nextTurn 始终执行
+        try {
+            this.emit('hu', {
+                player: player.toJSON(),
+                isZiMo,
+                fan: Utils.deepClone(fanResult),
+                score: totalScore,
+                hand: player.hand.map(t => t.id),
+                winType: winInfo.type,
+                isGangShangKaiHua: action.isGangShangKaiHua || false
+            });
+        } catch (emitErr) {
+            console.error('hu event listener error:', emitErr);
+        }
         
         // 检查是否一局结束
         if (this.isRoundOver()) {

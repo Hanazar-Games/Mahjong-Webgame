@@ -935,7 +935,8 @@
      * 显示胡牌结果
      */
     function showHuResult(data) {
-        const fanText = (data.fan?.fans || []).map(f => `${Utils.escapeHtml(f.name)} ${f.fan}番`).join('<br>');
+        const fans = Array.isArray(data.fan?.fans) ? data.fan.fans : [];
+        const fanText = fans.map(f => `${Utils.escapeHtml(f.name)} ${f.fan}番`).join('<br>');
         let title = data.isZiMo ? '🎉 自摸!' : '🎉 胡牌!';
         if (data.isGangShangKaiHua) {
             title = '🎉 杠上开花!';
@@ -1009,20 +1010,24 @@
             `;
         }
         
-        // 绑定按钮
+        // 绑定按钮（使用 cloneNode 彻底移除旧监听器，避免闭包累积）
         const restartBtn = document.getElementById('btn-result-restart');
         const exitBtn = document.getElementById('btn-result-exit');
         if (restartBtn) {
-            restartBtn.onclick = () => {
+            const newRestart = restartBtn.cloneNode(true);
+            restartBtn.parentNode.replaceChild(newRestart, restartBtn);
+            newRestart.addEventListener('click', () => {
                 AudioManager.SFX.buttonClick();
                 restartGame();
-            };
+            });
         }
         if (exitBtn) {
-            exitBtn.onclick = () => {
+            const newExit = exitBtn.cloneNode(true);
+            exitBtn.parentNode.replaceChild(newExit, exitBtn);
+            newExit.addEventListener('click', () => {
                 AudioManager.SFX.buttonClick();
                 endGame();
-            };
+            });
         }
         
         // 切换到结算页
