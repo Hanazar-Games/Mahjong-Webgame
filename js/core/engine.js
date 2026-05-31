@@ -378,11 +378,9 @@ class MahjongEngine extends Utils.EventEmitter {
             
             if (player.isHu) continue;
             
-            const actionList = this.checkActions(player, tile, i === 1);
-            if (actionList) {
-                for (const action of actionList) {
-                    allActions.push({ player, action, priority: action.priority });
-                }
+            const actions = this.checkActions(player, tile, i === 1);
+            for (const action of actions) {
+                allActions.push({ player, action, priority: action.priority });
             }
         }
         
@@ -444,6 +442,8 @@ class MahjongEngine extends Utils.EventEmitter {
      * 检查玩家可以执行的操作
      */
     checkActions(player, tile, isNextPlayer) {
+        const actions = [];
+        
         // 胡
         const testHand = [...player.hand, tile];
         const winResult = Rules.canWin(testHand, this.ruleConfig);
@@ -452,34 +452,34 @@ class MahjongEngine extends Utils.EventEmitter {
             if (this.ruleConfig.queYiMen && !this.checkQueYiMenComplete(player)) {
                 // 继续检查其他动作
             } else {
-                return { type: 'hu', winInfo: winResult };
+                actions.push({ type: 'hu', winInfo: winResult, priority: this.getActionPriority('hu') });
             }
         }
         
         // 四川麻将：不能吃碰杠缺门花色的牌
         if (this.ruleConfig.queYiMen && tile.suit === player.queYiMen) {
-            return null;
+            return actions;
         }
         
         // 杠
         if (Rules.canGang(player.hand, tile, this.ruleConfig)) {
-            return { type: 'gang' };
+            actions.push({ type: 'gang', priority: this.getActionPriority('gang') });
         }
         
         // 碰
         if (Rules.canPeng(player.hand, tile, this.ruleConfig)) {
-            return { type: 'peng' };
+            actions.push({ type: 'peng', priority: this.getActionPriority('peng') });
         }
         
         // 吃（只有下家可以吃）
         if (isNextPlayer) {
             const chiOptions = Rules.canChi(player.hand, tile, this.ruleConfig);
             if (chiOptions.length > 0) {
-                return { type: 'chi', options: chiOptions };
+                actions.push({ type: 'chi', options: chiOptions, priority: this.getActionPriority('chi') });
             }
         }
         
-        return null;
+        return actions;
     }
 
     /**
@@ -497,35 +497,42 @@ class MahjongEngine extends Utils.EventEmitter {
         this.state = 'action';
         this.stopTimer();
         
-        switch (action.type) {
-            case 'chi':
-                await this.executeChi(player, action);
-                this.pendingAction = null;
-                break;
-            case 'peng':
-                await this.executePeng(player, action);
-                this.pendingAction = null;
-                break;
-            case 'gang':
-                await this.executeGang(player, action);
-                this.pendingAction = null;
-                break;
-            case 'hu': {
-                const huSuccess = await this.executeHu(player, action);
-                this.pendingAction = null;
-                if (!huSuccess) {
-                    // 胡牌被拒绝（缺门未完成或起胡不足），继续游戏
+        try {
+            switch (action.type) {
+                case 'chi':
+                    await this.executeChi(player, action);
+                    break;
+                case 'peng':
+                    await this.executePeng(player, action);
+                    break;
+                case 'gang':
+                    await this.executeGang(player, action);
+                    break;
+                case 'hu': {
+                    const huSuccess = await this.executeHu(player, action);
+                    if (!huSuccess) {
+                        // 胡牌被拒绝（缺门未完成或起胡不足），继续游戏
+                        this.state = 'playing';
+                        await this.nextTurn();
+                    }
+                    return;
+                }
+                default:
+                    console.error('Unknown action type:', action.type);
                     this.state = 'playing';
                     await this.nextTurn();
-                }
-                return;
+                    return;
             }
-            default:
-                console.error('Unknown action type:', action.type);
-                this.pendingAction = null;
-                this.state = 'playing';
-                await this.nextTurn();
-                return;
+        } catch (e) {
+            // 防御：任何异常都不应让游戏卡死在 action 状态
+            if (e.message !== 'CANCELLED') {
+                console.error('executeAction error:', e);
+            }
+            this.state = 'playing';
+            this.pendingAction = null;
+            throw e;
+        } finally {
+            this.pendingAction = null;
         }
     }
 

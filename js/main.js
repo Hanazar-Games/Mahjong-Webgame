@@ -818,23 +818,26 @@
             return;
         }
         
+        // 辅助：检查引擎是否仍有效且未被替换
+        const engineStillValid = () => App.engine === engine && engine.state === 'playing';
+        
         try {
         switch (type) {
             case 'chi':
-                if (engine.pendingAction?.action.type === 'chi') {
+                if (engine.pendingAction?.action.type === 'chi' && engineStillValid()) {
                     await engine.executeAction(player, engine.pendingAction.action);
                 }
                 break;
             case 'peng':
-                if (engine.pendingAction?.action.type === 'peng') {
+                if (engine.pendingAction?.action.type === 'peng' && engineStillValid()) {
                     await engine.executeAction(player, engine.pendingAction.action);
                 }
                 break;
             case 'gang':
-                if (engine.pendingAction?.action.type === 'gang') {
+                if (engine.pendingAction?.action.type === 'gang' && engineStillValid()) {
                     // 明杠（碰后加杠或别人打出杠）
                     await engine.executeAction(player, engine.pendingAction.action);
-                } else if (App.anGangOptions && App.anGangOptions.length > 0) {
+                } else if (App.anGangOptions && App.anGangOptions.length > 0 && engineStillValid()) {
                     // 暗杠/加杠
                     await engine.executeAnGang(player, App.anGangOptions[0]);
                     App.anGangOptions = null;
@@ -847,15 +850,15 @@
                     break;
                 }
                 const selfWin = Rules.canWin(player.hand, engine.ruleConfig);
-                if (selfWin && selfWin.canWin) {
+                if (selfWin && selfWin.canWin && engineStillValid()) {
                     await engine.executeAction(player, { type: 'hu', winInfo: selfWin });
-                } else if (engine.pendingAction?.action.type === 'hu' && engine.lastDiscard) {
+                } else if (engine.pendingAction?.action.type === 'hu' && engine.lastDiscard && engineStillValid()) {
                     // 点炮胡：必须通过pendingAction验证，防止利用过期lastDiscard作弊
                     await engine.executeAction(player, engine.pendingAction.action);
                 }
                 break;
             case 'skip':
-                if (engine.pendingAction) {
+                if (engine.pendingAction && engineStillValid()) {
                     await engine.skipAction();
                 } else if (App.anGangOptions) {
                     // 跳过暗杠，继续打牌
@@ -2326,25 +2329,77 @@
                 '--bg-primary': '#1a3a1a',
                 '--bg-secondary': '#2d5a2d',
                 '--bg-card': '#3d6b3d',
-                '--accent-gold': '#d4a843'
+                '--bg-panel': 'rgba(30, 60, 30, 0.92)',
+                '--accent-gold': '#d4a843',
+                '--accent-gold-light': '#e8c870',
+                '--accent-gold-dark': '#b8922e',
+                '--text-primary': '#f0e6d2',
+                '--text-secondary': '#c4b896',
+                '--text-muted': '#8a9a7a',
+                '--win-color': '#4caf50',
+                '--lose-color': '#f44336',
+                '--hud-bg': 'rgba(18, 18, 24, 0.92)',
+                '--hud-border': 'rgba(212, 168, 67, 0.12)',
+                '--hud-gold-glow': '0 0 20px rgba(212, 168, 67, 0.15)',
+                '--turn-glow': '0 0 16px rgba(212, 168, 67, 0.5)',
+                '--shadow-glow': '0 0 20px rgba(212, 168, 67, 0.2)'
             },
             'dark-blue': {
                 '--bg-primary': '#1a1a3a',
                 '--bg-secondary': '#2d2d5a',
                 '--bg-card': '#3d3d6b',
-                '--accent-gold': '#6b9ed4'
+                '--bg-panel': 'rgba(25, 25, 55, 0.92)',
+                '--accent-gold': '#6b9ed4',
+                '--accent-gold-light': '#8ab8e8',
+                '--accent-gold-dark': '#4a7db0',
+                '--text-primary': '#e0e8f0',
+                '--text-secondary': '#a8b8d0',
+                '--text-muted': '#7a8aaa',
+                '--win-color': '#4caf50',
+                '--lose-color': '#f44336',
+                '--hud-bg': 'rgba(15, 15, 30, 0.92)',
+                '--hud-border': 'rgba(107, 158, 212, 0.12)',
+                '--hud-gold-glow': '0 0 20px rgba(107, 158, 212, 0.15)',
+                '--turn-glow': '0 0 16px rgba(107, 158, 212, 0.5)',
+                '--shadow-glow': '0 0 20px rgba(107, 158, 212, 0.2)'
             },
             'wood': {
                 '--bg-primary': '#3a2a1a',
                 '--bg-secondary': '#5a4a2d',
                 '--bg-card': '#6b5a3d',
-                '--accent-gold': '#c4a86b'
+                '--bg-panel': 'rgba(50, 40, 25, 0.92)',
+                '--accent-gold': '#c4a86b',
+                '--accent-gold-light': '#d8c090',
+                '--accent-gold-dark': '#a08850',
+                '--text-primary': '#f0e6d2',
+                '--text-secondary': '#c8b898',
+                '--text-muted': '#9a8a6a',
+                '--win-color': '#4caf50',
+                '--lose-color': '#f44336',
+                '--hud-bg': 'rgba(25, 20, 15, 0.92)',
+                '--hud-border': 'rgba(196, 168, 107, 0.12)',
+                '--hud-gold-glow': '0 0 20px rgba(196, 168, 107, 0.15)',
+                '--turn-glow': '0 0 16px rgba(196, 168, 107, 0.5)',
+                '--shadow-glow': '0 0 20px rgba(196, 168, 107, 0.2)'
             },
             'red': {
                 '--bg-primary': '#3a1a1a',
                 '--bg-secondary': '#5a2d2d',
                 '--bg-card': '#6b3d3d',
-                '--accent-gold': '#d46b6b'
+                '--bg-panel': 'rgba(55, 25, 25, 0.92)',
+                '--accent-gold': '#d46b6b',
+                '--accent-gold-light': '#e89090',
+                '--accent-gold-dark': '#b05050',
+                '--text-primary': '#f0e0e0',
+                '--text-secondary': '#d0a8a8',
+                '--text-muted': '#a07878',
+                '--win-color': '#4caf50',
+                '--lose-color': '#f44336',
+                '--hud-bg': 'rgba(25, 15, 15, 0.92)',
+                '--hud-border': 'rgba(212, 107, 107, 0.12)',
+                '--hud-gold-glow': '0 0 20px rgba(212, 107, 107, 0.15)',
+                '--turn-glow': '0 0 16px rgba(212, 107, 107, 0.5)',
+                '--shadow-glow': '0 0 20px rgba(212, 107, 107, 0.2)'
             }
         };
         
@@ -2874,8 +2929,7 @@
                     break;
                 case 'skip':
                     if (engine.pendingAction) {
-                        engine.pendingAction = null;
-                        engine.nextTurn();
+                        await engine.skipAction();
                     }
                     break;
             }

@@ -33,8 +33,22 @@ class P2PNetwork extends Utils.EventEmitter {
         this.serverUrl = url.replace(/\/$/, '');
     }
 
+    async _fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const res = await fetch(url, { ...options, signal: controller.signal });
+            clearTimeout(timeout);
+            return res;
+        } catch (e) {
+            clearTimeout(timeout);
+            if (e.name === 'AbortError') throw new Error('请求超时');
+            throw e;
+        }
+    }
+
     async _post(path, body) {
-        const res = await fetch(this.serverUrl + path, {
+        const res = await this._fetchWithTimeout(this.serverUrl + path, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -45,7 +59,7 @@ class P2PNetwork extends Utils.EventEmitter {
     }
 
     async _get(path) {
-        const res = await fetch(this.serverUrl + path);
+        const res = await this._fetchWithTimeout(this.serverUrl + path);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
         return data;
@@ -326,11 +340,14 @@ class P2PNetwork extends Utils.EventEmitter {
 
     _sendSignal(type, data) {
         if (!this.roomId || !this.playerId) return;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
         fetch(`${this.serverUrl}/room/${this.roomId}/send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ playerId: this.playerId, type, data })
-        }).catch(() => {});
+            body: JSON.stringify({ playerId: this.playerId, type, data }),
+            signal: controller.signal
+        }).catch(() => {}).finally(() => clearTimeout(timeout));
     }
 
     _closePeer(playerId) {
@@ -386,11 +403,15 @@ class P2PNetwork extends Utils.EventEmitter {
 
         if (this.roomId && this.playerId) {
             try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 5000);
                 await fetch(`${this.serverUrl}/room/${this.roomId}/leave`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ playerId: this.playerId })
+                    body: JSON.stringify({ playerId: this.playerId }),
+                    signal: controller.signal
                 });
+                clearTimeout(timeout);
             } catch (e) {}
         }
 
