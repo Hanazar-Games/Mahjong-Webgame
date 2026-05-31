@@ -402,8 +402,8 @@ class P2PNetwork extends Utils.EventEmitter {
         this.emit('left');
     }
 
-    destroy() {
-        this.leaveRoom();
+    async destroy() {
+        await this.leaveRoom();
         this.removeAllListeners();
     }
 }

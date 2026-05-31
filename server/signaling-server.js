@@ -57,7 +57,12 @@ function getCorsOrigin(req) {
 }
 
 function jsonResponse(res, status, data, req) {
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = {
+        'Content-Type': 'application/json',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'strict-origin-when-cross-origin'
+    };
     const corsOrigin = getCorsOrigin(req);
     if (corsOrigin) {
         headers['Access-Control-Allow-Origin'] = corsOrigin;

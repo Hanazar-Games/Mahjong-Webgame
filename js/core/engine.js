@@ -6,12 +6,12 @@ class MahjongEngine extends Utils.EventEmitter {
     constructor(config = {}) {
         super();
         this.config = {
-            mahjongType: config.mahjongType || 'guangdong',
-            playerCount: config.playerCount || 4,
-            targetScore: config.targetScore || 1000,
-            aiDifficulty: config.aiDifficulty || 'normal',
-            speed: config.speed || 'normal',
-            maxRounds: config.maxRounds || 4,
+            mahjongType: config.mahjongType ?? 'guangdong',
+            playerCount: config.playerCount ?? 4,
+            targetScore: config.targetScore ?? 1000,
+            aiDifficulty: config.aiDifficulty ?? 'normal',
+            speed: config.speed ?? 'normal',
+            maxRounds: config.maxRounds ?? 4,
             ...config
         };
         

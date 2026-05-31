@@ -762,7 +762,7 @@
      * 获取位置名称
      */
     function getPositionName(index) {
-        const count = App.engine?.config?.playerCount || 4;
+        const count = App.engine?.config?.playerCount ?? 4;
         if (count === 3) {
             return ['bottom', 'left', 'right'][index];
         }
@@ -813,7 +813,10 @@
         
         const engine = App.engine;
         const player = engine.players[0];
-        if (!player) return;
+        if (!player) {
+            App._actionPending = false;
+            return;
+        }
         
         try {
         switch (type) {
@@ -940,7 +943,7 @@
     function showGameResult(data) {
         if (!data.players || data.players.length === 0) return;
         const sorted = [...data.players].sort((a, b) => b.score - a.score);
-        const targetScore = App.engine?.config?.targetScore || 1000;
+        const targetScore = App.engine?.config?.targetScore ?? 1000;
         const selfPlayer = sorted.find(p => p.position === 0);
         const isWin = sorted[0]?.position === 0;
         const netScore = (selfPlayer?.score || 0) - targetScore;
@@ -1882,10 +1885,13 @@
 
         _resetTable() {
             ['top', 'left', 'right', 'bottom'].forEach(pos => {
-                document.getElementById(`replay-hand-${pos}`).innerHTML = '';
-                document.getElementById(`replay-melds-${pos}`).innerHTML = '';
+                const handEl = document.getElementById(`replay-hand-${pos}`);
+                if (handEl) handEl.innerHTML = '';
+                const meldsEl = document.getElementById(`replay-melds-${pos}`);
+                if (meldsEl) meldsEl.innerHTML = '';
             });
-            document.getElementById('replay-discard-pile').innerHTML = '';
+            const discardEl = document.getElementById('replay-discard-pile');
+            if (discardEl) discardEl.innerHTML = '';
         }
 
         goToStep(stepIdx) {
@@ -2835,7 +2841,7 @@
                 return;
             }
         } else if (claimActions.includes(action.type)) {
-            if (!engine.pendingAction || engine.pendingAction.playerIndex !== playerIdx) {
+            if (!engine.pendingAction || engine.pendingAction.player?.position !== playerIdx) {
                 console.warn('Remote claim action without pending action ignored');
                 return;
             }
