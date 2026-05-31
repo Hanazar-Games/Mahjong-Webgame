@@ -96,6 +96,13 @@ const AudioManager = (function() {
         modOsc.start(now);
         carrierOsc.stop(now + attack + decay + release + 0.1);
         modOsc.stop(now + attack + decay + release + 0.1);
+
+        carrierOsc.onended = () => {
+            carrierOsc.disconnect();
+            modOsc.disconnect();
+            modGain.disconnect();
+            envelope.disconnect();
+        };
     }
 
     /**
@@ -143,6 +150,12 @@ const AudioManager = (function() {
         gain.connect(sfxGain);
         noise.start(now);
         noise.stop(now + safeDuration);
+
+        noise.onended = () => {
+            noise.disconnect();
+            filter.disconnect();
+            gain.disconnect();
+        };
     }
 
     /**
@@ -177,6 +190,11 @@ const AudioManager = (function() {
         mainOsc.start(now);
         mainOsc.stop(now + decay + 0.05);
 
+        mainOsc.onended = () => {
+            mainOsc.disconnect();
+            mainGain.disconnect();
+        };
+
         // 添加泛音
         harmonics.forEach((h, i) => {
             const osc = audioCtx.createOscillator();
@@ -189,6 +207,10 @@ const AudioManager = (function() {
             g.connect(sfxGain);
             osc.start(now + h.delay);
             osc.stop(now + decay + 0.05);
+            osc.onended = () => {
+                osc.disconnect();
+                g.disconnect();
+            };
         });
     }
 
@@ -220,6 +242,10 @@ const AudioManager = (function() {
             g.connect(sfxGain);
             osc.start(t);
             osc.stop(t + attack + rel + 0.05);
+            osc.onended = () => {
+                osc.disconnect();
+                g.disconnect();
+            };
         });
     }
 
@@ -248,6 +274,11 @@ const AudioManager = (function() {
         fundamental.start(now);
         fundamental.stop(now + duration);
 
+        fundamental.onended = () => {
+            fundamental.disconnect();
+            g.disconnect();
+        };
+
         // 泛音
         [1.5, 2, 2.5, 3].forEach((ratio, i) => {
             const osc = audioCtx.createOscillator();
@@ -261,6 +292,10 @@ const AudioManager = (function() {
             g2.connect(sfxGain);
             osc.start(now + i * 0.05);
             osc.stop(now + duration);
+            osc.onended = () => {
+                osc.disconnect();
+                g2.disconnect();
+            };
         });
     }
 
@@ -601,6 +636,11 @@ const AudioManager = (function() {
         osc.start(time);
         osc.stop(time + duration);
 
+        osc.onended = () => {
+            osc.disconnect();
+            gain.disconnect();
+        };
+
         if (addHarmony && Math.random() > 0.5) {
             const harm = audioCtx.createOscillator();
             const harmGain = audioCtx.createGain();
@@ -613,6 +653,11 @@ const AudioManager = (function() {
             harmGain.connect(bgmGain);
             harm.start(time + 0.05);
             harm.stop(time + duration * 0.7);
+
+            harm.onended = () => {
+                harm.disconnect();
+                harmGain.disconnect();
+            };
         }
     }
 

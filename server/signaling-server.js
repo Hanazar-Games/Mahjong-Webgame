@@ -13,24 +13,44 @@ const os = require('os');
 
 const PORT = parseInt(process.argv[2]) || 8081;
 
+// ===== 安全配置 =====
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080').split(',').map(s => s.trim());
+const MAX_BODY_SIZE = parseInt(process.env.MAX_BODY_SIZE) || 65536; // 64KB
+const ALLOWED_MESSAGE_TYPES = new Set(['sdp-offer', 'sdp-answer', 'ice-candidate']);
+
 // ===== 内存状态 =====
 const rooms = new Map();   // roomId -> Room
 const players = new Map(); // playerId -> { roomId, name, isHost, res, lastEventId }
 let nextMsgId = 1;
 
 // ===== 工具函数 =====
-function jsonResponse(res, status, data) {
+function getCorsOrigin(req) {
+    const origin = req.headers.origin;
+    if (!origin) return ALLOWED_ORIGINS[0] || 'http://localhost:8080';
+    return ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0] || 'http://localhost:8080';
+}
+
+function jsonResponse(res, status, data, req) {
     res.writeHead(status, {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
+        'Access-Control-Allow-Origin': getCorsOrigin(req)
     });
     res.end(JSON.stringify(data));
 }
 
-function readBody(req) {
+function readBody(req, maxSize = MAX_BODY_SIZE) {
     return new Promise((resolve, reject) => {
         let body = '';
-        req.on('data', chunk => body += chunk);
+        let size = 0;
+        req.on('data', chunk => {
+            size += chunk.length;
+            if (size > maxSize) {
+                req.destroy();
+                reject(new Error('Request body too large'));
+                return;
+            }
+            body += chunk;
+        });
         req.on('end', () => {
             try { resolve(body ? JSON.parse(body) : {}); }
             catch (e) { reject(new Error('Invalid JSON: ' + e.message)); }
@@ -94,7 +114,8 @@ setInterval(() => {
 // ===== HTTP 服务器 =====
 const server = http.createServer(async (req, res) => {
     // CORS
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const corsOrigin = getCorsOrigin(req);
+    res.setHeader('Access-Control-Allow-Origin', corsOrigin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -115,7 +136,7 @@ const server = http.createServer(async (req, res) => {
                 list.push({ id, name: room.name, type: room.mahjongType,
                     players: room.playerIds.length, maxPlayers: room.maxPlayers, pinfos });
             }
-            jsonResponse(res, 200, { rooms: list });
+            jsonResponse(res, 200, { rooms: list }, req);
             return;
         }
 
@@ -137,7 +158,7 @@ const server = http.createServer(async (req, res) => {
                 isHost: true, res: null, lastEventId: 0
             });
             console.log(`[创建] 房间 ${roomId} 来自 ${getClientIP(req)}`);
-            jsonResponse(res, 200, { roomId, playerId, isHost: true });
+            jsonResponse(res, 200, { roomId, playerId, isHost: true }, req);
             return;
         }
 
@@ -146,10 +167,10 @@ const server = http.createServer(async (req, res) => {
         if (joinMatch && req.method === 'POST') {
             const roomId = joinMatch[1];
             const room = rooms.get(roomId);
-            if (!room) { jsonResponse(res, 404, { error: '房间不存在' }); return; }
-            if (room.started) { jsonResponse(res, 403, { error: '游戏已开始' }); return; }
+            if (!room) { jsonResponse(res, 404, { error: '房间不存在' }, req); return; }
+            if (room.started) { jsonResponse(res, 403, { error: '游戏已开始' }, req); return; }
             if (room.playerIds.length >= room.maxPlayers) {
-                jsonResponse(res, 403, { error: '房间已满' }); return;
+                jsonResponse(res, 403, { error: '房间已满' }, req); return;
             }
             const body = await readBody(req);
             const playerId = generatePlayerId();
@@ -166,7 +187,7 @@ const server = http.createServer(async (req, res) => {
                 maxPlayers: room.maxPlayers
             });
             console.log(`[加入] ${playerId} -> 房间 ${roomId}`);
-            jsonResponse(res, 200, { roomId, playerId, isHost: false });
+            jsonResponse(res, 200, { roomId, playerId, isHost: false }, req);
             return;
         }
 
@@ -177,7 +198,7 @@ const server = http.createServer(async (req, res) => {
             const playerId = parsed.query.playerId;
             const p = players.get(playerId);
             if (!p || p.roomId !== roomId) {
-                res.writeHead(403, { 'Content-Type': 'text/plain' });
+                res.writeHead(403, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': corsOrigin });
                 res.end('Forbidden'); return;
             }
             res.writeHead(200, {
@@ -244,16 +265,19 @@ const server = http.createServer(async (req, res) => {
             const roomId = sendMatch[1];
             const body = await readBody(req);
             const room = rooms.get(roomId);
-            if (!room) { jsonResponse(res, 404, { error: '房间不存在' }); return; }
+            if (!room) { jsonResponse(res, 404, { error: '房间不存在' }, req); return; }
             const p = players.get(body.playerId);
-            if (!p || p.roomId !== roomId) { jsonResponse(res, 403, { error: '无效玩家' }); return; }
+            if (!p || p.roomId !== roomId) { jsonResponse(res, 403, { error: '无效玩家' }, req); return; }
+            if (!ALLOWED_MESSAGE_TYPES.has(body.type)) {
+                jsonResponse(res, 400, { error: 'Invalid message type' }, req); return;
+            }
             room.lastActivity = Date.now();
             broadcast(roomId, {
-                type: body.type || 'message',
+                type: body.type,
                 from: body.playerId, fromName: p.name,
                 data: body.data || {}
             }, body.excludeSelf ? body.playerId : null);
-            jsonResponse(res, 200, { ok: true });
+            jsonResponse(res, 200, { ok: true }, req);
             return;
         }
 
@@ -263,14 +287,14 @@ const server = http.createServer(async (req, res) => {
             const roomId = startMatch[1];
             const body = await readBody(req);
             const room = rooms.get(roomId);
-            if (!room) { jsonResponse(res, 404, { error: '房间不存在' }); return; }
+            if (!room) { jsonResponse(res, 404, { error: '房间不存在' }, req); return; }
             const p = players.get(body.playerId);
-            if (!p || !p.isHost) { jsonResponse(res, 403, { error: '只有房主可以开始' }); return; }
-            if (room.playerIds.length < 2) { jsonResponse(res, 403, { error: '至少需要2人' }); return; }
+            if (!p || !p.isHost) { jsonResponse(res, 403, { error: '只有房主可以开始' }, req); return; }
+            if (room.playerIds.length < 2) { jsonResponse(res, 403, { error: '至少需要2人' }, req); return; }
             room.started = true;
             broadcast(roomId, { type: 'gameStart', from: body.playerId, config: body.config || {} });
             console.log(`[开始] 房间 ${roomId} 游戏开始 (${room.playerIds.length}人)`);
-            jsonResponse(res, 200, { ok: true });
+            jsonResponse(res, 200, { ok: true }, req);
             return;
         }
 
@@ -291,14 +315,18 @@ const server = http.createServer(async (req, res) => {
             const p = players.get(body.playerId);
             if (p && p.res && !p.res.writableEnded) { try { p.res.end(); } catch (e) {} }
             players.delete(body.playerId);
-            jsonResponse(res, 200, { ok: true });
+            jsonResponse(res, 200, { ok: true }, req);
             return;
         }
 
-        jsonResponse(res, 404, { error: 'Not Found' });
+        jsonResponse(res, 404, { error: 'Not Found' }, req);
     } catch (e) {
         console.error('[错误]', e.message);
-        jsonResponse(res, 500, { error: 'Internal Server Error', detail: e.message });
+        if (e.message === 'Request body too large') {
+            jsonResponse(res, 413, { error: 'Request body too large' }, req);
+        } else {
+            jsonResponse(res, 500, { error: 'Internal Server Error', detail: e.message }, req);
+        }
     }
 });
 

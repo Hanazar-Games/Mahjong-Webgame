@@ -1604,6 +1604,7 @@
             this.players = replayData.players || [];
             this.playerStates = [];
             this.discardPile = [];
+            this._handlers = {};
         }
 
         init() {
@@ -1619,46 +1620,50 @@
         destroy() {
             this.pause();
             if (this.playTimer) { clearTimeout(this.playTimer); this.playTimer = null; }
+            this._unbindEvents();
             _replayPlayer = null;
         }
 
         _bindEvents() {
-            document.getElementById('replay-back-btn')?.addEventListener('click', () => {
-                this.destroy();
-                UIComponents.switchScreen('replay-list');
-            });
-            document.getElementById('replay-play-pause')?.addEventListener('click', () => {
-                AudioManager.SFX.buttonClick();
-                if (this.isPlaying) this.pause(); else this.play();
-            });
-            document.getElementById('replay-step-forward')?.addEventListener('click', () => {
-                AudioManager.SFX.buttonClick();
-                this.stepForward();
-            });
-            document.getElementById('replay-step-back')?.addEventListener('click', () => {
-                AudioManager.SFX.buttonClick();
-                this.stepBack();
-            });
-            document.getElementById('replay-speed')?.addEventListener('click', () => {
+            this._handlers.back = () => { this.destroy(); UIComponents.switchScreen('replay-list'); };
+            this._handlers.playPause = () => { AudioManager.SFX.buttonClick(); if (this.isPlaying) this.pause(); else this.play(); };
+            this._handlers.stepForward = () => { AudioManager.SFX.buttonClick(); this.stepForward(); };
+            this._handlers.stepBack = () => { AudioManager.SFX.buttonClick(); this.stepBack(); };
+            this._handlers.speed = () => {
                 AudioManager.SFX.buttonClick();
                 this.speedIdx = (this.speedIdx + 1) % this.speeds.length;
                 this.speed = this.speeds[this.speedIdx];
                 const btn = document.getElementById('replay-speed');
                 if (btn) btn.textContent = this.speed + '×';
-            });
-            document.getElementById('replay-progress')?.addEventListener('input', (e) => {
+            };
+            this._handlers.progress = (e) => {
                 const max = this._getTotalSteps() - 1;
                 const val = parseInt(e.target.value);
                 if (max > 0) this.goToStep(Math.round(val / 100 * max));
-            });
-            document.getElementById('replay-round-prev')?.addEventListener('click', () => {
-                AudioManager.SFX.buttonClick();
-                if (this.currentRoundIdx > 0) this.loadRound(this.currentRoundIdx - 1);
-            });
-            document.getElementById('replay-round-next')?.addEventListener('click', () => {
-                AudioManager.SFX.buttonClick();
-                if (this.currentRoundIdx < this.rounds.length - 1) this.loadRound(this.currentRoundIdx + 1);
-            });
+            };
+            this._handlers.roundPrev = () => { AudioManager.SFX.buttonClick(); if (this.currentRoundIdx > 0) this.loadRound(this.currentRoundIdx - 1); };
+            this._handlers.roundNext = () => { AudioManager.SFX.buttonClick(); if (this.currentRoundIdx < this.rounds.length - 1) this.loadRound(this.currentRoundIdx + 1); };
+
+            document.getElementById('replay-back-btn')?.addEventListener('click', this._handlers.back);
+            document.getElementById('replay-play-pause')?.addEventListener('click', this._handlers.playPause);
+            document.getElementById('replay-step-forward')?.addEventListener('click', this._handlers.stepForward);
+            document.getElementById('replay-step-back')?.addEventListener('click', this._handlers.stepBack);
+            document.getElementById('replay-speed')?.addEventListener('click', this._handlers.speed);
+            document.getElementById('replay-progress')?.addEventListener('input', this._handlers.progress);
+            document.getElementById('replay-round-prev')?.addEventListener('click', this._handlers.roundPrev);
+            document.getElementById('replay-round-next')?.addEventListener('click', this._handlers.roundNext);
+        }
+
+        _unbindEvents() {
+            document.getElementById('replay-back-btn')?.removeEventListener('click', this._handlers.back);
+            document.getElementById('replay-play-pause')?.removeEventListener('click', this._handlers.playPause);
+            document.getElementById('replay-step-forward')?.removeEventListener('click', this._handlers.stepForward);
+            document.getElementById('replay-step-back')?.removeEventListener('click', this._handlers.stepBack);
+            document.getElementById('replay-speed')?.removeEventListener('click', this._handlers.speed);
+            document.getElementById('replay-progress')?.removeEventListener('input', this._handlers.progress);
+            document.getElementById('replay-round-prev')?.removeEventListener('click', this._handlers.roundPrev);
+            document.getElementById('replay-round-next')?.removeEventListener('click', this._handlers.roundNext);
+            this._handlers = {};
         }
 
         _getTotalSteps() {

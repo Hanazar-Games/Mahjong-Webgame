@@ -30,6 +30,8 @@ class Player extends Utils.EventEmitter {
         this.gangCount = 0;
         this.isReady = false;
         this.isHu = false;
+        this.queYiMen = null;
+        this.isDealer = false;
     }
 
     draw(tile) {
@@ -56,18 +58,34 @@ class Player extends Utils.EventEmitter {
     }
 
     removeFromHand(tiles) {
+        if (!Array.isArray(tiles)) return;
+        // 先统计各 ID 需移除的次数，防止重复 ID 导致误删
+        const toRemove = {};
         for (const tile of tiles) {
-            const index = this.hand.findIndex(t => t.id === tile.id);
-            if (index !== -1) {
-                this.hand.splice(index, 1);
+            const id = tile?.id;
+            if (id !== undefined && id !== null) {
+                toRemove[id] = (toRemove[id] || 0) + 1;
             }
         }
+        const newHand = [];
+        for (const tile of this.hand) {
+            if (toRemove[tile.id] > 0) {
+                toRemove[tile.id]--;
+            } else {
+                newHand.push(tile);
+            }
+        }
+        this.hand = newHand;
         if (this.autoSort) {
             this.hand = Tiles.sortTiles(this.hand);
         }
     }
 
     addScore(delta) {
+        if (typeof delta !== 'number' || !isFinite(delta)) {
+            console.error('addScore: delta must be a finite number, got', delta);
+            return;
+        }
         this.score += delta;
         this.emit('scoreChange', this.score);
     }
@@ -93,7 +111,7 @@ class Player extends Utils.EventEmitter {
         return this.hand.filter(predicate);
     }
 
-    toJSON(includeHand = false) {
+    serialize(includeHand = false) {
         const result = {
             id: this.id,
             name: this.name,
@@ -102,16 +120,24 @@ class Player extends Utils.EventEmitter {
             position: this.position,
             isDealer: this.isDealer,
             handSize: this.hand.length,
-            melds: this.melds,
-            discards: this.discards.map(t => t.id),
-            flowers: this.flowers,
+            melds: this.melds.map(m => ({ ...m, tiles: m.tiles ? m.tiles.map(t => ({ ...t })) : [] })),
+            discards: this.discards.map(t => ({ ...t })),
+            flowers: this.flowers.map(t => ({ ...t })),
             isHu: this.isHu,
-            gangCount: this.gangCount
+            gangCount: this.gangCount,
+            queYiMen: this.queYiMen
         };
         if (includeHand) {
-            result.hand = this.hand;
-            result.discards = this.discards;
+            result.hand = this.hand.map(t => ({ ...t }));
+            result.discards = this.discards.map(t => ({ ...t }));
         }
         return result;
+    }
+
+    // JSON.stringify 的内建钩子 + 代码直接调用
+    // JSON.stringify 传入属性名（字符串），代码直接调用传入 boolean
+    toJSON(key) {
+        const includeHand = (key === true);
+        return this.serialize(includeHand);
     }
 }

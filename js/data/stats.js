@@ -40,18 +40,21 @@ const Stats = (function() {
         if (!stats || typeof stats !== 'object') {
             stats = Utils.deepClone(DEFAULT_STATS);
         }
-        // 防御：确保新字段存在（兼容旧数据）
-        if (stats.totalRounds === undefined) stats.totalRounds = 0;
-        if (stats.history === undefined) stats.history = [];
-        if (stats.playedTypes === undefined) stats.playedTypes = [];
-        if (stats.unlockedAchievements === undefined) stats.unlockedAchievements = [];
-        // 旧数据的 totalScore / bestGame 可能包含了初始分，需要纠正
-        // 但无法自动纠正，只能在后续游戏中用正确的语义覆盖
+        // 深合并：确保所有 DEFAULT_STATS 字段都存在，防止旧数据缺失字段导致 NaN
+        for (const key of Object.keys(DEFAULT_STATS)) {
+            if (stats[key] === undefined || stats[key] === null) {
+                stats[key] = Utils.deepClone(DEFAULT_STATS[key]);
+            }
+        }
         return stats;
     }
 
     function saveStats(stats) {
-        Storage.set('stats', stats);
+        const ok = Storage.set('stats', stats);
+        if (!ok) {
+            console.error('stats save failed: localStorage quota exceeded');
+            throw new Error('存储空间不足，请清理回放记录或重置数据');
+        }
     }
 
     function resetStats() {
@@ -60,6 +63,9 @@ const Stats = (function() {
     }
 
     function addExp(amount) {
+        if (typeof amount !== 'number' || !isFinite(amount) || amount < 0 || amount > 1e6) {
+            throw new Error('Invalid exp amount');
+        }
         const stats = getStats();
         const result = _addExpToStats(stats, amount);
         saveStats(stats);
@@ -113,6 +119,10 @@ const Stats = (function() {
      *   - hasQingYiSe: boolean
      */
     function recordGame(result) {
+        if (!result || typeof result !== 'object') {
+            console.error('recordGame: invalid result');
+            return null;
+        }
         const stats = getStats();
         stats.totalGames++;
         stats.totalRounds += result.rounds || 1;

@@ -24,6 +24,7 @@ class P2PNetwork extends Utils.EventEmitter {
         this.lastPong = Date.now();
         this.connected = false;
         this.connecting = false;
+        this._sseStarting = false;
     }
 
     // ===== 连接管理 =====
@@ -96,12 +97,14 @@ class P2PNetwork extends Utils.EventEmitter {
     // ===== SSE 长连接（信令接收） =====
 
     _startSSE() {
+        if (this._sseStarting) return;
         if (this.sseReconnectTimer) {
             clearTimeout(this.sseReconnectTimer);
             this.sseReconnectTimer = null;
         }
         if (this.sse) { try { this.sse.close(); } catch (e) {} this.sse = null; }
 
+        this._sseStarting = true;
         this.connecting = true;
         this.emit('connecting');
 
@@ -109,6 +112,7 @@ class P2PNetwork extends Utils.EventEmitter {
         this.sse = new EventSource(sseUrl);
 
         this.sse.onopen = () => {
+            this._sseStarting = false;
             this.connected = true;
             this.connecting = false;
             this.lastPong = Date.now();
@@ -126,6 +130,7 @@ class P2PNetwork extends Utils.EventEmitter {
         };
 
         this.sse.onerror = () => {
+            this._sseStarting = false;
             this.connected = false;
             this.connecting = false;
             this.emit('disconnected');
@@ -258,6 +263,8 @@ class P2PNetwork extends Utils.EventEmitter {
         channel.onmessage = (e) => {
             try {
                 const msg = JSON.parse(e.data);
+                // 基本校验：只允许对象且必须包含 type 字段
+                if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return;
                 this.emit('data', { from: playerId, ...msg });
             } catch (err) {}
         };
@@ -339,6 +346,7 @@ class P2PNetwork extends Utils.EventEmitter {
     // ===== 离开/销毁 =====
 
     async leaveRoom() {
+        this._sseStarting = false;
         if (this.sseReconnectTimer) { clearTimeout(this.sseReconnectTimer); this.sseReconnectTimer = null; }
         this._stopHeartbeat();
         if (this.sse) { try { this.sse.close(); } catch (e) {} this.sse = null; }

@@ -27,8 +27,40 @@ const Utils = {
     /**
      * 延迟函数
      */
-    sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+    sleep(ms, token) {
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(resolve, ms);
+            if (token) {
+                token.onCancel(() => {
+                    clearTimeout(timer);
+                    reject(new Error('CANCELLED'));
+                });
+            }
+        });
+    },
+
+    /**
+     * 取消令牌
+     */
+    CancelToken: class CancelToken {
+        constructor() {
+            this._cancelled = false;
+            this._callbacks = [];
+        }
+        get isCancelled() { return this._cancelled; }
+        cancel() {
+            if (this._cancelled) return;
+            this._cancelled = true;
+            this._callbacks.forEach(cb => cb());
+            this._callbacks = [];
+        }
+        onCancel(cb) {
+            if (this._cancelled) { cb(); return; }
+            this._callbacks.push(cb);
+        }
+        throwIfCancelled() {
+            if (this._cancelled) throw new Error('CANCELLED');
+        }
     },
 
     /**

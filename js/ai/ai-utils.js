@@ -7,6 +7,38 @@ const AIUtils = (function() {
     'use strict';
 
     // ============================================================
+    // 模块级 LRU 缓存：跨调用共享向听数子问题结果
+    // ============================================================
+    const _shantenMemo = new Map();
+    const _MAX_SHANTEN_MEMO = 10000;
+
+    function _memoKey(counts) {
+        return Object.entries(counts)
+            .filter(([k, v]) => v > 0)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([k, v]) => `${k}:${v}`)
+            .join(',');
+    }
+
+    function _getMemo(counts) {
+        const key = _memoKey(counts);
+        return _shantenMemo.has(key) ? _shantenMemo.get(key) : undefined;
+    }
+
+    function _setMemo(counts, value) {
+        const key = _memoKey(counts);
+        if (_shantenMemo.size >= _MAX_SHANTEN_MEMO) {
+            // 清空一半：保留最近插入的（Map 保持插入顺序）
+            const entries = Array.from(_shantenMemo.entries());
+            _shantenMemo.clear();
+            for (let i = Math.floor(entries.length / 2); i < entries.length; i++) {
+                _shantenMemo.set(entries[i][0], entries[i][1]);
+            }
+        }
+        _shantenMemo.set(key, value);
+    }
+
+    // ============================================================
     // 1. 向听数计算 (Shanten)
     // ============================================================
 
@@ -39,17 +71,17 @@ const AIUtils = (function() {
          * shapes 包括：对子、两面/坎张/边张搭子
          */
         function analyzeHandValue(counts) {
-            const key = Object.entries(counts)
-                .filter(([k, v]) => v > 0)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([k, v]) => `${k}:${v}`)
-                .join(',');
+            // 先查模块级缓存
+            const cached = _getMemo(counts);
+            if (cached !== undefined) return cached;
 
+            const key = _memoKey(counts);
             if (memo.has(key)) return memo.get(key);
 
             const keys = Object.keys(counts).filter(k => counts[k] > 0);
             if (keys.length === 0) {
                 memo.set(key, 0);
+                _setMemo(counts, 0);
                 return 0;
             }
 
@@ -102,6 +134,7 @@ const AIUtils = (function() {
             }
 
             memo.set(key, max);
+            _setMemo(counts, max);
             return max;
         }
 
@@ -129,17 +162,13 @@ const AIUtils = (function() {
     function calculateSevenPairsShanten(hand) {
         const counts = handToCounts(hand);
         let pairs = 0;
-        let singles = 0;
         for (const key of Object.keys(counts)) {
             if (counts[key] >= 2) pairs++;
-            else singles++;
         }
-        // 需要7对，已有 pairs 对，还需 (7-pairs) 对
-        // 但手牌中单张 singles 可以用来凑对，缺的单张需要从牌墙摸
-        const neededPairs = 7 - pairs;
-        // 如果单张不够凑对（比如已有 pairs 对，剩余牌不足 neededPairs 张），则不可能
-        // 实际公式：向听数 = 6 - pairs （标准公式）
-        return Math.max(-1, 6 - pairs);
+        // 七对需要7对子，向听数 = (7 - 已有对子数)
+        // 手牌为14张时已胡，为13张时听牌
+        const target = hand.length >= 14 ? 7 : 6;
+        return Math.max(-1, target - pairs);
     }
 
     /**
@@ -152,19 +181,24 @@ const AIUtils = (function() {
         const counts = handToCounts(hand);
         let uniqueYaoJiu = 0;
         let hasPair = false;
+        let nonYaoJiu = 0;
 
         for (const key of Object.keys(counts)) {
             const [suit, val] = key.split('-');
             const v = parseInt(val);
             const isYaoJiu = yaoJiuSuits.has(suit) || yaoJiuValues.includes(v);
-            if (!isYaoJiu) continue;
+            if (!isYaoJiu) {
+                nonYaoJiu += counts[key];
+                continue;
+            }
 
             uniqueYaoJiu++;
             if (counts[key] >= 2) hasPair = true;
         }
 
         // 需要13种幺九牌各一张 + 其中一种对子
-        const shanten = 13 - uniqueYaoJiu - (hasPair ? 1 : 0);
+        // 非幺九牌必须全部替换掉
+        const shanten = 13 - uniqueYaoJiu - (hasPair ? 1 : 0) + nonYaoJiu;
         return Math.max(-1, shanten);
     }
 
@@ -201,7 +235,7 @@ const AIUtils = (function() {
      * 计算手牌的所有有效进张（能改进向听数或直接和牌的牌）
      * 返回 { tile, newShanten, remaining }[]
      */
-    function getUsefulDraws(hand, melds, config) {
+    function getUsefulDraws(hand, melds, config, context) {
         const currentShanten = calculateShanten(hand, melds, config);
         const results = [];
         const allTiles = generateAllPossibleTiles(config);
@@ -213,7 +247,7 @@ const AIUtils = (function() {
                 results.push({
                     tile,
                     newShanten,
-                    remaining: getTileRemaining(tile, hand, melds, config)
+                    remaining: getTileRemaining(tile, hand, melds, context)
                 });
             }
         }
@@ -224,11 +258,11 @@ const AIUtils = (function() {
     /**
      * 计算"和牌张数"（听牌时所有能和的牌的剩余总数）
      */
-    function countWinningTiles(hand, melds, config) {
+    function countWinningTiles(hand, melds, config, context) {
         const tingPai = Rules.analyzeTingPai(hand, config);
         let total = 0;
         for (const tp of tingPai) {
-            total += getTileRemaining(tp.tile, hand, melds, config);
+            total += getTileRemaining(tp.tile, hand, melds, context);
         }
         return total;
     }
@@ -237,7 +271,7 @@ const AIUtils = (function() {
      * 评估移除某张牌后的综合效率评分
      * 返回：向听数变化 + 和牌张数 + 听牌质量 的综合分数（越低越好）
      */
-    function evaluateDiscardEfficiency(hand, melds, tileToRemove, config) {
+    function evaluateDiscardEfficiency(hand, melds, tileToRemove, config, context) {
         const newHand = hand.filter(t => t.id !== tileToRemove.id);
         const newShanten = calculateShanten(newHand, melds, config);
 
@@ -245,7 +279,7 @@ const AIUtils = (function() {
 
         if (newShanten === 0) {
             // 已听牌，评估听牌质量
-            const winningTiles = countWinningTiles(newHand, melds, config);
+            const winningTiles = countWinningTiles(newHand, melds, config, context);
             score -= winningTiles * 2; // 和牌张数越多越好
 
             // 评估是否好型听牌（两面听 > 坎张/边张 > 单骑）
@@ -257,7 +291,7 @@ const AIUtils = (function() {
             score -= goodWaitCount * 15;
         } else if (newShanten === 1) {
             // 接近听牌，评估进张数
-            const useful = getUsefulDraws(newHand, melds, config);
+            const useful = getUsefulDraws(newHand, melds, config, context);
             const totalRemaining = useful.reduce((s, u) => s + u.remaining, 0);
             score -= totalRemaining * 0.5;
         }
@@ -270,25 +304,25 @@ const AIUtils = (function() {
      * 例如手牌有 4-5，听 3 和 6，这两个都是好型
      */
     function isGoodWaitTile(tile, hand) {
-        // 好型：该牌可以与手牌中的牌形成两面听
-        // 简单判断：该牌不是边张（1,9）且不是单骑对子
+        // 好型两面听：tile 能和手牌中的牌形成两面搭子
+        // 例如手牌有 4-5，听 3 和 6 → 两面听
+        // 手牌有 3-5，听 4 → 坎张听（不算好型）
+        // 手牌有 1-2，听 3 → 边张听（不算好型）
         if (tile.isHonor) return false;
-        if (tile.value === 1 || tile.value === 9) return false;
 
-        // 检查是否能形成两面听
         const counts = handToCounts(hand);
-        const left = `${tile.suit}-${tile.value - 1}`;
-        const right = `${tile.suit}-${tile.value + 1}`;
+
+        // 检查是否能形成两面听：手牌中有 tile-2,tile-1 或 tile-1,tile+1 或 tile+1,tile+2
+        const left1 = `${tile.suit}-${tile.value - 1}`;
         const left2 = `${tile.suit}-${tile.value - 2}`;
+        const right1 = `${tile.suit}-${tile.value + 1}`;
         const right2 = `${tile.suit}-${tile.value + 2}`;
 
-        // 两面听：tile 作为顺子中间或边，且另一边有延伸
-        // 例如 3-4 听 2 或 5：和 2 形成 2-3-4，和 5 形成 3-4-5
-        // 或 2-3 听 1 或 4：和 1 形成 1-2-3（好型），和 4 形成 2-3-4（好型）
-        // 但 1-2 听 3 只是边张听牌
+        // 两面搭子：n,n+1 听 n-1 或 n+2
+        if ((counts[left1] || 0) > 0 && (counts[left2] || 0) > 0) return true;
+        if ((counts[left1] || 0) > 0 && (counts[right1] || 0) > 0) return true;
+        if ((counts[right1] || 0) > 0 && (counts[right2] || 0) > 0) return true;
 
-        // 简化：tile 的 value 在 3-7 之间时，更容易形成两面听
-        if (tile.value >= 3 && tile.value <= 7) return true;
         return false;
     }
 
@@ -395,14 +429,14 @@ const AIUtils = (function() {
             else if (tile.value === 2 || tile.value === 8) danger -= 2;
         }
 
-        // 8. 字牌：有人碰过则安全
+        // 8. 字牌：有人碰过则比较安全（还剩1张）
         if (tile.isHonor) {
             const someoneHasPeng = players.some(p =>
                 (p.melds || []).some(m =>
                     m.type === 'triplet' && m.tiles.some(t => Tiles.isSameTile(t, tile))
                 )
             );
-            if (someoneHasPeng) danger = 0; // 有人碰过，不可能再胡这个
+            if (someoneHasPeng) danger = 5; // 有人碰过，只剩1张，较安全
         }
 
         // 9. 残局放大
@@ -458,8 +492,7 @@ const AIUtils = (function() {
     function isDora(tile, doraIndicators) {
         if (!doraIndicators || !tile) return false;
         for (const d of doraIndicators) {
-            if (Tiles.isSameTile(d, tile)) return true;
-            // Dora 的下一张也是 dora
+            // Dora 是 indicator 的下一张，indicator 本身不算 dora
             if (!d.isHonor && !tile.isHonor && d.suit === tile.suit) {
                 if (d.value + 1 === tile.value) return true;
                 // 数牌循环：9的下一张是1
@@ -598,10 +631,11 @@ const AIUtils = (function() {
         else if (deckCount < 40) prob += 0.1;
 
         // 某家很久没副露但在打安全牌，可能听牌了
-        // 简化：如果副露数多 + 弃牌中有安全牌模式
+        // 简化：如果副露数多 + 弃牌中有安全牌模式（现物）
         const discards = player.discards || [];
+        const discardPile = ctx.discardPile || [];
         if (discards.length > 5) {
-            const safeDiscards = discards.filter(d => isGenbutsu(d, discards.slice(0, -1))).length;
+            const safeDiscards = discards.filter(d => isGenbutsu(d, discardPile)).length;
             if (safeDiscards / discards.length > 0.5) prob += 0.15;
         }
 

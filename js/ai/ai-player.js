@@ -76,9 +76,9 @@ const AIPlayer = (function() {
         /**
          * 某张牌移除后的向听数
          */
-        _shantenAfterRemove(player, tile) {
+        _shantenAfterRemove(player, tile, context) {
             const newHand = player.hand.filter(t => t.id !== tile.id);
-            return AIUtils.calculateShanten(newHand, player.melds, {});
+            return AIUtils.calculateShanten(newHand, player.melds, context?.ruleConfig || {});
         }
 
         /**
@@ -91,8 +91,8 @@ const AIPlayer = (function() {
         /**
          * 是否听牌
          */
-        _isTenpai(player) {
-            return this._shanten(player, {}) === 0;
+        _isTenpai(player, context) {
+            return this._shanten(player, context) === 0;
         }
 
         /**
@@ -171,37 +171,51 @@ const AIPlayer = (function() {
          * 听牌张数
          */
         _winningTilesCount(player, context) {
-            return AIUtils.countWinningTiles(player.hand, player.melds, context?.ruleConfig || {});
+            return AIUtils.countWinningTiles(player.hand, player.melds, context?.ruleConfig || {}, context);
         }
 
         /**
          * 模拟吃后的向听数变化
          */
-        _shantenAfterChi(player, chiTiles) {
-            const discardTile = chiTiles.find(t => !player.hand.some(h => h.id === t.id));
+        _shantenAfterChi(player, chiTiles, context) {
             const usedFromHand = chiTiles.filter(t => player.hand.some(h => h.id === t.id));
-            const newHand = player.hand.filter(t => !usedFromHand.some(u => u.id === t.id));
-            return AIUtils.calculateShanten(newHand, player.melds, {});
+            let newHand = player.hand.filter(t => !usedFromHand.some(u => u.id === t.id));
+            const newMelds = [...player.melds, { type: 'sequence', tiles: chiTiles }];
+            // 吃后必须弃一张牌，模拟弃掉最优的一张
+            let bestShanten = Infinity;
+            for (const t of newHand) {
+                const testHand = newHand.filter(h => h.id !== t.id);
+                const s = AIUtils.calculateShanten(testHand, newMelds, context?.ruleConfig || {});
+                if (s < bestShanten) bestShanten = s;
+            }
+            return bestShanten;
         }
 
         /**
          * 模拟碰后的向听数变化
          */
-        _shantenAfterPeng(player, tile) {
+        _shantenAfterPeng(player, tile, context) {
             const sameTiles = player.hand.filter(t => Tiles.isSameTile(t, tile)).slice(0, 2);
-            const newHand = player.hand.filter(t => !sameTiles.some(s => s.id === t.id));
+            let newHand = player.hand.filter(t => !sameTiles.some(s => s.id === t.id));
             const newMelds = [...player.melds, { type: 'triplet', tiles: [...sameTiles, tile] }];
-            return AIUtils.calculateShanten(newHand, newMelds, {});
+            // 碰后必须弃一张牌，模拟弃掉最优的一张
+            let bestShanten = Infinity;
+            for (const t of newHand) {
+                const testHand = newHand.filter(h => h.id !== t.id);
+                const s = AIUtils.calculateShanten(testHand, newMelds, context?.ruleConfig || {});
+                if (s < bestShanten) bestShanten = s;
+            }
+            return bestShanten;
         }
 
         /**
          * 模拟明杠后的向听数变化
          */
-        _shantenAfterGang(player, tile) {
+        _shantenAfterGang(player, tile, context) {
             const sameTiles = player.hand.filter(t => Tiles.isSameTile(t, tile)).slice(0, 3);
             const newHand = player.hand.filter(t => !sameTiles.some(s => s.id === t.id));
             const newMelds = [...player.melds, { type: 'quad', tiles: [...sameTiles, tile] }];
-            return AIUtils.calculateShanten(newHand, newMelds, {});
+            return AIUtils.calculateShanten(newHand, newMelds, context?.ruleConfig || {});
         }
     }
 
@@ -299,7 +313,7 @@ const AIPlayer = (function() {
             const option = options[0];
 
             // 听牌了不打杠
-            if (this._isTenpai(player)) return false;
+            if (this._isTenpai(player, context)) return false;
 
             if (option.type === 'an_gang') {
                 return Math.random() < 0.7;
@@ -328,7 +342,7 @@ const AIPlayer = (function() {
 
                     // 吃后向听数减少才吃（选最优吃法评估）
                     const bestOption = this.chooseChiOption(player, action.options, context);
-                    const newShanten = this._shantenAfterChi(player, bestOption);
+                    const newShanten = this._shantenAfterChi(player, bestOption, context);
                     if (newShanten < shanten) return true;
 
                     // 向听数不变但形成好型听牌
@@ -347,7 +361,7 @@ const AIPlayer = (function() {
                     if (tile.isHonor) return true;
 
                     // 碰后向听数减少才碰
-                    const newShanten = this._shantenAfterPeng(player, tile);
+                    const newShanten = this._shantenAfterPeng(player, tile, context);
                     if (newShanten < shanten) return true;
 
                     // 有4张潜力（未来可以杠）
@@ -379,10 +393,10 @@ const AIPlayer = (function() {
 
             // 选择吃后向听数最小的
             let best = options[0];
-            let bestShanten = this._shantenAfterChi(player, options[0]);
+            let bestShanten = this._shantenAfterChi(player, options[0], context);
 
             for (const opt of options.slice(1)) {
-                const s = this._shantenAfterChi(player, opt);
+                const s = this._shantenAfterChi(player, opt, context);
                 if (s < bestShanten) {
                     bestShanten = s;
                     best = opt;
@@ -416,14 +430,14 @@ const AIPlayer = (function() {
                 let score = this._baseTileScore(tile, hand, melds);
 
                 // 1. 向听数驱动：打完后向听数的影响
-                const newShanten = this._shantenAfterRemove(player, tile);
+                const newShanten = this._shantenAfterRemove(player, tile, ctx);
                 const shantenDiff = newShanten - shanten;
                 score -= shantenDiff * 50; // 向听数增加→该牌有价值→降低弃牌意愿
 
                 // 2. 听牌效率：打完后如果听牌，评估和牌张数（好弃牌加分）
                 if (newShanten === 0) {
                     const newHand = hand.filter(t => t.id !== tile.id);
-                    const winningTiles = AIUtils.countWinningTiles(newHand, melds, ctx.ruleConfig || {});
+                    const winningTiles = AIUtils.countWinningTiles(newHand, melds, ctx.ruleConfig || {}, ctx);
                     score += winningTiles * 1.5;
                 }
 
@@ -494,7 +508,7 @@ const AIPlayer = (function() {
                 if (newShanten === 0) {
                     efficiency = AIUtils.countWinningTiles(newHand, melds, ctx.ruleConfig || {});
                 } else if (newShanten === 1) {
-                    const useful = AIUtils.getUsefulDraws(newHand, melds, ctx.ruleConfig || {});
+                    const useful = AIUtils.getUsefulDraws(newHand, melds, ctx.ruleConfig || {}, ctx);
                     efficiency = useful.reduce((s, u) => s + u.remaining, 0);
                 }
 
@@ -553,7 +567,7 @@ const AIPlayer = (function() {
 
                     // 选最优吃法
                     const bestOption = this.chooseChiOption(player, options, context);
-                    const newShanten = this._shantenAfterChi(player, bestOption);
+                    const newShanten = this._shantenAfterChi(player, bestOption, context);
 
                     // 向听数增加：绝对不吃
                     if (newShanten > shanten) return false;
@@ -574,7 +588,7 @@ const AIPlayer = (function() {
                     // 风牌/箭牌总是碰（增加番数）
                     if (tile.isHonor) return true;
 
-                    const newShanten = this._shantenAfterPeng(player, tile);
+                    const newShanten = this._shantenAfterPeng(player, tile, context);
 
                     // 碰后向听数减少才碰
                     if (newShanten < shanten) return true;
@@ -663,7 +677,7 @@ const AIPlayer = (function() {
 
                 // 2. 听牌质量（好弃牌加分）
                 if (newShanten === 0) {
-                    const winningTiles = AIUtils.countWinningTiles(newHand, melds, ctx.ruleConfig || {});
+                    const winningTiles = AIUtils.countWinningTiles(newHand, melds, ctx.ruleConfig || {}, ctx);
                     score += winningTiles * 2;
 
                     // 好型听牌奖励
@@ -677,7 +691,7 @@ const AIPlayer = (function() {
 
                 // 3. 牌效率（1向听时评估进张数，好弃牌加分）
                 if (newShanten === 1) {
-                    const useful = AIUtils.getUsefulDraws(newHand, melds, ctx.ruleConfig || {});
+                    const useful = AIUtils.getUsefulDraws(newHand, melds, ctx.ruleConfig || {}, ctx);
                     const totalRemaining = useful.reduce((s, u) => s + u.remaining, 0);
                     score += totalRemaining * 0.6;
                 }
@@ -824,7 +838,7 @@ const AIPlayer = (function() {
                     if (options.length === 0) return false;
 
                     const bestOption = this.chooseChiOption(player, options, context);
-                    const newShanten = this._shantenAfterChi(player, bestOption);
+                    const newShanten = this._shantenAfterChi(player, bestOption, context);
 
                     // EV 驱动：评估吃后的期望收益
                     // 吃后向听数严格减少，或形成显著更好的听牌
@@ -864,7 +878,7 @@ const AIPlayer = (function() {
                     // 风牌/箭牌：增加番数，总是碰
                     if (tile.isHonor) return true;
 
-                    const newShanten = this._shantenAfterPeng(player, tile);
+                    const newShanten = this._shantenAfterPeng(player, tile, context);
 
                     if (newShanten < shanten) return true;
 

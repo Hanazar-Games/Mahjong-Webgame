@@ -10,6 +10,7 @@ const Storage = {
     },
     set(key, value) {
         _storage[key] = JSON.parse(JSON.stringify(value));
+        return true;
     },
     remove(key) {
         delete _storage[key];

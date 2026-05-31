@@ -8,6 +8,34 @@ const Rules = (function() {
 
     const { SUIT_TYPES, createTile, isSameTile, canFormSequence, canFormTriplet, sortTiles } = Tiles;
 
+    // ===== 胡牌判断缓存 =====
+    const _canWinCache = new Map();
+    const _MAX_CANWIN_CACHE = 5000;
+
+    function _canWinCacheKey(hand) {
+        return hand.map(t => t.id).sort((a, b) => a - b).join(',');
+    }
+
+    function _getCanWinCached(hand) {
+        const key = _canWinCacheKey(hand);
+        if (_canWinCache.has(key)) {
+            return _canWinCache.get(key);
+        }
+        return undefined;
+    }
+
+    function _setCanWinCached(hand, result) {
+        const key = _canWinCacheKey(hand);
+        if (_canWinCache.size >= _MAX_CANWIN_CACHE) {
+            const entries = Array.from(_canWinCache.entries());
+            _canWinCache.clear();
+            for (let i = Math.floor(entries.length / 2); i < entries.length; i++) {
+                _canWinCache.set(entries[i][0], entries[i][1]);
+            }
+        }
+        _canWinCache.set(key, result);
+    }
+
     // ===== 番数体系 =====
     // 默认番数表（地方麻将通用）
     const DEFAULT_FAN_TABLE = {
@@ -94,26 +122,37 @@ const Rules = (function() {
     function canWin(hand, config = {}) {
         if (!hand || !Array.isArray(hand)) return { canWin: false };
         if (hand.length % 3 !== 1 && hand.length % 3 !== 2) return { canWin: false };
-        
+
+        const cached = _getCanWinCached(hand);
+        if (cached !== undefined) return cached;
+
         const sorted = sortTiles(hand);
         
         // 七对（支持任意偶数张牌，如台湾麻将16张=8对）
         if (hand.length % 2 === 0 && hand.length >= 14 && isSevenPairs(sorted)) {
-            return { canWin: true, type: 'seven_pairs' };
+            const result = { canWin: true, type: 'seven_pairs' };
+            _setCanWinCached(hand, result);
+            return result;
         }
         
         // 十三幺
         if (hand.length === 14 && isThirteenOrphans(sorted)) {
-            return { canWin: true, type: 'thirteen_orphans' };
+            const result = { canWin: true, type: 'thirteen_orphans' };
+            _setCanWinCached(hand, result);
+            return result;
         }
         
         // 标准胡牌型
         const result = findStandardWin(sorted);
         if (result) {
-            return { canWin: true, type: 'standard', ...result };
+            const r = { canWin: true, type: 'standard', ...result };
+            _setCanWinCached(hand, r);
+            return r;
         }
-        
-        return { canWin: false };
+
+        const negative = { canWin: false };
+        _setCanWinCached(hand, negative);
+        return negative;
     }
 
     /**

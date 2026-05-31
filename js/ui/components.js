@@ -159,7 +159,7 @@ const UIComponents = (function() {
         div.className = `player-info ${isCurrent ? 'current-turn' : ''}`;
         div.innerHTML = `
             <div class="player-avatar">${player.isAI ? '🤖' : '👤'}</div>
-            <div class="player-name">${player.name || ''}</div>
+            <div class="player-name">${Utils.escapeHtml(player.name)}</div>
             <div class="player-score">${player.score || 0}</div>
         `;
         return div;
@@ -224,7 +224,7 @@ const UIComponents = (function() {
         
         if (content) {
             const contentDiv = document.createElement('div');
-            contentDiv.innerHTML = content;
+            contentDiv.innerHTML = Utils.escapeHtml(content);
             modal.appendChild(contentDiv);
         }
         
@@ -260,12 +260,12 @@ const UIComponents = (function() {
         div.className = `achievement-card ${achievement.unlocked ? 'unlocked' : 'locked'}`;
         if (achievement.unlocked) div.classList.add('neon-border');
         div.innerHTML = `
-            <div class="achievement-icon">${achievement.icon}</div>
+            <div class="achievement-icon">${Utils.escapeHtml(achievement.icon)}</div>
             <div class="achievement-info">
-                <div class="achievement-name">${achievement.name}</div>
-                <div class="achievement-desc">${achievement.desc}</div>
+                <div class="achievement-name">${Utils.escapeHtml(achievement.name)}</div>
+                <div class="achievement-desc">${Utils.escapeHtml(achievement.desc)}</div>
                 <div class="achievement-progress">
-                    <div class="achievement-progress-bar" style="width: ${achievement.progress}%"></div>
+                    <div class="achievement-progress-bar" style="width: ${achievement.progress || 0}%"></div>
                 </div>
             </div>
         `;
@@ -284,8 +284,8 @@ const UIComponents = (function() {
         
         div.innerHTML = `
             <div class="replay-info">
-                <span class="replay-title">${replay.mahjongType} · ${replay.rounds}局</span>
-                <span class="replay-meta">${dateStr} · ${replay.finalScores?.[0]?.name || '未知'} 胜出</span>
+                <span class="replay-title">${Utils.escapeHtml(replay.mahjongType)} · ${Utils.escapeHtml(replay.rounds)}局</span>
+                <span class="replay-meta">${dateStr} · ${Utils.escapeHtml(replay.finalScores?.[0]?.name) || '未知'} 胜出</span>
             </div>
             <div class="replay-actions">
                 <button class="replay-btn">播放</button>
@@ -308,8 +308,8 @@ const UIComponents = (function() {
         div.className = 'room-item';
         div.innerHTML = `
             <div class="room-item-info">
-                <span class="room-item-name">${room.name}</span>
-                <span class="room-item-meta">${room.type} · ${room.players}/${room.maxPlayers}人</span>
+                <span class="room-item-name">${Utils.escapeHtml(room.name)}</span>
+                <span class="room-item-meta">${Utils.escapeHtml(room.type)} · ${Utils.escapeHtml(room.players)}/${Utils.escapeHtml(room.maxPlayers)}人</span>
             </div>
             <button class="room-item-join">加入</button>
         `;
