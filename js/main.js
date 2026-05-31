@@ -15,6 +15,16 @@
         anGangOptions: null
     };
 
+    // CSS.escape 兼容性回退（旧版 Safari/IE/部分安卓 WebView 不支持）
+    function escapeCssSelector(str) {
+        if (typeof str !== 'string') return '';
+        if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+            return CSS.escape(str);
+        }
+        // 手动转义：仅处理 ID/类名选择器中最危险的字符
+        return str.replace(/([!"#$%&'()*+,.\/:;<=>?@[\\]^`{|}~])/g, '\\$1');
+    }
+
     // 初始化
     function init() {
         loadSettings();
@@ -792,13 +802,13 @@
                 // 选择另一张牌
                 AudioManager.SFX.selectTile();
                 selected.classList.remove('selected');
-                const targetEl = handEl.querySelector(`[data-id="${CSS.escape(tile.id)}"]`);
+                const targetEl = handEl.querySelector(`[data-id="${escapeCssSelector(tile.id)}"]`);
                 if (targetEl) targetEl.classList.add('selected');
             }
         } else {
             // 选择牌
             AudioManager.SFX.selectTile();
-            const targetEl = handEl.querySelector(`[data-id="${CSS.escape(tile.id)}"]`);
+            const targetEl = handEl.querySelector(`[data-id="${escapeCssSelector(tile.id)}"]`);
             if (targetEl) targetEl.classList.add('selected');
         }
     }
@@ -828,7 +838,7 @@
         }
         
         // 辅助：检查引擎是否仍有效且未被替换
-        const engineStillValid = () => App.engine === engine && engine.state === 'playing';
+        const engineStillValid = () => App.engine === engine && engine.state !== 'destroyed' && engine.state !== 'idle';
         
         try {
         switch (type) {
@@ -1284,12 +1294,21 @@
     /**
      * 显示动作反馈文字
      */
+    let _actionFeedbackTimer = null;
+
     function showActionFeedback(text, duration = 800) {
         const el = document.getElementById('action-feedback');
         if (!el) return;
+        if (_actionFeedbackTimer) {
+            clearTimeout(_actionFeedbackTimer);
+            _actionFeedbackTimer = null;
+        }
         el.textContent = text;
         el.classList.add('show');
-        setTimeout(() => el.classList.remove('show'), duration);
+        _actionFeedbackTimer = setTimeout(() => {
+            _actionFeedbackTimer = null;
+            el.classList.remove('show');
+        }, duration);
     }
 
     /**
