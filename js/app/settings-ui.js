@@ -397,3 +397,38 @@
             }
         }
     }
+    function loadSettings() {
+        App.settings = Stats.getSettings();
+        
+        // 应用设置到UI
+        const settingMap = {
+            'player-name': App.settings.playerName,
+            'ai-difficulty': App.settings.aiDifficulty,
+            'table-theme': App.settings.tableTheme,
+            'game-rounds': String(App.settings.gameRounds),
+            'game-speed': App.settings.gameSpeed,
+            'bgm-volume': App.settings.bgmVolume,
+            'sfx-volume': App.settings.sfxVolume,
+            'sfx-enabled': App.settings.sfxEnabled,
+            'bgm-style': App.settings.bgmStyle,
+
+            'opponent-display': App.settings.opponentDisplay,
+            'show-tile-names': App.settings.showTileNames,
+            'auto-sort': App.settings.autoSort
+        };
+        
+        for (const [id, value] of Object.entries(settingMap)) {
+            const el = document.getElementById(id);
+            if (el) {
+                if (el.type === 'range') {
+                    el.value = value;
+                    const label = document.getElementById(id + '-value');
+                    if (label) label.textContent = value + '%';
+                } else if (el.type === 'checkbox') {
+                    el.checked = !!value;
+                } else {
+                    el.value = value;
+                }
+            }
+        }
+    }
