@@ -52,13 +52,7 @@
         UIComponents.updateStatsPanel(App.stats);
     }
 
-    /**
-     * 绑定事件
-     */
-
-    /**
-     * 处理菜单点击
-     */
+    // 核心游戏启动
     async function startGame(config) {
         // 清理旧游戏（先取消可能存在的退场动画，防止竞态销毁新引擎）
         if (App._endGameTimeout) {
@@ -122,10 +116,6 @@
         // 开始游戏
         await App.engine.start();
     }
-
-    /**
-     * 绑定引擎事件
-     */
 
     // 暴露全局引用供拆分模块使用
     window.App = App;
