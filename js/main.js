@@ -2526,6 +2526,9 @@
                 hideNetworkError();
                 App.network.setServerUrl(url);
                 updateConnectionStatus('connecting');
+                const btn = e.target;
+                if (btn.disabled) return;
+                btn.disabled = true;
                 try {
                     // 测试连接：discoverRooms 可以验证服务器可达
                     await App.network.discoverRooms();
@@ -2535,6 +2538,8 @@
                 } catch (err) {
                     updateConnectionStatus('offline');
                     showNetworkError('连接失败: ' + (err.message || '无法连接到服务器'));
+                } finally {
+                    btn.disabled = false;
                 }
             });
         }
@@ -2553,11 +2558,15 @@
             const type = typeSelect?.value || 'guangdong';
             const playerName = App.settings?.playerName || '玩家';
 
+            const createBtn = document.getElementById('create-room');
+            if (createBtn) createBtn.disabled = true;
             try {
                 await App.network.createRoom(name, type, playerName);
                 Utils.toast(`房间 ${Utils.escapeHtml(name)} 已创建`);
             } catch (err) {
                 showNetworkError('创建房间失败: ' + (err.message || '未知错误'));
+            } finally {
+                if (createBtn) createBtn.disabled = false;
             }
         });
 
@@ -2570,11 +2579,14 @@
         // 离开房间
         document.getElementById('btn-leave-room')?.addEventListener('click', async () => {
             AudioManager.SFX.buttonClick();
+            const leaveBtn = document.getElementById('btn-leave-room');
+            if (leaveBtn) leaveBtn.disabled = true;
             try {
                 await App.network.leaveRoom();
             } catch (e) {}
             showLobbyContent();
             updateConnectionStatus(App.network.connected ? 'online' : 'offline');
+            if (leaveBtn) leaveBtn.disabled = false;
         });
 
         // 开始游戏（房主）
@@ -2599,10 +2611,13 @@
                 networkMode: true
             };
 
+            const startBtnNet = document.getElementById('btn-start-network');
+            if (startBtnNet) startBtnNet.disabled = true;
             try {
                 await App.network.startGame(config);
             } catch (err) {
                 showNetworkError('开始游戏失败: ' + (err.message || '未知错误'));
+                if (startBtnNet) startBtnNet.disabled = false;
             }
         });
     }
@@ -2677,6 +2692,8 @@
     /**
      * 刷新房间列表
      */
+    let _refreshGeneration = 0;
+
     async function refreshRoomList() {
         const list = document.getElementById('room-list');
         if (!list) return;
@@ -2684,11 +2701,14 @@
             list.innerHTML = '<div class="empty-state">请先连接服务器</div>';
             return;
         }
+        const gen = ++_refreshGeneration;
         list.innerHTML = '<div class="empty-state">搜索中...</div>';
         try {
             const rooms = await App.network.discoverRooms();
+            if (gen !== _refreshGeneration) return; // 忽略过期结果
             renderRoomList(rooms);
         } catch (err) {
+            if (gen !== _refreshGeneration) return;
             list.innerHTML = '<div class="empty-state">搜索失败，请检查服务器</div>';
             console.warn('discoverRooms error:', err);
         }
@@ -2724,13 +2744,16 @@
             if (joinBtn) {
                 joinBtn.addEventListener('click', async () => {
                     AudioManager.SFX.buttonClick();
+                    if (joinBtn.disabled) return;
                     hideNetworkError();
+                    joinBtn.disabled = true;
                     const playerName = App.settings?.playerName || '玩家';
                     try {
                         await App.network.joinRoom(room.id, playerName);
                         Utils.toast(`已加入房间`);
                     } catch (err) {
                         showNetworkError('加入房间失败: ' + (err.message || '未知错误'));
+                        joinBtn.disabled = false;
                     }
                 });
             }
