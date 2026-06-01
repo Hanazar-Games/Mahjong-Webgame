@@ -385,3 +385,15 @@
     /**
      * 重置统计
      */
+    function handleResetStats() {
+        if (confirm('确定要重置所有统计数据吗？此操作不可恢复。')) {
+            try {
+                Stats.resetStats();
+                loadStats();
+                Utils.toast('统计数据已重置');
+            } catch (e) {
+                console.error('重置统计失败:', e);
+                Utils.toast('重置统计失败');
+            }
+        }
+    }
