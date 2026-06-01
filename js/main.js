@@ -1305,26 +1305,6 @@
     }
 
     /**
-     * 显示动作反馈文字
-     */
-    let _actionFeedbackTimer = null;
-
-    function showActionFeedback(text, duration = 800) {
-        const el = document.getElementById('action-feedback');
-        if (!el) return;
-        if (_actionFeedbackTimer) {
-            clearTimeout(_actionFeedbackTimer);
-            _actionFeedbackTimer = null;
-        }
-        el.textContent = text;
-        el.classList.add('show');
-        _actionFeedbackTimer = setTimeout(() => {
-            _actionFeedbackTimer = null;
-            el.classList.remove('show');
-        }, duration);
-    }
-
-    /**
      * 渲染麻将种类选择
      */
     function renderMahjongTypes() {

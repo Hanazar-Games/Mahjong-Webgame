@@ -959,59 +959,65 @@ class MahjongEngine extends Utils.EventEmitter {
         // 标记玩家已胡
         player.isHu = true;
         
-        // 结算分数：底分 × 2^(番数 - 起胡番)
-        const baseScore = 1;
-        const effectiveFan = Math.max(0, fanResult.total - minFan);
-        const totalScore = baseScore * Math.pow(2, effectiveFan);
-        
-        if (isZiMo) {
-            for (const p of this.players) {
-                if (p.id !== player.id && !p.isHu) {
-                    p.addScore(-totalScore);
-                    player.addScore(totalScore);
+        try {
+            // 结算分数：底分 × 2^(番数 - 起胡番)
+            const baseScore = 1;
+            const effectiveFan = Math.max(0, fanResult.total - minFan);
+            const totalScore = baseScore * Math.pow(2, effectiveFan);
+            
+            if (isZiMo) {
+                for (const p of this.players) {
+                    if (p.id !== player.id && !p.isHu) {
+                        p.addScore(-totalScore);
+                        player.addScore(totalScore);
+                    }
+                }
+            } else {
+                const discardPlayer = this.players[this.currentPlayerIndex];
+                if (discardPlayer) {
+                    discardPlayer.addScore(-totalScore);
+                }
+                player.addScore(totalScore);
+            }
+            
+            this.recordHistory('hu', {
+                playerId: player.id,
+                isZiMo,
+                fan: fanResult,
+                score: totalScore,
+                winType: winInfo.type
+            });
+            
+            // 防御：emit 监听器可能抛出异常，确保 endRound/nextTurn 始终执行
+            try {
+                this.emit('hu', {
+                    player: player.toJSON(),
+                    isZiMo,
+                    fan: Utils.deepClone(fanResult),
+                    score: totalScore,
+                    hand: player.hand.map(t => t.id),
+                    winType: winInfo.type,
+                    isGangShangKaiHua: action.isGangShangKaiHua || false
+                });
+            } catch (emitErr) {
+                console.error('hu event listener error:', emitErr);
+            }
+            
+            // 检查是否一局结束
+            if (this.isRoundOver()) {
+                await this.endRound();
+            } else {
+                // 四川麻将血战到底，继续
+                if (this.ruleConfig.xueZhanDaoDi) {
+                    await this.nextTurn();
+                } else {
+                    await this.endRound();
                 }
             }
-        } else {
-            const discardPlayer = this.players[this.currentPlayerIndex];
-            if (discardPlayer) {
-                discardPlayer.addScore(-totalScore);
-            }
-            player.addScore(totalScore);
-        }
-        
-        this.recordHistory('hu', {
-            playerId: player.id,
-            isZiMo,
-            fan: fanResult,
-            score: totalScore,
-            winType: winInfo.type
-        });
-        
-        // 防御：emit 监听器可能抛出异常，确保 endRound/nextTurn 始终执行
-        try {
-            this.emit('hu', {
-                player: player.toJSON(),
-                isZiMo,
-                fan: Utils.deepClone(fanResult),
-                score: totalScore,
-                hand: player.hand.map(t => t.id),
-                winType: winInfo.type,
-                isGangShangKaiHua: action.isGangShangKaiHua || false
-            });
-        } catch (emitErr) {
-            console.error('hu event listener error:', emitErr);
-        }
-        
-        // 检查是否一局结束
-        if (this.isRoundOver()) {
-            await this.endRound();
-        } else {
-            // 四川麻将血战到底，继续
-            if (this.ruleConfig.xueZhanDaoDi) {
-                await this.nextTurn();
-            } else {
-                await this.endRound();
-            }
+        } catch (e) {
+            // 回滚胡牌标记，防止半事务状态
+            player.isHu = false;
+            throw e;
         }
         return true;
     }
