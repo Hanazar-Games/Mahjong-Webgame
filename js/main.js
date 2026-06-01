@@ -506,7 +506,6 @@
     // 暴露全局引用供拆分模块使用
     window.App = App;
     window.bindEngineEvents = bindEngineEvents;
-    window.escapeCssSelector = escapeCssSelector;
     window.showIngameMenu = showIngameMenu;
     window.hideIngameMenu = hideIngameMenu;
     window.startGame = startGame;

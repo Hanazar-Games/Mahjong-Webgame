@@ -252,3 +252,13 @@ const Utils = {
         }
     }
 };
+
+// CSS.escape 兼容性回退（旧版 Safari/IE/部分安卓 WebView 不支持）
+function escapeCssSelector(str) {
+    if (typeof str !== 'string') return '';
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+        return CSS.escape(str);
+    }
+    // 手动转义：仅处理 ID/类名选择器中最危险的字符
+    return str.replace(/([!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, '\\$1');
+}
