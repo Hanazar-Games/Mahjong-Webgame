@@ -256,6 +256,8 @@ const server = http.createServer(async (req, res) => {
                 'Connection': 'keep-alive'
             });
             res.write(':ok\n\n');
+            // 清除旧离线通知timer，防止快速重连时错误广播离线
+            if (p.offlineTimeout) { clearTimeout(p.offlineTimeout); p.offlineTimeout = null; }
             p.res = res;
             p._clientIP = clientIP;
             p.lastEventId = parseInt(parsed.query.lastId) || 0;
@@ -299,7 +301,9 @@ const server = http.createServer(async (req, res) => {
             req.on('close', () => {
                 clearInterval(heartbeat);
                 p.res = null;
-                setTimeout(() => {
+                if (p.offlineTimeout) clearTimeout(p.offlineTimeout);
+                p.offlineTimeout = setTimeout(() => {
+                    p.offlineTimeout = null;
                     const cp = players.get(playerId);
                     if (cp && !cp.res) {
                         broadcast(roomId, { type: 'playerOffline', playerId, name: cp.name });

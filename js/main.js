@@ -270,7 +270,12 @@
             autoSort: App.settings.autoSort !== false
         };
         
-        await startGame(config);
+        try {
+            await startGame(config);
+        } catch (e) {
+            console.error('startQuickGame error:', e);
+            Utils.toast('游戏启动失败');
+        }
     }
 
     /**
@@ -298,7 +303,12 @@
             autoSort: App.settings.autoSort !== false
         };
         
-        await startGame(config);
+        try {
+            await startGame(config);
+        } catch (e) {
+            console.error('startCustomGame error:', e);
+            Utils.toast('游戏启动失败');
+        }
     }
 
     /**
@@ -885,7 +895,7 @@
                     App.anGangOptions = null;
                     disableActionButtons();
                     enablePlayerActions(true);
-                } else if (engine.currentPlayerIndex === 0 && player.hand?.length > (engine.typeConfig?.handSize || 13)) {
+                } else if (engine.currentPlayerIndex === 0 && player.hand?.length > (engine.typeConfig?.handSize || 13) && engineStillValid()) {
                     // 跳过自摸，允许继续打牌
                     enablePlayerActions(true);
                     engine.startTimer();
