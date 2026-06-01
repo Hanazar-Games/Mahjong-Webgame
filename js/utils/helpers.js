@@ -229,15 +229,24 @@ const Utils = {
         }
         emit(event, ...args) {
             if (!this.events[event]) return;
-            this.events[event].forEach(cb => cb(...args));
+            this.events[event].forEach(cb => {
+                try {
+                    cb(...args);
+                } catch (err) {
+                    console.error(`EventEmitter listener error for "${event}":`, err);
+                }
+            });
         }
         removeAllListeners() {
             this.events = {};
         }
         once(event, callback) {
             const onceWrapper = (...args) => {
-                callback(...args);
-                this.off(event, onceWrapper);
+                try {
+                    callback(...args);
+                } finally {
+                    this.off(event, onceWrapper);
+                }
             };
             this.on(event, onceWrapper);
         }

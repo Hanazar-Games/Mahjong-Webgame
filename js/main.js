@@ -313,6 +313,7 @@
         if (App.engine) {
             App.engine.destroy();
         }
+        AudioManager.stopAllSfx();
         
         // 创建引擎
         App.engine = new MahjongEngine(config);
@@ -1166,6 +1167,7 @@
                 App.engine = null;
                 App.anGangOptions = null;
                 AudioManager.stopBgm();
+                AudioManager.stopAllSfx();
                 await startGame(config);
             } catch (e) {
                 console.error('重新开始游戏失败:', e);
@@ -1198,6 +1200,7 @@
             App.engine = null;
         }
         AudioManager.stopBgm();
+        AudioManager.stopAllSfx();
         
         // 牌桌退场动画
         const table = document.getElementById('game-table');

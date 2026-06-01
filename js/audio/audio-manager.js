@@ -17,6 +17,7 @@ const AudioManager = (function() {
     let currentBgm = null;
     let bgmTimer = null;
     let sfxEnabled = true;
+    const activeSfxTimers = new Set();
 
     // 音频缓存（避免重复创建）
     const audioCache = new Map();
@@ -45,6 +46,22 @@ const AudioManager = (function() {
         if (audioCtx && audioCtx.state === 'suspended') {
             audioCtx.resume();
         }
+    }
+
+
+    // SFX timer 管理（防止游戏切换后旧音效仍播放）
+    function sfxTimeout(fn, delay) {
+        const id = setTimeout(() => {
+            activeSfxTimers.delete(id);
+            fn();
+        }, delay);
+        activeSfxTimers.add(id);
+        return id;
+    }
+
+    function clearAllSfxTimers() {
+        activeSfxTimers.forEach(id => clearTimeout(id));
+        activeSfxTimers.clear();
     }
 
     // ============ 高级合成器 ============
@@ -325,7 +342,7 @@ const AudioManager = (function() {
                 harmonics: [{ freq: 2, amp: 0.3, delay: 0.01 }]
             });
             // 桌面共振
-            setTimeout(() => {
+            sfxTimeout(() => {
                 playPerc({ freq: freq * 0.5, decay: 0.2, type: 'sine', pitchDrop: 30, volume: 0.2 });
             }, 30);
         },
@@ -343,13 +360,13 @@ const AudioManager = (function() {
         // 吃 - 轻快三连音
         chi() {
             playChord([523, 659, 784], { duration: 0.25, volume: 0.5, type: 'triangle', stagger: 0.03 });
-            setTimeout(() => playPerc({ freq: 1047, decay: 0.08, type: 'sine', volume: 0.2 }), 80);
+            sfxTimeout(() => playPerc({ freq: 1047, decay: 0.08, type: 'sine', volume: 0.2 }), 80);
         },
 
         // 碰 - 有力双音
         peng() {
             playChord([440, 554], { duration: 0.3, volume: 0.55, type: 'square', stagger: 0 });
-            setTimeout(() => {
+            sfxTimeout(() => {
                 playPerc({ freq: 880, decay: 0.12, type: 'triangle', volume: 0.3 });
                 playChord([440, 554], { duration: 0.2, volume: 0.3, stagger: 0 });
             }, 100);
@@ -359,7 +376,7 @@ const AudioManager = (function() {
         gang() {
             playPerc({ freq: 150, decay: 0.4, type: 'sawtooth', pitchDrop: 50, volume: 0.6 });
             playChord([196, 247, 293], { duration: 0.5, volume: 0.5, type: 'square', stagger: 0.05 });
-            setTimeout(() => playPerc({ freq: 100, decay: 0.5, type: 'sine', volume: 0.4 }), 150);
+            sfxTimeout(() => playPerc({ freq: 100, decay: 0.5, type: 'sine', volume: 0.4 }), 150);
         },
 
         // 暗杠
@@ -371,34 +388,34 @@ const AudioManager = (function() {
         // 胡 - 胜利钟声
         hu() {
             playBell(523, { duration: 1.5, volume: 0.7 });
-            setTimeout(() => playBell(659, { duration: 1.2, volume: 0.5 }), 150);
-            setTimeout(() => playBell(784, { duration: 1.8, volume: 0.6 }), 300);
-            setTimeout(() => playBell(1047, { duration: 2.5, volume: 0.4 }), 500);
+            sfxTimeout(() => playBell(659, { duration: 1.2, volume: 0.5 }), 150);
+            sfxTimeout(() => playBell(784, { duration: 1.8, volume: 0.6 }), 300);
+            sfxTimeout(() => playBell(1047, { duration: 2.5, volume: 0.4 }), 500);
         },
 
         // 自摸 - 华丽庆祝
         ziMo() {
             playBell(587, { duration: 0.8, volume: 0.6 });
-            setTimeout(() => playBell(740, { duration: 0.8, volume: 0.6 }), 80);
-            setTimeout(() => playBell(880, { duration: 1, volume: 0.7 }), 160);
-            setTimeout(() => playBell(1175, { duration: 2, volume: 0.5 }), 350);
+            sfxTimeout(() => playBell(740, { duration: 0.8, volume: 0.6 }), 80);
+            sfxTimeout(() => playBell(880, { duration: 1, volume: 0.7 }), 160);
+            sfxTimeout(() => playBell(1175, { duration: 2, volume: 0.5 }), 350);
             // 鼓点
             [0, 200, 400, 600, 800].forEach((t, i) => {
-                setTimeout(() => playPerc({ freq: 120 + i * 30, decay: 0.15, type: 'sine', volume: 0.25 }), t);
+                sfxTimeout(() => playPerc({ freq: 120 + i * 30, decay: 0.15, type: 'sine', volume: 0.25 }), t);
             });
         },
 
         // 流局
         drawGame() {
             playChord([392, 349, 329], { duration: 1, volume: 0.4, type: 'sine' });
-            setTimeout(() => playChord([329, 293, 261], { duration: 1.2, volume: 0.3, type: 'triangle' }), 400);
+            sfxTimeout(() => playChord([329, 293, 261], { duration: 1.2, volume: 0.3, type: 'triangle' }), 400);
         },
 
         // 游戏开始
         gameStart() {
             const notes = [523, 587, 659, 784];
             notes.forEach((freq, i) => {
-                setTimeout(() => playBell(freq, { duration: 0.6, volume: 0.4 }), i * 120);
+                sfxTimeout(() => playBell(freq, { duration: 0.6, volume: 0.4 }), i * 120);
             });
         },
 
@@ -406,7 +423,7 @@ const AudioManager = (function() {
         gameEnd(isWin) {
             if (isWin) {
                 [523, 587, 659, 784, 659, 784, 1047].forEach((freq, i) => {
-                    setTimeout(() => playBell(freq, { duration: 0.5, volume: 0.5 }), i * 120);
+                    sfxTimeout(() => playBell(freq, { duration: 0.5, volume: 0.5 }), i * 120);
                 });
             } else {
                 playChord([440, 392, 349], { duration: 1.2, volume: 0.35 });
@@ -431,13 +448,13 @@ const AudioManager = (function() {
         // 警告
         warning() {
             playPerc({ freq: 350, decay: 0.25, type: 'sawtooth', pitchDrop: 100, volume: 0.4 });
-            setTimeout(() => playPerc({ freq: 300, decay: 0.3, type: 'sawtooth', pitchDrop: 80, volume: 0.4 }), 120);
+            sfxTimeout(() => playPerc({ freq: 300, decay: 0.3, type: 'sawtooth', pitchDrop: 80, volume: 0.4 }), 120);
         },
 
         // 错误
         error() {
             playPerc({ freq: 200, decay: 0.4, type: 'sawtooth', pitchDrop: 100, volume: 0.5 });
-            setTimeout(() => playPerc({ freq: 180, decay: 0.5, type: 'square', pitchDrop: 50, volume: 0.4 }), 150);
+            sfxTimeout(() => playPerc({ freq: 180, decay: 0.5, type: 'square', pitchDrop: 50, volume: 0.4 }), 150);
         },
 
         // 滴答 - 倒计时
@@ -459,21 +476,21 @@ const AudioManager = (function() {
         // 解锁成就
         achievement() {
             [0, 80, 160, 280, 400].forEach((t, i) => {
-                setTimeout(() => playBell(523 * Math.pow(1.12, i), { duration: 0.5, volume: 0.45 }), t);
+                sfxTimeout(() => playBell(523 * Math.pow(1.12, i), { duration: 0.5, volume: 0.45 }), t);
             });
         },
 
         // 升级
         levelUp() {
             [523, 587, 659, 784, 880, 1047].forEach((freq, i) => {
-                setTimeout(() => playBell(freq, { duration: 0.4, volume: 0.5 }), i * 80);
+                sfxTimeout(() => playBell(freq, { duration: 0.4, volume: 0.5 }), i * 80);
             });
         },
 
         // 花牌
         flower() {
             playBell(880, { duration: 0.6, volume: 0.35 });
-            setTimeout(() => playBell(1100, { duration: 0.5, volume: 0.3 }), 100);
+            sfxTimeout(() => playBell(1100, { duration: 0.5, volume: 0.3 }), 100);
         },
 
         // 屏幕切换
@@ -499,7 +516,7 @@ const AudioManager = (function() {
         // 金币/分数增加
         scoreUp() {
             playPerc({ freq: 1200, decay: 0.08, type: 'sine', pitchDrop: 400, volume: 0.2 });
-            setTimeout(() => playPerc({ freq: 1600, decay: 0.06, type: 'sine', volume: 0.15 }), 50);
+            sfxTimeout(() => playPerc({ freq: 1600, decay: 0.06, type: 'sine', volume: 0.15 }), 50);
         },
 
         // 金币/分数减少
@@ -512,7 +529,7 @@ const AudioManager = (function() {
             const baseFreq = 500 + count * 100;
             playBell(baseFreq, { duration: 0.4, volume: 0.4 });
             if (count > 2) {
-                setTimeout(() => playBell(baseFreq * 1.25, { duration: 0.3, volume: 0.3 }), 80);
+                sfxTimeout(() => playBell(baseFreq * 1.25, { duration: 0.3, volume: 0.3 }), 80);
             }
         },
 
@@ -706,7 +723,7 @@ const AudioManager = (function() {
     return {
         init, resume, setupUserInteraction,
         SFX,
-        startBgm, stopBgm,
+        startBgm, stopBgm, stopAllSfx: clearAllSfxTimers,
         setBgmVolume, setSfxVolume, setMuted, setSfxEnabled,
         getBgmVolume, getSfxVolume,
         get isPlaying() { return bgmPlaying; },
