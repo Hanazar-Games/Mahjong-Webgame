@@ -14,10 +14,10 @@
         App.network.setServerUrl(serverUrl);
 
         // 刷新连接状态
-        updateConnectionStatus(App.network.connected ? 'online' : 'offline');
+        updateConnectionStatus((App.network.connected || App.networkServerReachable) ? 'online' : 'offline');
 
-        // 如果已连接则刷新房间列表
-        if (App.network.connected) {
+        // 如果服务器可达则刷新房间列表
+        if (canUseSignalServer()) {
             refreshRoomList();
         }
 
@@ -26,6 +26,54 @@
     }
 
     let _networkLobbyEventsBound = false;
+
+    function canUseSignalServer() {
+        return !!(App.network && App.network.serverUrl && (App.networkServerReachable || App.network.connected));
+    }
+
+    function isTrustedHost(playerId) {
+        const players = App.network?.players || [];
+        return players.some(player => player.id === playerId && player.isHost);
+    }
+
+    function isValidRemoteStatePayload(data) {
+        if (!data || typeof data !== 'object' || !data.state || typeof data.state !== 'object') {
+            return false;
+        }
+
+        const state = data.state;
+        const players = state.players;
+        if (!Array.isArray(players) || players.length < 2 || players.length > 4) {
+            return false;
+        }
+        if (!Number.isInteger(state.currentPlayer) || state.currentPlayer < 0 || state.currentPlayer >= players.length) {
+            return false;
+        }
+        if (!Number.isInteger(state.currentWind) || state.currentWind < 0 || state.currentWind > 3) {
+            return false;
+        }
+        if (!Number.isInteger(state.round) || state.round < 1) {
+            return false;
+        }
+        if (!Number.isInteger(state.deckCount) || state.deckCount < 0) {
+            return false;
+        }
+        if (!Array.isArray(state.discardPile)) {
+            return false;
+        }
+
+        const config = data.config || state.config;
+        if (config) {
+            if (!Number.isInteger(config.playerCount) || config.playerCount !== players.length) {
+                return false;
+            }
+            if (typeof config.mahjongType !== 'string' || !Tiles.getConfig(config.mahjongType)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     function bindNetworkLobbyEvents() {
         if (_networkLobbyEventsBound) return;
@@ -41,7 +89,7 @@
             btn.style.padding = '6px 16px';
             configRow.appendChild(btn);
 
-            btn.addEventListener('click', async () => {
+            btn.addEventListener('click', async (e) => {
                 AudioManager.SFX.buttonClick();
                 const serverInput = document.getElementById('signal-server');
                 const url = serverInput?.value?.trim();
@@ -52,20 +100,22 @@
                 hideNetworkError();
                 App.network.setServerUrl(url);
                 updateConnectionStatus('connecting');
-                const btn = e.target;
-                if (btn.disabled) return;
-                btn.disabled = true;
+                const button = e.currentTarget;
+                if (button.disabled) return;
+                button.disabled = true;
                 try {
                     // 测试连接：discoverRooms 可以验证服务器可达
                     await App.network.discoverRooms();
+                    App.networkServerReachable = true;
                     updateConnectionStatus('online');
                     Utils.toast('已连接到服务器');
                     refreshRoomList();
                 } catch (err) {
+                    App.networkServerReachable = false;
                     updateConnectionStatus('offline');
                     showNetworkError('连接失败: ' + (err.message || '无法连接到服务器'));
                 } finally {
-                    btn.disabled = false;
+                    button.disabled = false;
                 }
             });
         }
@@ -73,7 +123,7 @@
         // 创建房间
         document.getElementById('create-room')?.addEventListener('click', async () => {
             AudioManager.SFX.buttonClick();
-            if (!App.network.connected) {
+            if (!canUseSignalServer()) {
                 showNetworkError('请先连接到服务器');
                 return;
             }
@@ -88,6 +138,7 @@
             if (createBtn) createBtn.disabled = true;
             try {
                 await App.network.createRoom(name, type, playerName);
+                App.networkServerReachable = true;
                 Utils.toast(`房间 ${Utils.escapeHtml(name)} 已创建`);
             } catch (err) {
                 showNetworkError('创建房间失败: ' + (err.message || '未知错误'));
@@ -111,7 +162,8 @@
                 await App.network.leaveRoom();
             } catch (e) {}
             showLobbyContent();
-            updateConnectionStatus(App.network.connected ? 'online' : 'offline');
+            App.networkServerReachable = !!App.network?.serverUrl;
+            updateConnectionStatus(App.networkServerReachable ? 'online' : 'offline');
             if (leaveBtn) leaveBtn.disabled = false;
         });
 
@@ -163,20 +215,24 @@
         });
 
         net.on('connected', () => {
+            App.networkServerReachable = true;
             updateConnectionStatus('online');
             hideNetworkError();
         });
 
         net.on('disconnected', () => {
+            App.networkServerReachable = false;
             updateConnectionStatus('offline');
         });
 
         net.on('roomCreated', (data) => {
+            App.networkServerReachable = true;
             showRoomPanel(data);
             renderLobbyPlayers(net.players);
         });
 
         net.on('roomJoined', (data) => {
+            App.networkServerReachable = true;
             showRoomPanel({ roomId: data.roomId, name: '房间 ' + data.roomId });
             // 玩家列表由 SSE 推送
         });
@@ -211,6 +267,8 @@
         });
 
         net.on('left', () => {
+            App.networkServerReachable = !!net.serverUrl;
+            updateConnectionStatus(App.networkServerReachable ? 'online' : 'offline');
             showLobbyContent();
         });
     }
@@ -223,7 +281,7 @@
     async function refreshRoomList() {
         const list = document.getElementById('room-list');
         if (!list) return;
-        if (!App.network.connected) {
+        if (!canUseSignalServer()) {
             list.innerHTML = '<div class="empty-state">请先连接服务器</div>';
             return;
         }
@@ -232,9 +290,13 @@
         try {
             const rooms = await App.network.discoverRooms();
             if (gen !== _refreshGeneration) return; // 忽略过期结果
+            App.networkServerReachable = true;
+            updateConnectionStatus('online');
             renderRoomList(rooms);
         } catch (err) {
             if (gen !== _refreshGeneration) return;
+            App.networkServerReachable = false;
+            updateConnectionStatus('offline');
             list.innerHTML = '<div class="empty-state">搜索失败，请检查服务器</div>';
             console.warn('discoverRooms error:', err);
         }
@@ -276,6 +338,7 @@
                     const playerName = App.settings?.playerName || '玩家';
                     try {
                         await App.network.joinRoom(room.id, playerName);
+                        App.networkServerReachable = true;
                         Utils.toast(`已加入房间`);
                     } catch (err) {
                         showNetworkError('加入房间失败: ' + (err.message || '未知错误'));
@@ -467,6 +530,10 @@
         } else {
             // 访客接收房主状态同步
             if (type === 'stateSync') {
+                if (!isTrustedHost(fromPlayerId)) {
+                    console.warn('忽略非房主发来的状态同步');
+                    return;
+                }
                 applyRemoteState(data);
             }
         }
@@ -488,7 +555,7 @@
 
         // 安全检查：区分回合动作和claim动作
         const turnActions = ['draw', 'discard'];
-        const claimActions = ['chi', 'peng', 'gang', 'hu'];
+        const claimActions = ['chi', 'peng', 'gang', 'hu', 'skip'];
         if (turnActions.includes(action.type)) {
             if (engine.currentPlayerIndex !== playerIdx) {
                 console.warn('Remote turn action from non-current player ignored');
@@ -544,13 +611,16 @@
      * 访客应用远程状态
      */
     function applyRemoteState(data) {
-        if (!data || !data.state) return;
+        if (!isValidRemoteStatePayload(data)) {
+            console.warn('收到无效的远程状态，同步已忽略');
+            return;
+        }
         const state = data.state;
+        const config = data.config || state.config || { mahjongType: 'guangdong', playerCount: state.players.length };
 
         // 如果还没有engine，创建一个用于渲染
         if (!App.engine) {
             try {
-                const config = state.config || { mahjongType: 'guangdong', playerCount: 4 };
                 App.engine = new MahjongEngine(config);
                 // 初始化玩家（名字从状态中恢复）
                 const playerConfigs = (state.players || []).map((p, i) => ({
@@ -567,6 +637,7 @@
 
         // 同步引擎状态（轻量同步，不触发事件）
         const engine = App.engine;
+        engine.config = { ...engine.config, ...config };
         engine.state = state.state || 'playing';
         engine.currentPlayerIndex = state.currentPlayer ?? 0;
         engine.currentWind = state.currentWind ?? 0;

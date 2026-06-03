@@ -42,7 +42,14 @@
             else if (value === 'true' || value === 'false') value = value === 'true';
             App.settings[key] = value;
         }
-        Stats.saveSettings(App.settings);
+        try {
+            Stats.saveSettings(App.settings);
+        } catch (e) {
+            console.error('保存设置失败:', e);
+            Utils.toast('设置保存失败');
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -210,6 +217,10 @@
             Stats.saveSettings(App.settings);
             
             // 实时应用某些设置
+            if (key === 'player-name') {
+                const selfNameEl = document.getElementById('self-name');
+                if (selfNameEl) selfNameEl.textContent = value || '玩家';
+            }
             if (key === 'table-theme') {
                 applyTheme(value);
             }

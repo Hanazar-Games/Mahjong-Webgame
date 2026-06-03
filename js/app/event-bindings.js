@@ -22,13 +22,13 @@
             });
         });
         
-        // 设置变更（仅主菜单中的设置元素）
-        document.querySelectorAll('#main-menu input, #main-menu select').forEach(el => {
+        // 设置变更（设置弹窗内）
+        document.querySelectorAll('#settings-modal input, #settings-modal select').forEach(el => {
             el.addEventListener('change', handleSettingChange);
         });
         
         // 滑块实时更新
-        document.querySelectorAll('#main-menu input[type="range"]').forEach(el => {
+        document.querySelectorAll('#settings-modal input[type="range"]').forEach(el => {
             el.addEventListener('input', handleSliderInput);
         });
         

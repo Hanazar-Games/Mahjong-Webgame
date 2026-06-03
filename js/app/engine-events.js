@@ -77,6 +77,7 @@
         engine.on('chi', (data) => {
             if (!data || !data.player) return;
             UIComponents.showActionEffect('吃');
+            renderDiscardPile();
             renderPlayerMelds(data.player.position);
             renderPlayerHand(data.player.position, data.player.handSize);
             AudioManager.SFX.chi();
@@ -87,6 +88,7 @@
         engine.on('peng', (data) => {
             if (!data || !data.player) return;
             UIComponents.showActionEffect('碰');
+            renderDiscardPile();
             renderPlayerMelds(data.player.position);
             renderPlayerHand(data.player.position, data.player.handSize);
             AudioManager.SFX.peng();
@@ -97,6 +99,7 @@
         engine.on('gang', (data) => {
             if (!data || !data.player) return;
             UIComponents.showActionEffect('杠');
+            renderDiscardPile();
             renderPlayerMelds(data.player.position);
             renderPlayerHand(data.player.position, data.player.handSize);
             AudioManager.SFX.gang();

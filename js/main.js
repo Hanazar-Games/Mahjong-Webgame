@@ -12,7 +12,8 @@
         stats: null,
         currentScreen: 'main-menu',
         network: null,
-        anGangOptions: null
+        anGangOptions: null,
+        networkServerReachable: false
     };
 
     // 初始化
@@ -119,9 +120,6 @@
 
     // 暴露全局引用供拆分模块使用
     window.App = App;
-    window.bindEngineEvents = bindEngineEvents;
-    window.showIngameMenu = showIngameMenu;
-    window.hideIngameMenu = hideIngameMenu;
     window.startGame = startGame;
     window.loadStats = loadStats;
 

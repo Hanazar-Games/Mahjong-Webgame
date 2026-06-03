@@ -6,7 +6,7 @@
 
 ### 🎮 游戏模式
 - **人机对战** - 1人 vs 2~3个AI（支持多种难度）
-- **局域网联机** - 3~4人P2P对战（无需服务器）
+- **局域网联机** - 3~4人 WebRTC 对战（需信令服务）
 - **自定义模式** - 自由选择麻将种类与规则
 - **牌局回放** - 查看历史对局记录
 
@@ -54,19 +54,26 @@
 
 ### 本地运行
 ```bash
-# 使用 Python
-python3 -m http.server 8080
+# 终端 1：启动静态页面
+npm run client
 
-# 或使用 Node.js
-npx serve .
+# 终端 2：启动联机信令服务
+npm run server
 ```
 
 然后在浏览器中打开 `http://localhost:8080`
 
+### 一键启动（仅适合 macOS / Linux shell）
+```bash
+npm start
+```
+
 ### 直接打开
 由于游戏使用纯前端技术（HTML/CSS/JavaScript），也可以直接在浏览器中打开 `index.html` 文件。
 
-**注意**：局域网联机功能需要在HTTP/HTTPS环境下运行，直接打开文件可能受限。
+**注意**：
+- 局域网联机需要同时启动 `8080` 静态页面和 `8081` 信令服务。
+- 直接打开 `index.html` 只适合单机查看，不适合联机。
 
 ## 🖥️ 浏览器支持
 - Chrome / Edge / Safari / Firefox 最新版
@@ -96,9 +103,17 @@ npx serve .
 ├── css/
 │   ├── main.css        # 主样式与菜单
 │   ├── themes.css      # 主题样式
-│   └── game.css        # 游戏界面样式
+│   ├── game.css        # 游戏界面样式
+│   ├── animations.css  # 动画与特效
+│   └── ui-overhaul.css # 新版 UI 覆盖层
+├── server/
+│   └── signaling-server.js # WebRTC 信令服务器
+├── test/
+│   ├── rules-test-node.js  # Node 规则测试
+│   ├── stats-test.js       # 统计系统测试
+│   └── ...                 # 回放 / AI / 规则辅助测试
 └── js/
-    ├── main.js         # 应用入口与UI控制
+    ├── main.js         # 应用入口与全局状态
     ├── utils/
     │   └── helpers.js  # 工具函数
     ├── core/
@@ -107,13 +122,19 @@ npx serve .
     │   ├── player.js   # 玩家类
     │   └── engine.js   # 核心游戏引擎
     ├── ai/
-    │   └── ai-player.js # AI决策系统
+    │   ├── ai-player.js # AI策略系统
+    │   └── ai-utils.js  # 向听数/危险度/效率工具
     ├── network/
-    │   └── p2p.js      # P2P局域网联机
+    │   └── p2p.js      # WebRTC P2P 联机客户端
     ├── data/
     │   ├── storage.js  # 本地存储
     │   ├── stats.js    # 统计与成就
     │   └── replay.js   # 回放系统
+    ├── app/            # UI 逻辑拆分模块
+    │   ├── game-renderer.js
+    │   ├── game-input.js
+    │   ├── network-ui.js
+    │   └── ...
     └── ui/
         └── components.js # UI组件
 ```
