@@ -104,6 +104,16 @@
             startCustomGame();
         });
         
+        // 结算页按钮（避免 cloneNode 重新绑定导致的模式不一致）
+        document.getElementById('btn-result-restart')?.addEventListener('click', () => {
+            AudioManager.SFX.buttonClick();
+            restartGame();
+        });
+        document.getElementById('btn-result-exit')?.addEventListener('click', () => {
+            AudioManager.SFX.buttonClick();
+            endGame();
+        });
+        
         // 键盘事件
         document.addEventListener('keydown', handleKeydown);
         

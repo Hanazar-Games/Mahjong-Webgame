@@ -6,6 +6,7 @@
         const engine = App.engine;
         
         engine.on('gameStart', (data) => {
+            AppEventBus.emit('engine:gameStart', data);
             console.log('游戏开始', data);
             renderGameState();
             const typeName = Tiles.getConfig(engine.config.mahjongType)?.name || engine.config.mahjongType;
@@ -17,15 +18,18 @@
         });
         
         engine.on('tileDealt', (data) => {
+            AppEventBus.emit('engine:tileDealt', data);
             // 只更新牌堆计数，不发牌动画到DOM（避免与tilesDealed的renderGameState竞态）
             updateDeckCount(data.deckCount);
         });
         
         engine.on('tilesDealt', () => {
+            AppEventBus.emit('engine:tilesDealt');
             renderGameState();
         });
         
         engine.on('turnStart', (data) => {
+            AppEventBus.emit('engine:turnStart', data);
             updatePlayerHighlight(data.index);
             
             if (data.index === 0) {
@@ -51,6 +55,7 @@
         });
         
         engine.on('draw', (data) => {
+            AppEventBus.emit('engine:draw', data);
             if (!data || !data.player) return;
             renderPlayerHand(data.index, data.player.handSize, true, data.tile?.id);
             updateDeckCount(data.deckCount);
@@ -59,6 +64,7 @@
         });
         
         engine.on('discard', (data) => {
+            AppEventBus.emit('engine:discard', data);
             if (!data || !data.player) return;
             renderDiscardPile(true);
             renderPlayerHand(data.player.position, data.player.handSize);
@@ -67,6 +73,7 @@
         });
         
         engine.on('actionAvailable', (data) => {
+            AppEventBus.emit('engine:actionAvailable', data);
             if (!data || !data.player) return;
             if (data.player.position === 0) {
                 enableActionButtons(data.action);
@@ -75,6 +82,7 @@
         });
         
         engine.on('chi', (data) => {
+            AppEventBus.emit('engine:chi', data);
             if (!data || !data.player) return;
             UIComponents.showActionEffect('吃');
             renderDiscardPile();
@@ -86,6 +94,7 @@
         });
         
         engine.on('peng', (data) => {
+            AppEventBus.emit('engine:peng', data);
             if (!data || !data.player) return;
             UIComponents.showActionEffect('碰');
             renderDiscardPile();
@@ -97,6 +106,7 @@
         });
         
         engine.on('gang', (data) => {
+            AppEventBus.emit('engine:gang', data);
             if (!data || !data.player) return;
             UIComponents.showActionEffect('杠');
             renderDiscardPile();
@@ -109,6 +119,7 @@
         });
         
         engine.on('anGang', (data) => {
+            AppEventBus.emit('engine:anGang', data);
             if (!data || !data.player) return;
             UIComponents.showActionEffect('暗杠');
             renderPlayerMelds(data.player.position);
@@ -119,6 +130,7 @@
         });
         
         engine.on('hu', (data) => {
+            AppEventBus.emit('engine:hu', data);
             if (!data || !data.player) return;
             let effectText = data.isZiMo ? '自摸' : '胡';
             if (data.isGangShangKaiHua) {
@@ -142,6 +154,7 @@
         });
         
         engine.on('gameEnd', (data) => {
+            AppEventBus.emit('engine:gameEnd', data);
             showGameResult(data);
             saveGameResult(data);
             AudioManager.SFX.gameEnd(data.winner?.position === 0);
@@ -150,12 +163,14 @@
         });
         
         engine.on('drawGame', (data) => {
+            AppEventBus.emit('engine:drawGame', data);
             Utils.toast('流局');
             AudioManager.SFX.drawGame();
             if (App.isNetworkGame) broadcastGameState();
         });
         
         engine.on('ziMo', (data) => {
+            AppEventBus.emit('engine:ziMo', data);
             if (!data || !data.player) return;
             if (data.player.position === 0) {
                 enableActionButtons({ type: 'hu' });
@@ -163,6 +178,7 @@
         });
         
         engine.on('anGangOptions', (data) => {
+            AppEventBus.emit('engine:anGangOptions', data);
             if (!data || !data.player) return;
             if (data.player.position === 0) {
                 App.anGangOptions = data.options;
@@ -171,6 +187,7 @@
         });
         
         engine.on('needDiscard', (data) => {
+            AppEventBus.emit('engine:needDiscard', data);
             if (data.index === 0) {
                 // 防御引擎被销毁的竞态
                 if (!App.engine || App.engine !== engine || engine.state !== 'playing') {
@@ -183,17 +200,20 @@
         });
         
         engine.on('turnTimeout', () => {
+            AppEventBus.emit('engine:turnTimeout');
             Utils.toast('回合超时，自动打牌');
             AudioManager.SFX.warning();
         });
         
         engine.on('queYiMenSelected', (data) => {
+            AppEventBus.emit('engine:queYiMenSelected', data);
             if (!data || !data.player) return;
             const suitNames = { wan: '万', tong: '筒', tiao: '条' };
             Utils.toast(`${Utils.escapeHtml(data.player.name)} 缺${suitNames[data.suit] || ''}`);
         });
         
         engine.on('invalidHu', (data) => {
+            AppEventBus.emit('engine:invalidHu', data);
             if (data.reason === 'queYiMenNotComplete') {
                 Utils.toast('胡牌失败：缺门花色未打完！');
                 AudioManager.SFX.warning();
@@ -201,6 +221,7 @@
         });
         
         engine.on('roundEnd', (data) => {
+            AppEventBus.emit('engine:roundEnd', data);
             console.log('一局结束', data);
             // 更新所有玩家分数显示
             if (!data || !data.players || data.players.length === 0) return;

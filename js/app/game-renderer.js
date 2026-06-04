@@ -52,14 +52,10 @@
             if (!player.hand) return;
             player.hand.forEach((tile, index) => {
                 const tileEl = UIComponents.createTileElement(tile, {
-                    onClick: handleTileClick,
                     draggable: true,
                     showName: App.settings.showTileNames,
-                    onDragEnd: (t) => {
-                        if (!App.engine || App.engine.state !== 'playing') return;
-                        _doDiscard(t.id);
-                        enablePlayerActions(false);
-                    }
+                    onClick: (t) => AppEventBus.emit('tile:click', t),
+                    onDragEnd: (t) => AppEventBus.emit('tile:dragend', t)
                 });
                 // 摸牌动画：优先匹配drawnTileId（因为手牌会被排序，最后一张不一定是新摸的）
                 if (animateLast && (drawnTileId ? tile.id === drawnTileId : index === player.hand.length - 1)) {

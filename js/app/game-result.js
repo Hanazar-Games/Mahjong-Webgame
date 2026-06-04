@@ -78,26 +78,6 @@
             `;
         }
         
-        // 绑定按钮（使用 cloneNode 彻底移除旧监听器，避免闭包累积）
-        const restartBtn = document.getElementById('btn-result-restart');
-        const exitBtn = document.getElementById('btn-result-exit');
-        if (restartBtn) {
-            const newRestart = restartBtn.cloneNode(true);
-            restartBtn.parentNode.replaceChild(newRestart, restartBtn);
-            newRestart.addEventListener('click', () => {
-                AudioManager.SFX.buttonClick();
-                restartGame();
-            });
-        }
-        if (exitBtn) {
-            const newExit = exitBtn.cloneNode(true);
-            exitBtn.parentNode.replaceChild(newExit, exitBtn);
-            newExit.addEventListener('click', () => {
-                AudioManager.SFX.buttonClick();
-                endGame();
-            });
-        }
-        
         // 切换到结算页
         UIComponents.switchScreen('game-result');
     }

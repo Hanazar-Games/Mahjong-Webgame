@@ -162,10 +162,6 @@
     }
 
     /**
-     * 显示胡牌结果
-     */
-
-    /**
      * 键盘事件
      */
     function handleKeydown(e) {
@@ -259,3 +255,11 @@
             touchStartY = 0;
         }, { passive: true });
     }
+
+    // 通过事件总线订阅牌交互事件（消除 game-renderer.js 的反向依赖）
+    AppEventBus.on('tile:click', handleTileClick);
+    AppEventBus.on('tile:dragend', (tile) => {
+        if (!App.engine || App.engine.state !== 'playing') return;
+        _doDiscard(tile.id);
+        enablePlayerActions(false);
+    });
