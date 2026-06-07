@@ -126,15 +126,32 @@ const Utils = {
 
     /**
      * Toast提示
+     * @param {string} message
+     * @param {number} duration - 毫秒
+     * @param {string} type - 'default' | 'success' | 'error' | 'warning'
      */
-    toast(message, duration = 3000) {
+    toast(message, duration = 3000, type = 'default') {
         const container = document.getElementById('toast-container');
         if (!container) return;
         const toast = document.createElement('div');
         toast.className = 'toast';
         toast.textContent = message;
+        toast.setAttribute('role', 'status');
+        toast.setAttribute('aria-live', 'polite');
+        const colors = {
+            success: '#4caf50',
+            error:   '#f44336',
+            warning: '#ff9800',
+            default: null
+        };
+        if (colors[type]) {
+            toast.style.borderLeftColor = colors[type];
+        }
         container.appendChild(toast);
-        setTimeout(() => toast.remove(), duration);
+        setTimeout(() => {
+            toast.style.animation = 'toastOut 0.3s ease forwards';
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
     },
 
     /**

@@ -24,7 +24,7 @@ const Stats = (function() {
         currentStreak: 0,   // 当前连胜场数
         maxStreak: 0,       // 最高连胜场数
         totalScore: 0,      // 累计净胜分（不含初始分）
-        bestGame: 0,        // 单场最高净胜分
+        bestGame: -999999, // 单场最高净胜分
         mostBombs: 0,       // 单场最多杠次数
         playedTypes: [],
         totalGang: 0,       // 累计杠次数
@@ -45,6 +45,23 @@ const Stats = (function() {
             if (stats[key] === undefined || stats[key] === null) {
                 stats[key] = Utils.deepClone(DEFAULT_STATS[key]);
             }
+        }
+        // 防御：Infinity 数据损坏导致无限循环
+        if (!isFinite(stats.exp)) stats.exp = 0;
+        if (!isFinite(stats.maxExp) || stats.maxExp <= 0) stats.maxExp = 100;
+        if (!isFinite(stats.level) || stats.level < 1) stats.level = 1;
+        // 防御：旧数据中 bestGame 可能为 0（默认值），如果 totalGames>0 且 totalScore<0，
+        // 说明可能从未赢过，bestGame 应从真实历史重新计算
+        if (stats.bestGame === 0 && stats.totalGames > 0) {
+            const histBest = (stats.history || []).reduce((best, h) => 
+                Math.max(best, h.netScore ?? -999999), -999999);
+            if (histBest > -999999) {
+                stats.bestGame = histBest;
+            }
+        }
+        // 防御：JSON 序列化将 -Infinity 转为 null
+        if (stats.bestGame === null) {
+            stats.bestGame = -999999;
         }
         return stats;
     }
@@ -79,16 +96,16 @@ const Stats = (function() {
         }
         const prevLevel = stats.level;
         const prevExp = stats.exp;
+        
+        // 防御：Infinity 数据损坏导致无限循环
+        if (!isFinite(stats.exp)) stats.exp = 0;
+        if (!isFinite(stats.maxExp) || stats.maxExp <= 0) stats.maxExp = 100;
+        
         stats.exp += amount;
         
-        // 防御：maxExp为0或负数时防止无限循环
-        if (!stats.maxExp || stats.maxExp <= 0) {
-            stats.maxExp = 100;
-        }
-        
         let levelsGained = 0;
-        // 升级检查
-        while (stats.exp >= stats.maxExp) {
+        // 升级检查（防御：exp异常大时限制升级次数）
+        while (isFinite(stats.exp) && stats.exp >= stats.maxExp && levelsGained < 10000) {
             stats.exp -= stats.maxExp;
             stats.level++;
             levelsGained++;
@@ -150,7 +167,7 @@ const Stats = (function() {
         const netScore = Number(result.netScore) || 0;
         stats.totalScore += netScore;
         
-        if (netScore > stats.bestGame) {
+        if (netScore > stats.bestGame || stats.bestGame === null || stats.bestGame === -999999) {
             stats.bestGame = netScore;
         }
         
@@ -344,10 +361,10 @@ const Stats = (function() {
             tableTheme: 'classic-green',
             gameRounds: 4,
             gameSpeed: 'normal',
-            bgmVolume: 50,
+            bgmVolume: 0,
             sfxVolume: 50,
             sfxEnabled: true,
-            bgmStyle: 'calm',
+            bgmStyle: 'none',
 
             opponentDisplay: 'small',
             mahjongType: 'guangdong',

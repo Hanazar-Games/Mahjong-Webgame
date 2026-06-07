@@ -80,7 +80,7 @@
                     </div>
                     <div class="detail-row">
                         <span>单场最高净胜</span>
-                        <span class="win">+${summary.bestGame}</span>
+                        <span class="${(summary.bestGame || 0) >= 0 ? 'win' : 'lose'}">${(summary.bestGame || 0) >= 0 ? '+' : ''}${summary.bestGame || 0}</span>
                     </div>
                     <div class="detail-row">
                         <span>场均净胜</span>

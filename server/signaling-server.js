@@ -325,6 +325,11 @@ const server = http.createServer(async (req, res) => {
             if (!ALLOWED_MESSAGE_TYPES.has(body.type)) {
                 jsonResponse(res, 400, { error: 'Invalid message type' }, req); return;
             }
+            // 校验 targetId 合法性（如果存在）
+            const targetId = body.data?.targetId;
+            if (targetId && !room.playerIds.includes(targetId)) {
+                jsonResponse(res, 400, { error: 'Invalid targetId' }, req); return;
+            }
             room.lastActivity = Date.now();
             broadcast(roomId, {
                 type: body.type,
@@ -383,7 +388,7 @@ const server = http.createServer(async (req, res) => {
         if (e.message === 'Request body too large') {
             jsonResponse(res, 413, { error: 'Request body too large' }, req);
         } else {
-            jsonResponse(res, 500, { error: 'Internal Server Error', detail: e.message }, req);
+            jsonResponse(res, 500, { error: 'Internal Server Error' }, req);
         }
     }
 });

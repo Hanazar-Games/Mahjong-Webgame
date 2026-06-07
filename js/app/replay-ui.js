@@ -53,8 +53,24 @@
         _bindEvents() {
             this._handlers.back = () => { this.destroy(); UIComponents.switchScreen('replay-list'); };
             this._handlers.playPause = () => { AudioManager.SFX.buttonClick(); if (this.isPlaying) this.pause(); else this.play(); };
-            this._handlers.stepForward = () => { AudioManager.SFX.buttonClick(); this.stepForward(); };
-            this._handlers.stepBack = () => { AudioManager.SFX.buttonClick(); this.stepBack(); };
+            // step 按钮防抖（防止快速连点导致音频spam）
+            let _lastStepSfx = 0;
+            this._handlers.stepForward = () => {
+                const now = Date.now();
+                if (now - _lastStepSfx > 100) {
+                    _lastStepSfx = now;
+                    AudioManager.SFX.buttonClick();
+                }
+                this.stepForward();
+            };
+            this._handlers.stepBack = () => {
+                const now = Date.now();
+                if (now - _lastStepSfx > 100) {
+                    _lastStepSfx = now;
+                    AudioManager.SFX.buttonClick();
+                }
+                this.stepBack();
+            };
             this._handlers.speed = () => {
                 AudioManager.SFX.buttonClick();
                 this.speedIdx = (this.speedIdx + 1) % this.speeds.length;
@@ -281,7 +297,14 @@
         }
 
         _resetTable() {
-            ['top', 'left', 'right', 'bottom'].forEach(pos => {
+            const tableEl = document.getElementById('replay-table');
+            if (tableEl) {
+                tableEl.classList.toggle('three-player', this.players.length === 3);
+            }
+            const positions = this.players.length === 3
+                ? ['left', 'right', 'bottom']
+                : ['top', 'left', 'right', 'bottom'];
+            positions.forEach(pos => {
                 const handEl = document.getElementById(`replay-hand-${pos}`);
                 if (handEl) handEl.innerHTML = '';
                 const meldsEl = document.getElementById(`replay-melds-${pos}`);
@@ -411,9 +434,13 @@
                     this.discardPile = [];
                     break;
                 }
-                case 'draw':
-                    // 引擎不记录 draw，但测试数据可能有；不做任何事
+                case 'draw': {
+                    const p = this._findPlayerState(data.playerId);
+                    if (p && data.tile) {
+                        p.hand.push(data.tile);
+                    }
                     break;
+                }
                 case 'discard': {
                     const p = this._findPlayerState(data.playerId);
                     if (p) {

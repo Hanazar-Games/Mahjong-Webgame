@@ -69,10 +69,10 @@ const Replay = (function() {
                 position: p?.position || 0
             })),
             rounds: allRounds,
-            finalScores: [...(engine.players || [])].sort((a, b) => (b?.score || 0) - (a?.score || 0)).map(p => ({
+            finalScores: [...(engine.players || [])].sort((a, b) => (b?.score || 0) - (a?.score || 0)).map((p, idx) => ({
                 name: p?.name || '',
                 score: p?.score || 0,
-                isWin: p?.isHu || false
+                isWin: idx === 0
             }))
         };
     }

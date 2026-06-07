@@ -50,9 +50,9 @@
                 <!-- 主操作区 -->
                 <div class="menu-primary-actions">
                     <button class="menu-btn primary" data-screen="game" data-mode="ai">
-                        <span class="btn-icon">🤖</span>
+                        <span class="btn-icon">🚀</span>
                         <div class="btn-text-group">
-                            <span class="btn-text">人机对战</span>
+                            <span class="btn-text">快速开始</span>
                             <span class="btn-desc">与 AI 练习牌技</span>
                         </div>
                         <span class="btn-arrow">›</span>
@@ -106,11 +106,11 @@
         </div>
 
         <!-- 设置弹窗 -->
-        <div id="settings-modal" class="modal hidden">
+        <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
             <div class="modal-overlay"></div>
             <div class="modal-panel settings-panel">
                 <div class="modal-panel-header">
-                    <h3>⚙️ 游戏设置</h3>
+                    <h3 id="settings-title">⚙️ 游戏设置</h3>
                     <button class="modal-close" id="settings-close">✕</button>
                 </div>
                 <div class="modal-panel-body">
@@ -183,12 +183,12 @@
                             <input type="range" id="sfx-volume" min="0" max="100" value="50">
                             <span class="slider-value" id="sfx-value">50%</span>
                         </div>
-                        <div class="setting-row">
+                        <div class="setting-row toggle-row">
                             <label>音效开关</label>
-                            <select id="sfx-enabled">
-                                <option value="true" selected>开启</option>
-                                <option value="false">关闭</option>
-                            </select>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="sfx-enabled" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
                         </div>
                         <div class="setting-row">
                             <label>BGM 风格</label>
@@ -201,19 +201,19 @@
                     </div>
                     <div class="settings-group">
                         <h4>辅助</h4>
-                        <div class="setting-row">
+                        <div class="setting-row toggle-row">
                             <label>显示牌名</label>
-                            <select id="show-tile-names">
-                                <option value="false" selected>关闭</option>
-                                <option value="true">开启</option>
-                            </select>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="show-tile-names">
+                                <span class="toggle-slider"></span>
+                            </label>
                         </div>
-                        <div class="setting-row">
+                        <div class="setting-row toggle-row">
                             <label>自动理牌</label>
-                            <select id="auto-sort">
-                                <option value="true" selected>开启</option>
-                                <option value="false">关闭</option>
-                            </select>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="auto-sort" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -234,6 +234,10 @@
                 <div class="hud-deck-info">
                     <span class="hud-deck-count" id="deck-count">84</span>
                     <span class="hud-deck-label">张</span>
+                </div>
+                <div class="turn-timer-display hidden" id="turn-timer-display">
+                    <span class="turn-timer-icon">⏱</span>
+                    <span class="turn-timer-value" id="turn-timer-value">30</span>
                 </div>
             </div>
 
@@ -309,18 +313,18 @@
                 <button class="action-btn highlight" id="btn-hu" disabled>
                     <span class="action-label">胡</span>
                 </button>
-                <button class="action-btn secondary" id="btn-skip">
+                <button class="action-btn secondary" id="btn-skip" disabled>
                     <span class="action-label">过</span>
                 </button>
             </div>
         </div>
 
         <!-- 游戏内暂停菜单 -->
-        <div id="ingame-menu" class="modal hidden">
+        <div id="ingame-menu" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ingame-title">
             <div class="modal-overlay"></div>
             <div class="modal-panel pause-panel">
                 <div class="modal-panel-header">
-                    <h3>☰ 暂停</h3>
+                    <h3 id="ingame-title">☰ 暂停</h3>
                     <button class="modal-close" id="btn-resume">✕</button>
                 </div>
                 <div class="modal-panel-body pause-actions">

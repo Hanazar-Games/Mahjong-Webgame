@@ -156,7 +156,9 @@ const AIUtils = (function() {
             bestValue = Math.max(bestValue, analyzeHandValue(c) + 1);
         }
 
-        const shanten = 8 - 2 * melds.length - bestValue;
+        // 动态计算目标面子数（台湾麻将16张=5面子，标准13张=4面子）
+        const targetMelds = Math.ceil((hand.length + melds.length * 3 - 2) / 3);
+        const shanten = 2 * targetMelds - 2 * melds.length - bestValue;
         return Math.max(-1, shanten);
     }
 
@@ -167,14 +169,10 @@ const AIUtils = (function() {
         const counts = handToCounts(hand);
         let pairs = 0;
         for (const key of Object.keys(counts)) {
-            if (counts[key] >= 2) pairs++;
+            pairs += Math.floor(counts[key] / 2);
         }
-        // 14张手牌凑齐7对子 = 已胡牌
-        if (hand.length >= 14 && pairs >= 7) return -1;
-        // 七对需要7对子，向听数 = (7 - 已有对子数)
-        // 手牌为14张时已胡，为13张时听牌
-        const target = hand.length >= 14 ? 7 : 6;
-        return Math.max(-1, target - pairs);
+        // 七对子向听数：6 - 对子数（适用于13/14/16张等所有大小）
+        return Math.max(-1, 6 - pairs);
     }
 
     /**

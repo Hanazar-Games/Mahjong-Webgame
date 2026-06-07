@@ -2,8 +2,60 @@
  * 万能麻将 - 引擎事件绑定模块
  * 从 main.js 拆分（架构拆分轮次 2）
  */
+    
+    /**
+     * 计算玩家相对方向（上家/对家/下家）
+     */
+    function _getRelativeDir(playerPos, fromPos, playerCount) {
+        if (fromPos === undefined || fromPos === null) return '';
+        const count = playerCount || App.engine?.config?.playerCount || 4;
+        const diff = (fromPos - playerPos + count) % count;
+        if (count === 3) {
+            if (diff === 1) return '下家';
+            if (diff === 2) return '上家';
+        } else {
+            if (diff === 1) return '下家';
+            if (diff === 2) return '对家';
+            if (diff === 3) return '上家';
+        }
+        return '';
+    }
+    
     function bindEngineEvents() {
         const engine = App.engine;
+        
+        // 回合倒计时 UI 管理
+        let _turnTimerInterval = null;
+        function startTurnTimerUI() {
+            stopTurnTimerUI();
+            const display = document.getElementById('turn-timer-display');
+            const valueEl = document.getElementById('turn-timer-value');
+            if (!display || !valueEl) return;
+            const timeoutSec = Math.floor((engine.turnTimeout || 30000) / 1000);
+            let remaining = timeoutSec;
+            valueEl.textContent = remaining;
+            display.classList.remove('hidden');
+            _turnTimerInterval = setInterval(() => {
+                remaining--;
+                if (remaining <= 0) {
+                    stopTurnTimerUI();
+                    return;
+                }
+                if (valueEl) valueEl.textContent = remaining;
+                if (remaining <= 5 && display) display.classList.add('urgent');
+            }, 1000);
+        }
+        function stopTurnTimerUI() {
+            if (_turnTimerInterval) {
+                clearInterval(_turnTimerInterval);
+                _turnTimerInterval = null;
+            }
+            const display = document.getElementById('turn-timer-display');
+            if (display) {
+                display.classList.add('hidden');
+                display.classList.remove('urgent');
+            }
+        }
         
         engine.on('gameStart', (data) => {
             AppEventBus.emit('engine:gameStart', data);
@@ -12,9 +64,6 @@
             const typeName = Tiles.getConfig(engine.config.mahjongType)?.name || engine.config.mahjongType;
             Utils.toast(`${typeName} · 第${data.round}局`);
             AudioManager.SFX.gameStart();
-            if (!AudioManager.isPlaying) {
-                AudioManager.startBgm(App.settings.bgmStyle || 'calm');
-            }
         });
         
         engine.on('tileDealt', (data) => {
@@ -42,6 +91,7 @@
                     if (!result || !result.ziMo) {
                         enablePlayerActions(true);
                         engine.startTimer();
+                        startTurnTimerUI();
                     }
                     // 联机模式：广播状态
                     if (App.isNetworkGame) broadcastGameState();
@@ -54,37 +104,53 @@
             }
         });
         
+        // draw/discard SFX 节流：AI 操作不播放，避免声音重叠
+        const _isHumanPlayer = (pos) => pos === 0 || App.isNetworkGame;
+        
         engine.on('draw', (data) => {
             AppEventBus.emit('engine:draw', data);
             if (!data || !data.player) return;
             renderPlayerHand(data.index, data.player.handSize, true, data.tile?.id);
             updateDeckCount(data.deckCount);
-            AudioManager.SFX.draw();
+            if (_isHumanPlayer(data.player.position)) {
+                AudioManager.SFX.draw();
+            }
             if (App.isNetworkGame) broadcastGameState();
         });
         
         engine.on('discard', (data) => {
             AppEventBus.emit('engine:discard', data);
+            stopTurnTimerUI();
             if (!data || !data.player) return;
             renderDiscardPile(true);
             renderPlayerHand(data.player.position, data.player.handSize);
-            AudioManager.SFX.discard();
+            if (_isHumanPlayer(data.player.position)) {
+                AudioManager.SFX.discard();
+            }
             if (App.isNetworkGame) broadcastGameState();
         });
         
+        // tick SFX 防重复（多个 actionAvailable 快速触发时只播放一次）
+        let _lastTickTime = 0;
         engine.on('actionAvailable', (data) => {
             AppEventBus.emit('engine:actionAvailable', data);
             if (!data || !data.player) return;
             if (data.player.position === 0) {
                 enableActionButtons(data.action);
-                AudioManager.SFX.tick();
+                const now = Date.now();
+                if (now - _lastTickTime > 400) {
+                    _lastTickTime = now;
+                    AudioManager.SFX.tick();
+                }
             }
         });
         
         engine.on('chi', (data) => {
             AppEventBus.emit('engine:chi', data);
             if (!data || !data.player) return;
-            UIComponents.showActionEffect('吃');
+            const dir = _getRelativeDir(data.player.position, data.from);
+            const text = dir ? `吃${dir}` : '吃';
+            UIComponents.showActionEffect(text);
             renderDiscardPile();
             renderPlayerMelds(data.player.position);
             renderPlayerHand(data.player.position, data.player.handSize);
@@ -96,7 +162,9 @@
         engine.on('peng', (data) => {
             AppEventBus.emit('engine:peng', data);
             if (!data || !data.player) return;
-            UIComponents.showActionEffect('碰');
+            const dir = _getRelativeDir(data.player.position, data.from);
+            const text = dir ? `碰${dir}` : '碰';
+            UIComponents.showActionEffect(text);
             renderDiscardPile();
             renderPlayerMelds(data.player.position);
             renderPlayerHand(data.player.position, data.player.handSize);
@@ -107,8 +175,11 @@
         
         engine.on('gang', (data) => {
             AppEventBus.emit('engine:gang', data);
+            stopTurnTimerUI();
             if (!data || !data.player) return;
-            UIComponents.showActionEffect('杠');
+            const dir = _getRelativeDir(data.player.position, data.from);
+            const text = dir ? `杠${dir}` : '杠';
+            UIComponents.showActionEffect(text);
             renderDiscardPile();
             renderPlayerMelds(data.player.position);
             renderPlayerHand(data.player.position, data.player.handSize);
@@ -120,6 +191,7 @@
         
         engine.on('anGang', (data) => {
             AppEventBus.emit('engine:anGang', data);
+            stopTurnTimerUI();
             if (!data || !data.player) return;
             UIComponents.showActionEffect('暗杠');
             renderPlayerMelds(data.player.position);
@@ -131,10 +203,16 @@
         
         engine.on('hu', (data) => {
             AppEventBus.emit('engine:hu', data);
+            stopTurnTimerUI();
             if (!data || !data.player) return;
-            let effectText = data.isZiMo ? '自摸' : '胡';
+            let effectText;
             if (data.isGangShangKaiHua) {
                 effectText = '杠上开花';
+            } else if (data.isZiMo) {
+                effectText = '自摸';
+            } else {
+                const dir = _getRelativeDir(data.player.position, data.from);
+                effectText = dir ? `胡${dir}` : '胡';
             }
             UIComponents.showActionEffect(effectText);
             showHuResult(data);
@@ -155,8 +233,9 @@
         
         engine.on('gameEnd', (data) => {
             AppEventBus.emit('engine:gameEnd', data);
-            showGameResult(data);
-            saveGameResult(data);
+            // 先保存再显示，确保结算页展示的经验值与实际获得一致
+            const saveResult = saveGameResult(data);
+            showGameResult(data, saveResult);
             AudioManager.SFX.gameEnd(data.winner?.position === 0);
             AudioManager.stopBgm();
             App.isNetworkGame = false;
@@ -194,14 +273,15 @@
                     return;
                 }
                 enablePlayerActions(true);
-                Utils.toast('请打出一张牌');
+                Utils.toast('请打出一张牌', 3000, 'warning');
                 engine.startTimer();
             }
         });
         
         engine.on('turnTimeout', () => {
             AppEventBus.emit('engine:turnTimeout');
-            Utils.toast('回合超时，自动打牌');
+            stopTurnTimerUI();
+            Utils.toast('回合超时，自动打牌', 3000, 'warning');
             AudioManager.SFX.warning();
         });
         
@@ -215,7 +295,7 @@
         engine.on('invalidHu', (data) => {
             AppEventBus.emit('engine:invalidHu', data);
             if (data.reason === 'queYiMenNotComplete') {
-                Utils.toast('胡牌失败：缺门花色未打完！');
+                Utils.toast('胡牌失败：缺门花色未打完！', 3000, 'error');
                 AudioManager.SFX.warning();
             }
         });

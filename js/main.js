@@ -28,9 +28,9 @@
         // 初始化主题
         applyTheme(App.settings.tableTheme);
         
-        // 初始化音频系统
+        // 初始化音频系统（BGM 已禁用，仅保留 SFX）
         AudioManager.setupUserInteraction();
-        AudioManager.setBgmVolume(App.settings.bgmVolume / 100);
+        AudioManager.setBgmVolume(0);
         AudioManager.setSfxVolume(App.settings.sfxVolume / 100);
         AudioManager.setSfxEnabled(App.settings.sfxEnabled !== false);
         

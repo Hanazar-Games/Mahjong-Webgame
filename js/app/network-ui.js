@@ -14,7 +14,7 @@
         App.network.setServerUrl(serverUrl);
 
         // 刷新连接状态
-        updateConnectionStatus((App.network.connected || App.networkServerReachable) ? 'online' : 'offline');
+        updateConnectionStatus(App.network.connected ? 'online' : 'offline');
 
         // 如果服务器可达则刷新房间列表
         if (canUseSignalServer()) {
@@ -84,9 +84,11 @@
         if (configRow && !document.getElementById('btn-connect-server')) {
             const btn = document.createElement('button');
             btn.id = 'btn-connect-server';
-            btn.className = 'room-item-join';
-            btn.textContent = '连接';
-            btn.style.padding = '6px 16px';
+            btn.className = 'primary-btn';
+            btn.textContent = '连接服务器';
+            btn.style.padding = '8px 18px';
+            btn.style.width = 'auto';
+            btn.style.marginTop = '0';
             configRow.appendChild(btn);
 
             btn.addEventListener('click', async (e) => {
@@ -102,20 +104,20 @@
                 updateConnectionStatus('connecting');
                 const button = e.currentTarget;
                 if (button.disabled) return;
+                const originalText = button.textContent;
                 button.disabled = true;
+                button.textContent = '连接中...';
                 try {
                     // 测试连接：discoverRooms 可以验证服务器可达
                     await App.network.discoverRooms();
-                    App.networkServerReachable = true;
-                    updateConnectionStatus('online');
-                    Utils.toast('已连接到服务器');
+                    Utils.toast('已连接到服务器', 3000, 'success');
                     refreshRoomList();
                 } catch (err) {
-                    App.networkServerReachable = false;
                     updateConnectionStatus('offline');
                     showNetworkError('连接失败: ' + (err.message || '无法连接到服务器'));
                 } finally {
                     button.disabled = false;
+                    button.textContent = originalText;
                 }
             });
         }
@@ -138,8 +140,7 @@
             if (createBtn) createBtn.disabled = true;
             try {
                 await App.network.createRoom(name, type, playerName);
-                App.networkServerReachable = true;
-                Utils.toast(`房间 ${Utils.escapeHtml(name)} 已创建`);
+                Utils.toast(`房间 ${Utils.escapeHtml(name)} 已创建`, 3000, 'success');
             } catch (err) {
                 showNetworkError('创建房间失败: ' + (err.message || '未知错误'));
             } finally {
@@ -162,8 +163,7 @@
                 await App.network.leaveRoom();
             } catch (e) {}
             showLobbyContent();
-            App.networkServerReachable = !!App.network?.serverUrl;
-            updateConnectionStatus(App.networkServerReachable ? 'online' : 'offline');
+            updateConnectionStatus(App.network.connected ? 'online' : 'offline');
             if (leaveBtn) leaveBtn.disabled = false;
         });
 
@@ -221,18 +221,15 @@
         });
 
         net.on('disconnected', () => {
-            App.networkServerReachable = false;
             updateConnectionStatus('offline');
         });
 
         net.on('roomCreated', (data) => {
-            App.networkServerReachable = true;
             showRoomPanel(data);
             renderLobbyPlayers(net.players);
         });
 
         net.on('roomJoined', (data) => {
-            App.networkServerReachable = true;
             showRoomPanel({ roomId: data.roomId, name: '房间 ' + data.roomId });
             // 玩家列表由 SSE 推送
         });
@@ -254,8 +251,8 @@
             }
         });
 
-        net.on('playerDisconnected', (playerId) => {
-            Utils.toast('玩家断开连接');
+        net.on('playerDisconnected', ({ playerId, name }) => {
+            Utils.toast(name ? `${Utils.escapeHtml(name)} 断开连接` : '玩家断开连接', 3000, 'warning');
         });
 
         net.on('gameStart', (config) => {
@@ -267,8 +264,7 @@
         });
 
         net.on('left', () => {
-            App.networkServerReachable = !!net.serverUrl;
-            updateConnectionStatus(App.networkServerReachable ? 'online' : 'offline');
+            updateConnectionStatus(App.network.connected ? 'online' : 'offline');
             showLobbyContent();
         });
     }
@@ -290,12 +286,10 @@
         try {
             const rooms = await App.network.discoverRooms();
             if (gen !== _refreshGeneration) return; // 忽略过期结果
-            App.networkServerReachable = true;
-            updateConnectionStatus('online');
+            // HTTP 探测成功不更新连接状态 UI（SSE 状态才决定 online/offline）
             renderRoomList(rooms);
         } catch (err) {
             if (gen !== _refreshGeneration) return;
-            App.networkServerReachable = false;
             updateConnectionStatus('offline');
             list.innerHTML = '<div class="empty-state">搜索失败，请检查服务器</div>';
             console.warn('discoverRooms error:', err);
@@ -311,7 +305,7 @@
         if (!rooms || !Array.isArray(rooms)) rooms = [];
 
         if (rooms.length === 0) {
-            list.innerHTML = '<div class="empty-state">暂无可用房间</div>';
+            list.innerHTML = '<div class="empty-state">暂无可用房间<br><small style="opacity:0.7">点击下方「创建房间」新建一局</small></div>';
             return;
         }
 
@@ -338,8 +332,7 @@
                     const playerName = App.settings?.playerName || '玩家';
                     try {
                         await App.network.joinRoom(room.id, playerName);
-                        App.networkServerReachable = true;
-                        Utils.toast(`已加入房间`);
+                        Utils.toast(`已加入房间`, 3000, 'success');
                     } catch (err) {
                         showNetworkError('加入房间失败: ' + (err.message || '未知错误'));
                         joinBtn.disabled = false;
@@ -561,11 +554,16 @@
                 console.warn('Remote turn action from non-current player ignored');
                 return;
             }
+            // draw 由引擎自动处理，无需远程触发
+            if (action.type === 'draw') return;
         } else if (claimActions.includes(action.type)) {
             if (!engine.pendingAction || engine.pendingAction.player?.position !== playerIdx) {
                 console.warn('Remote claim action without pending action ignored');
                 return;
             }
+        } else {
+            console.warn(`[Network] 未知的远程动作类型: ${action.type}`);
+            return;
         }
 
         try {

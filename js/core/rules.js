@@ -12,20 +12,22 @@ const Rules = (function() {
     const _canWinCache = new Map();
     const _MAX_CANWIN_CACHE = 5000;
 
-    function _canWinCacheKey(hand) {
-        return hand.map(t => t.id).sort((a, b) => a - b).join(',');
+    function _canWinCacheKey(hand, config) {
+        const tileKey = hand.map(t => `${t.suit}-${t.value}`).sort().join(',');
+        const configKey = config?.mahjongType || '';
+        return `${configKey}|${tileKey}`;
     }
 
-    function _getCanWinCached(hand) {
-        const key = _canWinCacheKey(hand);
+    function _getCanWinCached(hand, config) {
+        const key = _canWinCacheKey(hand, config);
         if (_canWinCache.has(key)) {
             return _canWinCache.get(key);
         }
         return undefined;
     }
 
-    function _setCanWinCached(hand, result) {
-        const key = _canWinCacheKey(hand);
+    function _setCanWinCached(hand, config, result) {
+        const key = _canWinCacheKey(hand, config);
         if (_canWinCache.size >= _MAX_CANWIN_CACHE) {
             const entries = Array.from(_canWinCache.entries());
             _canWinCache.clear();
@@ -123,7 +125,7 @@ const Rules = (function() {
         if (!hand || !Array.isArray(hand)) return { canWin: false };
         if (hand.length % 3 !== 1 && hand.length % 3 !== 2) return { canWin: false };
 
-        const cached = _getCanWinCached(hand);
+        const cached = _getCanWinCached(hand, config);
         if (cached !== undefined) return cached;
 
         const sorted = sortTiles(hand);
@@ -131,14 +133,14 @@ const Rules = (function() {
         // 七对（支持任意偶数张牌，如台湾麻将16张=8对）
         if (hand.length % 2 === 0 && hand.length >= 14 && isSevenPairs(sorted)) {
             const result = { canWin: true, type: 'seven_pairs' };
-            _setCanWinCached(hand, result);
+            _setCanWinCached(hand, config, result);
             return result;
         }
         
         // 十三幺
         if (hand.length === 14 && isThirteenOrphans(sorted)) {
             const result = { canWin: true, type: 'thirteen_orphans' };
-            _setCanWinCached(hand, result);
+            _setCanWinCached(hand, config, result);
             return result;
         }
         
@@ -146,12 +148,12 @@ const Rules = (function() {
         const result = findStandardWin(sorted);
         if (result) {
             const r = { canWin: true, type: 'standard', ...result };
-            _setCanWinCached(hand, r);
+            _setCanWinCached(hand, config, r);
             return r;
         }
 
         const negative = { canWin: false };
-        _setCanWinCached(hand, negative);
+        _setCanWinCached(hand, config, negative);
         return negative;
     }
 
@@ -276,15 +278,16 @@ const Rules = (function() {
 
     /**
      * 判断是否为七对
-     * 支持四张相同牌作为两对
+     * 标准规则：7个不同的对子，每种牌恰好2张，不允许四张相同牌拆成两对
      */
     function isSevenPairs(tiles) {
         if (tiles.length % 2 !== 0) return false;
         const counts = countTiles(tiles);
         let pairCount = 0;
         for (const key in counts) {
-            if (counts[key] % 2 !== 0) return false; // 每种牌数量必须是偶数
-            pairCount += counts[key] / 2;
+            const count = counts[key];
+            if (count !== 2) return false; // 每种牌必须恰好2张（不能4张）
+            pairCount++;
         }
         return pairCount === tiles.length / 2;
     }
@@ -358,7 +361,7 @@ const Rules = (function() {
             const tileA = hand.find(t => t.suit === suit && t.value === a);
             const tileB = hand.find(t => t.suit === suit && t.value === b);
             if (tileA && tileB) {
-                results.push([tileA, tileB, discard]);
+                results.push([tileA, tileB, { ...discard }]);
             }
         }
         
@@ -553,6 +556,15 @@ const Rules = (function() {
             if (gangFan > 0) {
                 fan += gangFan;
                 fans.push({ name: `×${context.gangCount}杠`, fan: gangFan });
+            }
+        }
+
+        // 花牌（上海麻将等）
+        if (context.flowers && context.flowers.length > 0) {
+            const huaFan = getFanValue(config, 'hua_pai') * context.flowers.length;
+            if (huaFan > 0) {
+                fan += huaFan;
+                fans.push({ name: `花牌×${context.flowers.length}`, fan: huaFan });
             }
         }
 

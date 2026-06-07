@@ -95,6 +95,9 @@ const UIComponents = (function() {
             document.addEventListener('touchcancel', onEnd);
         }
         
+        // 缓存元素尺寸，避免拖拽时的强制同步布局
+        let cachedWidth = 0, cachedHeight = 0;
+        
         function onMove(e) {
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -108,8 +111,11 @@ const UIComponents = (function() {
                 
                 clone = element.cloneNode(true);
                 clone.classList.add('dragging');
-                clone.style.width = element.offsetWidth + 'px';
-                clone.style.height = element.offsetHeight + 'px';
+                // 在布局稳定时缓存尺寸，避免拖拽时读取offsetWidth/offsetHeight导致的强制同步布局
+                cachedWidth = element.offsetWidth || 50;
+                cachedHeight = element.offsetHeight || 70;
+                clone.style.width = cachedWidth + 'px';
+                clone.style.height = cachedHeight + 'px';
                 document.body.appendChild(clone);
                 
                 // 高亮弃牌区域
@@ -118,8 +124,9 @@ const UIComponents = (function() {
             }
             
             if (isDragging && clone) {
-                clone.style.left = (clientX - clone.offsetWidth / 2) + 'px';
-                clone.style.top = (clientY - clone.offsetHeight / 2) + 'px';
+                // 使用缓存的尺寸避免强制同步布局
+                clone.style.left = (clientX - cachedWidth / 2) + 'px';
+                clone.style.top = (clientY - cachedHeight / 2) + 'px';
             }
         }
         
@@ -337,6 +344,21 @@ const UIComponents = (function() {
      * 显示动作效果
      */
     function showActionEffect(text) {
+        const feedback = document.getElementById('action-feedback');
+        if (feedback) {
+            feedback.textContent = text;
+            feedback.classList.remove('action-effect');
+            void feedback.offsetWidth; // force reflow
+            feedback.classList.add('action-effect');
+            // 清除之前的定时器
+            if (feedback._actionTimer) clearTimeout(feedback._actionTimer);
+            feedback._actionTimer = setTimeout(() => {
+                feedback.textContent = '';
+                feedback.classList.remove('action-effect');
+            }, 1000);
+            return;
+        }
+        // fallback: 创建临时元素
         const app = document.getElementById('app');
         if (!app) return;
         const div = document.createElement('div');
@@ -469,6 +491,7 @@ const UIComponents = (function() {
         } = options;
 
         const container = document.getElementById('particle-container') || document.body;
+        const fragment = document.createDocumentFragment();
         
         for (let i = 0; i < count; i++) {
             const particle = document.createElement('div');
@@ -492,9 +515,11 @@ const UIComponents = (function() {
             particle.style.setProperty('--tx', `${tx}px`);
             particle.style.setProperty('--ty', `${ty}px`);
             
-            container.appendChild(particle);
+            fragment.appendChild(particle);
             setTimeout(() => particle.remove(), duration + 300);
         }
+        
+        container.appendChild(fragment);
     }
 
     /**
@@ -504,6 +529,7 @@ const UIComponents = (function() {
         const { count = 50, duration = 4000 } = options;
         const colors = ['#d4a843', '#e8c870', '#4caf50', '#f44336', '#2196f3', '#ff9800', '#9c27b0', '#00bcd4'];
         const container = document.getElementById('particle-container') || document.body;
+        const fragment = document.createDocumentFragment();
         
         for (let i = 0; i < count; i++) {
             const piece = document.createElement('div');
@@ -521,9 +547,11 @@ const UIComponents = (function() {
             const rotationDir = Math.random() > 0.5 ? 1 : -1;
             piece.style.setProperty('--rot-dir', rotationDir);
             
-            container.appendChild(piece);
+            fragment.appendChild(piece);
             setTimeout(() => piece.remove(), duration + 1500);
         }
+        
+        container.appendChild(fragment);
     }
 
     /**
@@ -533,18 +561,26 @@ const UIComponents = (function() {
         const app = document.getElementById('app');
         if (!app) return;
         
+        // 创建独立的震动层，避免在 #app 根节点上直接修改 transform 导致整棵 DOM 重排
+        let shakeLayer = document.getElementById('screen-shake-layer');
+        if (!shakeLayer) {
+            shakeLayer = document.createElement('div');
+            shakeLayer.id = 'screen-shake-layer';
+            shakeLayer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden;';
+            app.insertBefore(shakeLayer, app.firstChild);
+        }
+        
         const startTime = Date.now();
         function shake() {
             const elapsed = Date.now() - startTime;
             if (elapsed >= duration) {
-                app.style.transform = '';
+                shakeLayer.style.transform = '';
                 return;
             }
             const decay = 1 - elapsed / duration;
             const dx = (Math.random() - 0.5) * intensity * decay * 2;
             const dy = (Math.random() - 0.5) * intensity * decay * 2;
-            const rot = (Math.random() - 0.5) * intensity * decay * 0.5;
-            app.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
+            shakeLayer.style.transform = `translate(${dx}px, ${dy}px)`;
             requestAnimationFrame(shake);
         }
         shake();
@@ -552,11 +588,33 @@ const UIComponents = (function() {
 
     /**
      * 成就解锁闪光
+     * @param {HTMLElement|Object} elementOrAch - DOM元素或成就对象 {name, desc, icon}
      */
-    function flashAchievement(element) {
-        if (!element) return;
-        element.classList.add('achievement-unlock');
-        setTimeout(() => element.classList.remove('achievement-unlock'), 800);
+    function flashAchievement(elementOrAch) {
+        if (!elementOrAch) return;
+        // 如果传入的是 DOM 元素，保持原有行为
+        if (elementOrAch instanceof HTMLElement) {
+            elementOrAch.classList.add('achievement-unlock');
+            setTimeout(() => elementOrAch.classList.remove('achievement-unlock'), 800);
+            return;
+        }
+        // 如果传入的是成就对象，创建浮动闪光提示
+        const ach = elementOrAch;
+        const el = document.createElement('div');
+        el.className = 'achievement-flash';
+        el.innerHTML = `<span class="achievement-flash-icon">${ach.icon || '🏆'}</span><span class="achievement-flash-text">${Utils.escapeHtml(ach.name || '')}</span>`;
+        el.style.cssText = 'position:fixed;top:20%;left:50%;transform:translateX(-50%) scale(0.8);z-index:300;padding:16px 28px;background:linear-gradient(135deg,rgba(30,35,45,0.95),rgba(20,25,35,0.98));border:1px solid rgba(212,168,67,0.3);border-radius:12px;color:var(--accent-gold);font-size:1.1rem;font-weight:700;box-shadow:0 12px 40px rgba(0,0,0,0.4);pointer-events:none;opacity:0;';
+        document.getElementById('app')?.appendChild(el) || document.body.appendChild(el);
+        requestAnimationFrame(() => {
+            el.style.transition = 'all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+            el.style.opacity = '1';
+            el.style.transform = 'translateX(-50%) scale(1)';
+        });
+        setTimeout(() => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateX(-50%) scale(0.9) translateY(-20px)';
+            setTimeout(() => el.remove(), 400);
+        }, 1800);
     }
 
     return {

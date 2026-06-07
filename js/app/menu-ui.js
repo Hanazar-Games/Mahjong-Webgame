@@ -56,7 +56,7 @@
             await startGame(config);
         } catch (e) {
             console.error('startQuickGame error:', e);
-            Utils.toast('游戏启动失败');
+            Utils.toast('游戏启动失败', 3000, 'error');
         }
     }
 
@@ -66,14 +66,14 @@
     async function startCustomGame() {
         const selectedType = document.querySelector('.mahjong-type-card.selected');
         if (!selectedType) {
-            Utils.toast('请先选择一种麻将');
+            Utils.toast('请先选择一种麻将', 3000, 'warning');
             return;
         }
         
         const type = selectedType.dataset.type;
         const typeConfig = Tiles.getConfig(type);
         if (!typeConfig) {
-            Utils.toast('无效的麻将种类');
+            Utils.toast('无效的麻将种类', 3000, 'error');
             return;
         }
         const config = {
@@ -89,7 +89,7 @@
             await startGame(config);
         } catch (e) {
             console.error('startCustomGame error:', e);
-            Utils.toast('游戏启动失败');
+            Utils.toast('游戏启动失败', 3000, 'error');
         }
     }
 

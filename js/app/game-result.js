@@ -21,12 +21,13 @@
     /**
      * 显示游戏结果
      */
-    function showGameResult(data) {
+    function showGameResult(data, saveResult) {
         if (!data.players || data.players.length === 0) return;
         const sorted = [...data.players].sort((a, b) => b.score - a.score);
         const targetScore = App.engine?.config?.targetScore ?? 1000;
         const selfPlayer = sorted.find(p => p.position === 0);
-        const isWin = sorted[0]?.position === 0;
+        // 优先使用 saveResult 中记录的本局数据，避免与累计统计混淆
+        const isWin = saveResult?.matchIsWin ?? (sorted[0]?.position === 0);
         const netScore = (selfPlayer?.score || 0) - targetScore;
         
         // 渲染结算页
@@ -69,12 +70,29 @@
             }).join('');
         }
         
-        // 渲染奖励（经验）
+        // 渲染奖励（经验）：优先使用 saveResult 中的真实值，避免结算页与真实获得不一致
         const rewardsEl = document.getElementById('result-rewards');
         if (rewardsEl) {
-            const expGain = isWin ? 20 + (data.fan || 0) * 2 : 5;
+            const expGain = saveResult?.expGain ?? (isWin ? 20 + (data.fan || 0) * 2 : 5);
+            const typeName = Tiles.getConfig(data.mahjongType)?.name || data.mahjongType || '';
+            const selfRank = sorted.findIndex(p => p.position === 0) + 1;
+            const rankLabel = selfRank === 1 ? '🥇 第1名' : selfRank === 2 ? '🥈 第2名' : selfRank === 3 ? '🥉 第3名' : `第${selfRank}名`;
+            // 使用本局统计数据（match* 字段），避免与累计统计混淆
+            const mHu = saveResult?.matchHuCount || 0;
+            const mZiMo = saveResult?.matchZiMoCount || 0;
+            const mGang = saveResult?.matchGangCount || 0;
+            const mFan = saveResult?.matchFan || 0;
+            const mWonRounds = saveResult?.matchWonRounds || 0;
+            const mRounds = saveResult?.matchRounds || 1;
             rewardsEl.innerHTML = `
+                <div class="result-reward-chip">${rankLabel}</div>
+                <div class="result-reward-chip">${Utils.escapeHtml(typeName)}</div>
                 <div class="result-reward-chip">✨ +${expGain} EXP</div>
+                ${mHu ? `<div class="result-reward-chip">🀄 胡牌${mHu}次</div>` : ''}
+                ${mZiMo ? `<div class="result-reward-chip">🎉 自摸${mZiMo}次</div>` : ''}
+                ${mGang ? `<div class="result-reward-chip">💥 杠${mGang}次</div>` : ''}
+                ${mFan ? `<div class="result-reward-chip">🔥 最高${mFan}番</div>` : ''}
+                ${mWonRounds ? `<div class="result-reward-chip">🏆 胜${mWonRounds}/${mRounds}局</div>` : ''}
             `;
         }
         
@@ -100,13 +118,10 @@
         const netScore = finalScore - targetScore;
         const totalRounds = App.engine?.round || 1;
         
-        // 从所有对局历史统计（matchHistory 包含已完成的所有局，gameHistory 可能包含当前未结束的局）
+        // 从 matchHistory 统计（gameEnd 时 endRound 已将当前局 history 移入 matchHistory）
         const allHistory = [];
         for (const round of (App.engine?.matchHistory || [])) {
             if (round.history) allHistory.push(...round.history);
-        }
-        if (App.engine?.gameHistory?.length > 0) {
-            allHistory.push(...App.engine.gameHistory);
         }
 
         let ziMoCount = 0;
@@ -159,17 +174,17 @@
             });
         } catch (e) {
             console.error('保存游戏结果失败:', e);
-            Utils.toast('保存结果失败: ' + e.message);
+            Utils.toast('保存结果失败: ' + e.message, 3000, 'error');
             result = null;
         }
         
         // 显示升级和成就解锁提示
         if (result.levelResult?.levelsGained > 0) {
-            Utils.toast(`🎉 升级到 Lv.${result.levelResult.newLevel}！`, 3000);
+            Utils.toast(`🎉 升级到 Lv.${result.levelResult.newLevel}！`, 3000, 'success');
         }
         if (result.newlyUnlocked?.length > 0) {
             for (const ach of result.newlyUnlocked) {
-                Utils.toast(`🏆 解锁成就「${ach.name}」：${ach.desc}`, 4000);
+                Utils.toast(`🏆 解锁成就「${ach.name}」：${ach.desc}`, 4000, 'success');
                 UIComponents.flashAchievement?.(ach);
             }
         }
@@ -186,6 +201,21 @@
         }
         
         loadStats();
+        
+        // 返回本局关键数据，供结算页展示（避免与累计统计混淆）
+        if (result) {
+            return {
+                ...result,
+                matchIsWin: isWin,
+                matchHuCount: huCount,
+                matchZiMoCount: ziMoCount,
+                matchGangCount: player?.gangCount || 0,
+                matchFan: maxFan,
+                matchWonRounds: wonRounds,
+                matchRounds: totalRounds,
+                matchNetScore: netScore
+            };
+        }
     }
 
     /**
@@ -208,7 +238,7 @@
                 await startGame(config);
             } catch (e) {
                 console.error('重新开始游戏失败:', e);
-                Utils.toast('游戏启动失败，请返回主菜单');
+                Utils.toast('游戏启动失败，请返回主菜单', 3000, 'error');
             }
         }
     }

@@ -348,7 +348,7 @@
     border: 1px solid var(--hud-border);
     box-shadow: var(--shadow-elevated);
     position: relative;
-    z-index: 101;
+    z-index: 251;
     max-width: 90vw;
 }
 
@@ -540,6 +540,47 @@
     color: var(--text-muted);
 }
 
+.turn-timer-display {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--hud-bg);
+    border: 1px solid var(--hud-border);
+    border-radius: 20px;
+    padding: 6px 14px;
+    backdrop-filter: blur(8px);
+    color: var(--text-primary);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    transition: all 0.3s ease;
+}
+
+.turn-timer-display.hidden {
+    display: none;
+}
+
+.turn-timer-display.urgent {
+    border-color: rgba(244, 67, 54, 0.5);
+    background: rgba(244, 67, 54, 0.15);
+    color: #ff5252;
+    animation: timerPulse 1s ease-in-out infinite;
+}
+
+.turn-timer-icon {
+    font-size: 0.85rem;
+}
+
+.turn-timer-value {
+    font-size: 1rem;
+    color: var(--accent-gold);
+    min-width: 20px;
+    text-align: center;
+}
+
+.turn-timer-display.urgent .turn-timer-value {
+    color: #ff5252;
+}
+
 /* 动作反馈 */
 .action-feedback {
     position: absolute;
@@ -625,20 +666,9 @@
     50% { transform: translateX(-50%) scale(1.4); opacity: 0.7; }
 }
 
-/* 3人模式：隐藏对家 */
+/* 3人模式：已由 game.css grid 布局统一处理 */
 .game-table.three-player .player-area.top {
     display: none !important;
-}
-
-/* 3人模式：调整左右玩家位置 */
-.game-table.three-player .player-area.left {
-    top: 15%;
-    transform: translateY(0) rotate(90deg);
-}
-
-.game-table.three-player .player-area.right {
-    top: 15%;
-    transform: translateY(0) rotate(-90deg);
 }
 
 /* 弃牌堆 */
@@ -691,7 +721,38 @@
 }
 
 .action-btn:active:not(:disabled) {
-    transform: translateY(0) scale(0.96);
+    transform: translateY(0) scale(0.94);
+    transition: transform 0.05s ease;
+}
+
+.action-btn:focus-visible:not(:disabled) {
+    outline: 2px solid var(--accent-gold);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 3px rgba(212, 168, 67, 0.25);
+}
+
+.action-btn:not(:disabled)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    background: radial-gradient(circle at center, rgba(212,168,67,0.25) 0%, transparent 70%);
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.action-btn:not(:disabled):hover::after {
+    opacity: 1;
+}
+
+.action-btn.highlight:not(:disabled) {
+    animation: btnPulse 2s ease-in-out infinite;
+}
+
+@keyframes btnPulse {
+    0%, 100% { box-shadow: 0 0 12px rgba(212, 168, 67, 0.2); }
+    50% { box-shadow: 0 0 24px rgba(212, 168, 67, 0.4); }
 }
 
 .action-btn:disabled {
@@ -714,14 +775,14 @@
 }
 
 .action-btn.highlight {
-    background: linear-gradient(135deg, rgba(212,168,67,0.25), rgba(200,150,50,0.15));
-    border-color: rgba(212, 168, 67, 0.45);
-    box-shadow: 0 0 16px rgba(212, 168, 67, 0.15);
+    background: linear-gradient(135deg, rgba(212,168,67,0.3), rgba(200,150,50,0.18));
+    border-color: rgba(212, 168, 67, 0.55);
+    box-shadow: 0 0 20px rgba(212, 168, 67, 0.2);
 }
 
 .action-btn.highlight:hover:not(:disabled) {
-    background: linear-gradient(135deg, rgba(212,168,67,0.35), rgba(200,150,50,0.2));
-    box-shadow: 0 0 24px rgba(212, 168, 67, 0.25);
+    background: linear-gradient(135deg, rgba(212,168,67,0.4), rgba(200,150,50,0.25));
+    box-shadow: 0 0 30px rgba(212, 168, 67, 0.35);
 }
 
 /* 移除旧的游戏控制栏 */
@@ -940,7 +1001,7 @@
     inset: 0;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
-    z-index: 100;
+    z-index: 250;
 }
 
 .modal.hidden {
@@ -953,7 +1014,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 200;
+    z-index: 250;
 }
 
 .tile-name-label {
@@ -970,6 +1031,54 @@
 
 .mahjong-tile {
     position: relative;
+}
+
+/* Toggle Switch */
+.toggle-row {
+    justify-content: space-between;
+}
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.1);
+    border-radius: 24px;
+    transition: 0.2s;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background: var(--text-secondary);
+    border-radius: 50%;
+    transition: 0.2s;
+}
+.toggle-switch input:checked + .toggle-slider {
+    background: rgba(212,168,67,0.25);
+    border-color: rgba(212,168,67,0.4);
+}
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(20px);
+    background: var(--accent-gold);
+}
+.toggle-switch input:focus + .toggle-slider {
+    box-shadow: 0 0 0 2px rgba(212,168,67,0.2);
 }
 
 /* ========== 移动端适配 ========== */

@@ -22,6 +22,7 @@ class P2PNetwork extends Utils.EventEmitter {
         this.sseReconnectTimer = null;
         this.heartbeatTimer = null;
         this.lastPong = Date.now();
+        this.sseReconnectAttempts = 0;
         this.connected = false;
         this.connecting = false;
         this._sseStarting = false;
@@ -131,6 +132,7 @@ class P2PNetwork extends Utils.EventEmitter {
             this.connected = true;
             this.connecting = false;
             this.lastPong = Date.now();
+            this.sseReconnectAttempts = 0;
             this.emit('connected');
             this._startHeartbeat();
         };
@@ -153,8 +155,9 @@ class P2PNetwork extends Utils.EventEmitter {
             this.connecting = false;
             this.emit('disconnected');
             this._stopHeartbeat();
-            // 自动重连（3秒后）
-            if (this.roomId) {
+            // 自动重连（3秒后），最多重试5次
+            if (this.roomId && this.sseReconnectAttempts < 5) {
+                this.sseReconnectAttempts++;
                 this.sseReconnectTimer = setTimeout(() => this._startSSE(), 3000);
             }
         };
@@ -165,7 +168,7 @@ class P2PNetwork extends Utils.EventEmitter {
     _startHeartbeat() {
         this._stopHeartbeat();
         this.heartbeatTimer = setInterval(() => {
-            // 5秒未收到任何消息则认为断线
+            // 8秒未收到任何消息则认为断线
             if (Date.now() - this.lastPong > 8000) {
                 this.emit('disconnected');
                 if (this.sse) { try { this.sse.close(); } catch (e) {} this.sse = null; }
@@ -184,6 +187,7 @@ class P2PNetwork extends Utils.EventEmitter {
 
     async _handleSignal(msg) {
         this.lastPong = Date.now();
+        this.sseReconnectAttempts = 0;
 
         switch (msg.type) {
             case 'playerJoined': {
@@ -206,10 +210,11 @@ class P2PNetwork extends Utils.EventEmitter {
                 break;
             }
             case 'playerOffline': {
+                const offlinePlayer = this.players.find(p => p.id === msg.playerId);
+                this.emit('playerDisconnected', { playerId: msg.playerId, name: offlinePlayer?.name });
                 this._closePeer(msg.playerId);
                 this.players = this.players.filter(p => p.id !== msg.playerId);
                 this.emit('playerListUpdated', this.players);
-                this.emit('playerDisconnected', msg.playerId);
                 break;
             }
             case 'playerLeft': {
@@ -288,6 +293,7 @@ class P2PNetwork extends Utils.EventEmitter {
         };
         channel.onclose = () => {
             this.channels.delete(playerId);
+            this.emit('peerDisconnected', playerId);
         };
     }
 
@@ -340,12 +346,19 @@ class P2PNetwork extends Utils.EventEmitter {
 
     _sendSignal(type, data) {
         if (!this.roomId || !this.playerId) return;
+        let body;
+        try {
+            body = JSON.stringify({ playerId: this.playerId, type, data });
+        } catch (e) {
+            console.error('P2P _sendSignal JSON.stringify error:', e);
+            return;
+        }
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
         fetch(`${this.serverUrl}/room/${this.roomId}/send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ playerId: this.playerId, type, data }),
+            body,
             signal: controller.signal
         }).catch(() => {}).finally(() => clearTimeout(timeout));
     }
@@ -375,9 +388,11 @@ class P2PNetwork extends Utils.EventEmitter {
         if (ch && ch.readyState === 'open') {
             let msg;
             try { msg = JSON.stringify(data); }
-            catch (e) { console.error('sendTo JSON.stringify error:', e); return; }
-            try { ch.send(msg); } catch (e) {}
+            catch (e) { console.error('sendTo JSON.stringify error:', e); return false; }
+            try { ch.send(msg); return true; }
+            catch (e) { console.error('sendTo failed:', e); return false; }
         }
+        return false;
     }
 
     // ===== 开始游戏 =====

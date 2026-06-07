@@ -46,7 +46,7 @@
             Stats.saveSettings(App.settings);
         } catch (e) {
             console.error('保存设置失败:', e);
-            Utils.toast('设置保存失败');
+            Utils.toast('设置保存失败', 3000, 'error');
             return false;
         }
         return true;
@@ -113,6 +113,10 @@
         
         const settingKey = keyMap[key];
         if (settingKey) {
+            // checkbox 先解析 boolean，再赋值和保存
+            if (el.type === 'checkbox') {
+                value = el.checked;
+            }
             App.settings[settingKey] = value;
             Stats.saveSettings(App.settings);
             
@@ -125,29 +129,23 @@
                 applyTheme(value);
             }
             if (key === 'sfx-enabled') {
-                const enabled = el.type === 'checkbox' ? el.checked : (value === 'true' || value === true);
-                App.settings[settingKey] = enabled; // 存储为布尔值
+                const enabled = !!value;
                 AudioManager.setSfxEnabled(enabled);
                 if (enabled) AudioManager.SFX.toggleSwitch();
             }
             if (key === 'bgm-style') {
-                AudioManager.SFX.toggleSwitch();
-                if (AudioManager.isPlaying) {
-                    AudioManager.startBgm(value);
-                }
+                // BGM 已禁用
+                AudioManager.stopBgm();
             }
 
             if (key === 'auto-sort') {
-                const enabled = value === 'true' || value === true;
-                App.settings[settingKey] = enabled;
+                const enabled = !!value;
                 if (App.engine?.players) {
                     App.engine.players.forEach(p => { p.autoSort = enabled; });
                 }
             }
             if (key === 'show-tile-names') {
-                const enabled = value === 'true' || value === true;
-                App.settings[settingKey] = enabled;
-                // 如果正在游戏中，重新渲染自己的手牌
+                const enabled = !!value;
                 if (App.engine && App.currentScreen === 'game-screen') {
                     renderPlayerHand(0, App.engine.players[0]?.hand?.length || 0);
                 }
@@ -194,7 +192,7 @@
                 Stats.saveSettings(App.settings);
             } catch (e) {
                 console.error('保存设置失败:', e);
-                Utils.toast('设置保存失败');
+                Utils.toast('设置保存失败', 3000, 'error');
             }
         }, 300);
     }
@@ -301,10 +299,10 @@
             try {
                 Stats.resetStats();
                 loadStats();
-                Utils.toast('统计数据已重置');
+                Utils.toast('统计数据已重置', 3000, 'success');
             } catch (e) {
                 console.error('重置统计失败:', e);
-                Utils.toast('重置统计失败');
+                Utils.toast('重置统计失败', 3000, 'error');
             }
         }
     }

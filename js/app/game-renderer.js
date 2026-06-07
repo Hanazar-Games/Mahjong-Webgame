@@ -6,6 +6,10 @@
         if (!App.engine) return;
         
         const state = App.engine.getState();
+        const tableEl = document.getElementById('game-table');
+        if (tableEl) {
+            tableEl.classList.toggle('three-player', App.engine.config.playerCount === 3);
+        }
         
         // 渲染所有玩家
         for (let i = 0; i < App.engine.config.playerCount; i++) {
@@ -31,86 +35,137 @@
     }
 
     /**
-     * 渲染玩家手牌
+     * 渲染玩家手牌（增量更新，避免全量DOM重建）
      */
     function renderPlayerHand(playerIndex, handSize, animateLast = false, drawnTileId = null) {
         const handEl = document.getElementById(`hand-${getPositionName(playerIndex)}`);
         if (!handEl || !App.engine) return;
         
-        // 保存自己的选中状态
         const isSelf = playerIndex === 0;
-        const selectedId = isSelf ? handEl.querySelector('.mahjong-tile.selected')?.dataset.id : null;
-        
-        handEl.innerHTML = '';
-        
         const player = App.engine.players[playerIndex];
         if (!player) return;
         const displayMode = isSelf ? 'full' : App.settings.opponentDisplay;
         
-        if (isSelf) {
-            // 自己的牌：全部显示，可点击，支持拖拽
-            if (!player.hand) return;
-            player.hand.forEach((tile, index) => {
-                const tileEl = UIComponents.createTileElement(tile, {
-                    draggable: true,
-                    showName: App.settings.showTileNames,
-                    onClick: (t) => AppEventBus.emit('tile:click', t),
-                    onDragEnd: (t) => AppEventBus.emit('tile:dragend', t)
-                });
-                // 摸牌动画：优先匹配drawnTileId（因为手牌会被排序，最后一张不一定是新摸的）
-                if (animateLast && (drawnTileId ? tile.id === drawnTileId : index === player.hand.length - 1)) {
-                    tileEl.classList.add('tile-drawn');
-                }
-                handEl.appendChild(tileEl);
-            });
-            // 根据当前游戏状态自动设置禁用状态，防止re-render后丢失
-            const engine = App.engine;
-            const shouldDisable = !engine || engine.currentPlayerIndex !== 0 || engine.state !== 'playing';
-            handEl.querySelectorAll('.mahjong-tile').forEach(tile => {
-                tile.classList.toggle('disabled', shouldDisable);
-                // 恢复之前选中的牌
-                if (selectedId && tile.dataset.id === selectedId) {
-                    tile.classList.add('selected');
-                }
-            });
-        } else if (displayMode === 'small') {
-            // 小牌堆显示
-            for (let i = 0; i < handSize; i++) {
-                const tileEl = document.createElement('div');
-                tileEl.className = 'mahjong-tile back';
-                if (animateLast && i === handSize - 1) {
-                    tileEl.classList.add('tile-drawn');
-                }
-                handEl.appendChild(tileEl);
+        if (isSelf || displayMode === 'full') {
+            const hand = isSelf ? player.hand : (displayMode === 'full' ? player.hand : null);
+            if (!hand) return;
+            
+            // 防御：如果之前是其他显示模式（如背面牌或文字），先清空
+            if (handEl.querySelectorAll('.mahjong-tile.back').length > 0 || handEl.querySelector(':scope > span')) {
+                handEl.innerHTML = '';
             }
-        } else if (displayMode === 'full') {
-            // 完整显示对手手牌（旁观/调试模式）
-            if (!player.hand) return;
-            player.hand.forEach((tile, index) => {
-                const tileEl = UIComponents.createTileElement(tile, { small: true, showName: App.settings.showTileNames });
-                if (animateLast && index === player.hand.length - 1) {
+            
+            // 保存选中状态
+            const selectedId = isSelf ? handEl.querySelector('.mahjong-tile.selected')?.dataset.id : null;
+            
+            // 收集现有元素
+            const existingEls = new Map();
+            handEl.querySelectorAll('.mahjong-tile').forEach(el => {
+                existingEls.set(el.dataset.id, el);
+            });
+            
+            const fragment = document.createDocumentFragment();
+            
+            hand.forEach((tile, index) => {
+                let tileEl = existingEls.get(tile.id);
+                if (!tileEl) {
+                    // 创建新元素
+                    if (isSelf) {
+                        tileEl = UIComponents.createTileElement(tile, {
+                            draggable: true,
+                            showName: App.settings.showTileNames,
+                            onClick: (t) => AppEventBus.emit('tile:click', t),
+                            onDragEnd: (t) => AppEventBus.emit('tile:dragend', t)
+                        });
+                    } else {
+                        tileEl = UIComponents.createTileElement(tile, { small: true, showName: App.settings.showTileNames });
+                    }
+                } else {
+                    // 复用现有元素，从Map中移除
+                    existingEls.delete(tile.id);
+                    // 清除之前的动画类（避免重复动画）
+                    tileEl.classList.remove('tile-drawn');
+                }
+                
+                // 摸牌动画：优先匹配drawnTileId
+                if (animateLast && (drawnTileId ? tile.id === drawnTileId : index === hand.length - 1)) {
                     tileEl.classList.add('tile-drawn');
                 }
-                handEl.appendChild(tileEl);
+                
+                fragment.appendChild(tileEl);
             });
+            
+            // 移除不再存在的元素
+            existingEls.forEach(el => el.remove());
+            
+            // 批量插入（减少重排）
+            handEl.appendChild(fragment);
+            
+            // 设置禁用状态和恢复选中
+            if (isSelf) {
+                const engine = App.engine;
+                const shouldDisable = !engine || engine.currentPlayerIndex !== 0 || engine.state !== 'playing';
+                handEl.querySelectorAll('.mahjong-tile').forEach(tile => {
+                    tile.classList.toggle('disabled', shouldDisable);
+                    if (selectedId && tile.dataset.id === selectedId) {
+                        tile.classList.add('selected');
+                    }
+                });
+            }
+        } else if (displayMode === 'small') {
+            // 防御：如果之前是其他显示模式（如真实牌面或文字），先清空
+            if (handEl.querySelectorAll('.mahjong-tile:not(.back)').length > 0 || handEl.querySelector(':scope > span')) {
+                handEl.innerHTML = '';
+            }
+            
+            // 对手小牌堆：调整背面牌数量
+            const currentTiles = handEl.querySelectorAll('.mahjong-tile.back');
+            const currentCount = currentTiles.length;
+            
+            if (currentCount < handSize) {
+                const fragment = document.createDocumentFragment();
+                for (let i = currentCount; i < handSize; i++) {
+                    const tileEl = document.createElement('div');
+                    tileEl.className = 'mahjong-tile back';
+                    if (animateLast && i === handSize - 1) {
+                        tileEl.classList.add('tile-drawn');
+                    }
+                    fragment.appendChild(tileEl);
+                }
+                handEl.appendChild(fragment);
+            } else if (currentCount > handSize) {
+                for (let i = currentCount - 1; i >= handSize; i--) {
+                    currentTiles[i].remove();
+                }
+            }
         } else if (displayMode === 'hidden') {
             handEl.innerHTML = `<span style="color:var(--text-muted);font-size:0.8rem">${handSize}张</span>`;
         }
     }
 
     /**
-     * 渲染玩家副露
+     * 渲染玩家副露（增量更新）
      */
     function renderPlayerMelds(playerIndex) {
         const meldsEl = document.getElementById(`melds-${getPositionName(playerIndex)}`);
         if (!meldsEl || !App.engine) return;
         
         const player = App.engine.players[playerIndex];
-        if (!player) return;
-        meldsEl.innerHTML = '';
+        if (!player || !player.melds) return;
         
-        if (!player.melds) return;
-        for (const meld of player.melds) {
+        const existingGroups = meldsEl.querySelectorAll('.meld-group');
+        
+        // 防御：如果副露变短了（如回放跳转或网络同步），移除多余元素
+        if (existingGroups.length > player.melds.length) {
+            for (let i = existingGroups.length - 1; i >= player.melds.length; i--) {
+                existingGroups[i].remove();
+            }
+        }
+        
+        // 只添加新增的 meld（副露通常只增不减）
+        for (let i = existingGroups.length; i < player.melds.length; i++) {
+            const meld = player.melds[i];
+            if (!meld || !Array.isArray(meld.tiles)) continue;
             const group = document.createElement('div');
             group.className = 'meld-group';
             
@@ -124,24 +179,39 @@
     }
 
     /**
-     * 渲染弃牌堆
+     * 渲染弃牌堆（增量更新）
      */
     function renderDiscardPile(animateLast = true) {
         const pileEl = document.getElementById('discard-pile');
         if (!pileEl || !App.engine) return;
         
-        pileEl.innerHTML = '';
+        const discardPile = App.engine.discardPile || [];
+        const existingEls = pileEl.querySelectorAll('.mahjong-tile');
         
-        (App.engine.discardPile || []).forEach((tile, index) => {
+        // 防御：如果弃牌堆变短了（如回放跳转或网络同步），移除多余元素
+        if (existingEls.length > discardPile.length) {
+            for (let i = existingEls.length - 1; i >= discardPile.length; i--) {
+                existingEls[i].remove();
+            }
+        }
+        
+        // 重新查询，移除旧动画类（避免re-render时重复动画）
+        const currentEls = pileEl.querySelectorAll('.mahjong-tile');
+        if (currentEls.length > 0) {
+            currentEls[currentEls.length - 1].classList.remove('tile-discarded');
+        }
+        
+        // 只添加新元素
+        for (let i = currentEls.length; i < discardPile.length; i++) {
+            const tile = discardPile[i];
             const tileEl = UIComponents.createTileElement(tile, { small: true });
-            // 只在真正的新牌丢弃时添加动画，避免re-render时重复动画
-            if (animateLast && index === App.engine.discardPile.length - 1) {
+            if (animateLast && i === discardPile.length - 1) {
                 tileEl.classList.add('tile-discarded');
             }
             pileEl.appendChild(tileEl);
-        });
+        }
         
-        // 滚动到最新（如果之前有timeout则取消）
+        // 滚动到最新
         if (App._discardScrollTimeout) clearTimeout(App._discardScrollTimeout);
         App._discardScrollTimeout = setTimeout(() => {
             App._discardScrollTimeout = null;

@@ -2,6 +2,16 @@
  * 万能麻将 - 游戏输入处理模块（牌点击、动作、键盘、触摸）
  * 从 main.js 拆分（架构拆分轮次 2）
  */
+    // selectTile SFX 节流（防止快速点击导致音频spam）
+    let _lastSelectTileSfxTime = 0;
+    function _playSelectTileSfx() {
+        const now = Date.now();
+        if (now - _lastSelectTileSfxTime > 80) {
+            _lastSelectTileSfxTime = now;
+            AudioManager.SFX.selectTile();
+        }
+    }
+
     function handleTileClick(tile) {
         if (!App.engine || App.engine.state !== 'playing') return;
         if (App.engine.currentPlayerIndex !== 0) return;
@@ -20,14 +30,14 @@
                 enablePlayerActions(false);
             } else {
                 // 选择另一张牌
-                AudioManager.SFX.selectTile();
+                _playSelectTileSfx();
                 selected.classList.remove('selected');
                 const targetEl = handEl.querySelector(`[data-id="${escapeCssSelector(tile.id)}"]`);
                 if (targetEl) targetEl.classList.add('selected');
             }
         } else {
             // 选择牌
-            AudioManager.SFX.selectTile();
+            _playSelectTileSfx();
             const targetEl = handEl.querySelector(`[data-id="${escapeCssSelector(tile.id)}"]`);
             if (targetEl) targetEl.classList.add('selected');
         }
@@ -45,6 +55,118 @@
     /**
      * 处理操作
      */
+    /**
+     * 通用牌型选项选择器
+     */
+    function showTileOptionsSelector(options, titleText, getTilesFn) {
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.id = 'tile-selector-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:240;display:flex;align-items:center;justify-content:center;';
+            
+            const panel = document.createElement('div');
+            panel.style.cssText = 'background:var(--bg-panel);padding:20px;border-radius:var(--border-radius);border:1px solid rgba(212,168,67,0.3);max-width:90%;';
+            
+            const title = document.createElement('h3');
+            title.textContent = titleText;
+            title.style.cssText = 'color:var(--accent-gold);margin-bottom:16px;text-align:center;';
+            panel.appendChild(title);
+            
+            const optionsContainer = document.createElement('div');
+            optionsContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+            
+            options.forEach((opt, idx) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;gap:8px;align-items:center;cursor:pointer;padding:8px 12px;border-radius:8px;border:1px solid transparent;transition:all 0.2s;';
+                row.addEventListener('mouseenter', () => {
+                    row.style.background = 'rgba(212,168,67,0.1)';
+                    row.style.borderColor = 'rgba(212,168,67,0.3)';
+                });
+                row.addEventListener('mouseleave', () => {
+                    row.style.background = '';
+                    row.style.borderColor = 'transparent';
+                });
+                row.addEventListener('click', () => {
+                    overlay.remove();
+                    resolve(opt);
+                });
+                
+                const tiles = getTilesFn(opt);
+                for (const tile of tiles) {
+                    const tileEl = UIComponents.createTileElement(tile, { small: true });
+                    tileEl.style.cursor = 'pointer';
+                    row.appendChild(tileEl);
+                }
+                
+                optionsContainer.appendChild(row);
+            });
+            
+            panel.appendChild(optionsContainer);
+            overlay.appendChild(panel);
+            document.body.appendChild(overlay);
+        });
+    }
+
+    function showChiOptionsSelector(options) {
+        return showTileOptionsSelector(options, '请选择吃的组合', opt => opt);
+    }
+
+    function showAnGangOptionsSelector(options) {
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.id = 'tile-selector-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:300;display:flex;align-items:center;justify-content:center;';
+            
+            const panel = document.createElement('div');
+            panel.style.cssText = 'background:var(--bg-panel);padding:20px;border-radius:var(--border-radius);border:1px solid rgba(212,168,67,0.3);max-width:90%;';
+            
+            const title = document.createElement('h3');
+            title.textContent = '请选择杠的组合';
+            title.style.cssText = 'color:var(--accent-gold);margin-bottom:16px;text-align:center;';
+            panel.appendChild(title);
+            
+            const optionsContainer = document.createElement('div');
+            optionsContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+            
+            options.forEach((opt) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;gap:8px;align-items:center;cursor:pointer;padding:8px 12px;border-radius:8px;border:1px solid transparent;transition:all 0.2s;';
+                row.addEventListener('mouseenter', () => {
+                    row.style.background = 'rgba(212,168,67,0.1)';
+                    row.style.borderColor = 'rgba(212,168,67,0.3)';
+                });
+                row.addEventListener('mouseleave', () => {
+                    row.style.background = '';
+                    row.style.borderColor = 'transparent';
+                });
+                row.addEventListener('click', () => {
+                    overlay.remove();
+                    resolve(opt);
+                });
+                
+                const tiles = opt.type === 'an_gang' ? opt.tiles : (opt.tile ? [opt.tile] : []);
+                for (const tile of tiles) {
+                    const tileEl = UIComponents.createTileElement(tile, { small: true });
+                    tileEl.style.cursor = 'pointer';
+                    row.appendChild(tileEl);
+                }
+                
+                if (opt.type === 'jia_gang') {
+                    const label = document.createElement('span');
+                    label.textContent = '加杠';
+                    label.style.cssText = 'color:var(--text-secondary);font-size:0.9rem;';
+                    row.appendChild(label);
+                }
+                
+                optionsContainer.appendChild(row);
+            });
+            
+            panel.appendChild(optionsContainer);
+            overlay.appendChild(panel);
+            document.body.appendChild(overlay);
+        });
+    }
+
     async function handleAction(type) {
         if (!App.engine) return;
         if (App._actionPending) return;
@@ -64,7 +186,14 @@
         switch (type) {
             case 'chi':
                 if (engine.pendingAction?.action.type === 'chi' && engineStillValid()) {
-                    await engine.executeAction(player, engine.pendingAction.action);
+                    const options = engine.pendingAction.action.options;
+                    let actionToExecute = engine.pendingAction.action;
+                    if (options && options.length > 1) {
+                        const selected = await showChiOptionsSelector(options);
+                        if (!engineStillValid()) break;
+                        actionToExecute = { ...engine.pendingAction.action, selectedOption: selected };
+                    }
+                    await engine.executeAction(player, actionToExecute);
                 }
                 break;
             case 'peng':
@@ -78,17 +207,23 @@
                     await engine.executeAction(player, engine.pendingAction.action);
                 } else if (App.anGangOptions && App.anGangOptions.length > 0 && engineStillValid()) {
                     // 暗杠/加杠
-                    await engine.executeAnGang(player, App.anGangOptions[0]);
+                    let option = App.anGangOptions[0];
+                    if (App.anGangOptions.length > 1) {
+                        option = await showAnGangOptionsSelector(App.anGangOptions);
+                        if (!engineStillValid()) break;
+                    }
+                    await engine.executeAnGang(player, option);
                     App.anGangOptions = null;
                 }
                 break;
             case 'hu':
-                // 优先检查自摸（手牌已包含摸到的牌）
+                // 优先检查自摸（仅在当前玩家回合且手牌已包含摸到的牌）
                 if (typeof Rules === 'undefined' || !Rules.canWin) {
                     console.error('Rules模块未加载');
                     break;
                 }
-                const selfWin = Rules.canWin(player.hand, engine.ruleConfig);
+                const isMyTurn = engine.currentPlayerIndex === 0;
+                const selfWin = isMyTurn ? Rules.canWin(player.hand, engine.ruleConfig) : null;
                 if (selfWin && selfWin.canWin && engineStillValid()) {
                     await engine.executeAction(player, { type: 'hu', winInfo: selfWin });
                 } else if (engine.pendingAction?.action.type === 'hu' && engine.lastDiscard && engineStillValid()) {
@@ -108,13 +243,25 @@
                     // 跳过自摸，允许继续打牌
                     enablePlayerActions(true);
                     engine.startTimer();
+                    // 重新检查暗杠（跳过自摸后可能仍有暗杠选项）
+                    if (typeof Rules !== 'undefined' && Rules.canAnGang) {
+                        const anGangOptions = Rules.canAnGang(player.hand, player.melds, engine.ruleConfig);
+                        if (anGangOptions.length > 0) {
+                            App.anGangOptions = anGangOptions;
+                            enableActionButtons({ type: 'gang' });
+                        }
+                    }
                 }
                 break;
         }
         } catch (e) {
             console.error('handleAction error:', e);
         } finally {
-            disableActionButtons();
+            // 如果 skip 后引擎又提供了新的 pendingAction，不要禁用按钮
+            // （engine-events.js 中的 actionAvailable 监听器可能已经启用了新按钮）
+            if (!engine.pendingAction) {
+                disableActionButtons();
+            }
             App._actionPending = false;
         }
     }
@@ -221,10 +368,12 @@
                 break;
             }
             case 's':
-            case 'S':
+            case 'S': {
                 e.preventDefault();
-                handleAction('skip');
+                const skipBtn = document.getElementById('btn-skip');
+                if (skipBtn && !skipBtn.disabled) handleAction('skip');
                 break;
+            }
         }
     }
 

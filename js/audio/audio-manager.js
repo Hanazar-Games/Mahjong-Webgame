@@ -451,107 +451,61 @@ const AudioManager = (function() {
             sfxTimeout(() => playPerc({ freq: 300, decay: 0.3, type: 'sawtooth', pitchDrop: 80, volume: 0.4 }), 120);
         },
 
-        // 错误
-        error() {
-            playPerc({ freq: 200, decay: 0.4, type: 'sawtooth', pitchDrop: 100, volume: 0.5 });
-            sfxTimeout(() => playPerc({ freq: 180, decay: 0.5, type: 'square', pitchDrop: 50, volume: 0.4 }), 150);
-        },
+        // 错误（静默）
+        error() {},
 
-        // 滴答 - 倒计时
+        // 滴答 - 倒计时（降低音量）
         tick() {
-            playPerc({ freq: 2200, decay: 0.015, type: 'sine', volume: 0.12 });
+            playPerc({ freq: 2200, decay: 0.015, type: 'sine', volume: 0.06 });
         },
 
-        // 倒计时紧急
-        tickUrgent() {
-            playPerc({ freq: 2800, decay: 0.02, type: 'sine', volume: 0.2 });
-            playPerc({ freq: 1400, decay: 0.03, type: 'triangle', volume: 0.15 });
-        },
+        // 倒计时紧急（静默）
+        tickUrgent() {},
 
-        // 倒计时结束
-        tickEnd() {
-            playPerc({ freq: 800, decay: 0.3, type: 'sawtooth', pitchDrop: 300, volume: 0.4 });
-        },
+        // 倒计时结束（静默）
+        tickEnd() {},
 
-        // 解锁成就
-        achievement() {
-            [0, 80, 160, 280, 400].forEach((t, i) => {
-                sfxTimeout(() => playBell(523 * Math.pow(1.12, i), { duration: 0.5, volume: 0.45 }), t);
-            });
-        },
+        // 解锁成就（静默）
+        achievement() {},
 
-        // 升级
-        levelUp() {
-            [523, 587, 659, 784, 880, 1047].forEach((freq, i) => {
-                sfxTimeout(() => playBell(freq, { duration: 0.4, volume: 0.5 }), i * 80);
-            });
-        },
+        // 升级（静默）
+        levelUp() {},
 
-        // 花牌
-        flower() {
-            playBell(880, { duration: 0.6, volume: 0.35 });
-            sfxTimeout(() => playBell(1100, { duration: 0.5, volume: 0.3 }), 100);
-        },
+        // 花牌（静默）
+        flower() {},
 
-        // 屏幕切换
-        screenSwitch() {
-            playNoise({ duration: 0.2, frequency: 200, type: 'lowpass', volume: 0.15 });
-        },
+        // 屏幕切换（静默）
+        screenSwitch() {},
 
-        // 弹出菜单
-        menuOpen() {
-            playChord([300, 450], { duration: 0.15, volume: 0.25, type: 'sine' });
-        },
+        // 弹出菜单（静默）
+        menuOpen() {},
 
-        // 关闭菜单
-        menuClose() {
-            playChord([450, 300], { duration: 0.12, volume: 0.2, type: 'sine' });
-        },
+        // 关闭菜单（静默）
+        menuClose() {},
 
-        // 模态框弹出
-        modalOpen() {
-            playPerc({ freq: 600, decay: 0.15, type: 'sine', pitchDrop: 200, volume: 0.25 });
-        },
+        // 模态框弹出（静默）
+        modalOpen() {},
 
-        // 金币/分数增加
-        scoreUp() {
-            playPerc({ freq: 1200, decay: 0.08, type: 'sine', pitchDrop: 400, volume: 0.2 });
-            sfxTimeout(() => playPerc({ freq: 1600, decay: 0.06, type: 'sine', volume: 0.15 }), 50);
-        },
+        // 金币/分数增加（静默）
+        scoreUp() {},
 
-        // 金币/分数减少
-        scoreDown() {
-            playPerc({ freq: 600, decay: 0.1, type: 'sine', pitchDrop: 200, volume: 0.2 });
-        },
+        // 金币/分数减少（静默）
+        scoreDown() {},
 
-        // 连击
-        combo(count) {
-            const baseFreq = 500 + count * 100;
-            playBell(baseFreq, { duration: 0.4, volume: 0.4 });
-            if (count > 2) {
-                sfxTimeout(() => playBell(baseFreq * 1.25, { duration: 0.3, volume: 0.3 }), 80);
-            }
-        },
+        // 连击（静默）
+        combo() {},
 
-        // 回合开始
-        turnStart() {
-            playPerc({ freq: 440, decay: 0.08, type: 'sine', volume: 0.2 });
-        },
+        // 回合开始（静默）
+        turnStart() {},
 
-        // 风标变化
-        windChange() {
-            playNoise({ duration: 0.3, frequency: 300, type: 'lowpass', volume: 0.2 });
-        },
+        // 风标变化（静默）
+        windChange() {},
 
-        // 牌进入弃牌堆
-        toDiscard() {
-            playPerc({ freq: 180, decay: 0.06, type: 'triangle', volume: 0.15 });
-        },
+        // 牌进入弃牌堆（静默）
+        toDiscard() {},
 
-        // 3D翻转
-        flip3D() {
-            playNoise({ duration: 0.15, frequency: 800, type: 'bandpass', volume: 0.2 });
-        }
+        // 3D翻转（静默）
+        flip3D() {}
     };
 
     // ============ BGM 系统 ============
@@ -596,31 +550,9 @@ const AudioManager = (function() {
     };
 
     function startBgm(style = 'calm') {
-        if (!audioCtx) init();
-        if (!audioCtx) return;
-        resume();
+        // BGM 已禁用 - 不播放任何背景音乐
         stopBgm();
-        bgmPlaying = true;
-        currentBgm = style;
-
-        const pattern = BGM_PATTERNS[style] || BGM_PATTERNS.calm;
-        const { notes, scale, tempo, type, harmony } = pattern;
-
-        let phraseIndex = 0;
-        let nextTime = audioCtx.currentTime + 0.1;
-
-        function scheduleNext() {
-            if (!bgmPlaying) return;
-            const melody = notes[phraseIndex % notes.length];
-            nextTime = schedulePhrase(melody, nextTime, tempo, scale, type, harmony);
-            phraseIndex++;
-            const rest = tempo * 2 + Math.random() * tempo;
-            nextTime += rest;
-            const delay = Math.max(80, (nextTime - audioCtx.currentTime - 0.3) * 1000);
-            bgmTimer = setTimeout(scheduleNext, delay);
-        }
-
-        scheduleNext();
+        return;
     }
 
     function schedulePhrase(melody, startTime, tempo, scale, oscType, addHarmony) {
