@@ -137,6 +137,11 @@
                 // BGM 已禁用
                 AudioManager.stopBgm();
             }
+            if (key === 'game-speed') {
+                if (typeof updateAnimSpeed === 'function') {
+                    updateAnimSpeed(value);
+                }
+            }
 
             if (key === 'auto-sort') {
                 const enabled = !!value;

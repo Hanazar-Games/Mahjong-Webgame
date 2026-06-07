@@ -14,8 +14,18 @@ const Rules = (function() {
 
     function _canWinCacheKey(hand, config) {
         const tileKey = hand.map(t => `${t.suit}-${t.value}`).sort().join(',');
-        const configKey = config?.mahjongType || '';
-        return `${configKey}|${tileKey}`;
+        // 缓存键必须包含所有影响胡牌判断的规则参数
+        const cfg = config || {};
+        const configKey = [
+            cfg.mahjongType || '',
+            cfg.allowChi !== false ? '1' : '0',
+            cfg.allowPeng !== false ? '1' : '0',
+            cfg.allowGang !== false ? '1' : '0',
+            cfg.queYiMen ? '1' : '0',
+            cfg.xueZhanDaoDi ? '1' : '0',
+            cfg.huaPai ? '1' : '0'
+        ].join('|');
+        return `${configKey}||${tileKey}`;
     }
 
     function _getCanWinCached(hand, config) {

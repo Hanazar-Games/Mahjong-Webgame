@@ -27,6 +27,8 @@
         
         // 初始化主题
         applyTheme(App.settings.tableTheme);
+        // 初始化动画速度
+        updateAnimSpeed(App.settings.gameSpeed);
         
         // 初始化音频系统（BGM 已禁用，仅保留 SFX）
         AudioManager.setupUserInteraction();
@@ -117,6 +119,13 @@
         // 开始游戏
         await App.engine.start();
     }
+
+    // 根据游戏速度更新CSS动画倍率
+    function updateAnimSpeed(speed) {
+        const scale = speed === 'instant' ? 0.01 : (speed === 'fast' ? 0.5 : 1);
+        document.documentElement.style.setProperty('--anim-speed', String(scale));
+    }
+    window.updateAnimSpeed = updateAnimSpeed;
 
     // 暴露全局引用供拆分模块使用
     window.App = App;

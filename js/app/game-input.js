@@ -115,7 +115,7 @@
         return new Promise((resolve) => {
             const overlay = document.createElement('div');
             overlay.id = 'tile-selector-overlay';
-            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:300;display:flex;align-items:center;justify-content:center;';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:240;display:flex;align-items:center;justify-content:center;';
             
             const panel = document.createElement('div');
             panel.style.cssText = 'background:var(--bg-panel);padding:20px;border-radius:var(--border-radius);border:1px solid rgba(212,168,67,0.3);max-width:90%;';

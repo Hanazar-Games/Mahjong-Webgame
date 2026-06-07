@@ -144,18 +144,36 @@ const UIComponents = (function() {
                 const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
                 
                 const rect = discardPile?.getBoundingClientRect();
-                if (rect && clientX >= rect.left && clientX <= rect.right &&
-                    clientY >= rect.top && clientY <= rect.bottom) {
+                const dropped = rect && clientX >= rect.left && clientX <= rect.right &&
+                    clientY >= rect.top && clientY <= rect.bottom;
+                
+                if (dropped) {
                     // 拖到弃牌区
                     if (onDragEnd) onDragEnd(tile);
+                    clone.remove();
+                    element.classList.remove('drag-source');
+                    isDragging = false;
+                    clone = null;
+                } else {
+                    // 未拖到弃牌区：snap-back 动画
+                    const snapClone = clone;
+                    const elRect = element.getBoundingClientRect();
+                    snapClone.style.transition = 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                    snapClone.style.left = elRect.left + 'px';
+                    snapClone.style.top = elRect.top + 'px';
+                    snapClone.style.transform = 'scale(1)';
+                    snapClone.style.opacity = '0.6';
+                    setTimeout(() => {
+                        snapClone.remove();
+                        element.classList.remove('drag-source');
+                    }, 280);
+                    isDragging = false;
+                    clone = null;
                 }
-                
-                clone.remove();
-                element.classList.remove('drag-source');
+            } else {
+                isDragging = false;
+                clone = null;
             }
-            
-            isDragging = false;
-            clone = null;
         }
     }
 

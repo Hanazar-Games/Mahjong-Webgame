@@ -353,9 +353,9 @@ const AudioManager = (function() {
         },
 
         // 取消选中
-        deselectTile() {
-            playFM({ carrier: 800, modulator: 400, modulationIndex: 30, attack: 0.005, decay: 0.03, sustain: 0, release: 0.05, volume: 0.15 });
-        },
+        // deselectTile() {  // 未使用，已移除
+        //     playFM({ carrier: 800, modulator: 400, modulationIndex: 30, attack: 0.005, decay: 0.03, sustain: 0, release: 0.05, volume: 0.15 });
+        // },
 
         // 吃 - 轻快三连音
         chi() {
@@ -441,9 +441,9 @@ const AudioManager = (function() {
         },
 
         // 滑动条
-        sliderChange() {
-            playFM({ carrier: 800 + Math.random() * 400, modulator: 400, modulationIndex: 50, attack: 0.002, decay: 0.03, volume: 0.1 });
-        },
+        // sliderChange() {  // 未使用，已移除
+        //     playFM({ carrier: 800 + Math.random() * 400, modulator: 400, modulationIndex: 50, attack: 0.002, decay: 0.03, volume: 0.1 });
+        // },
 
         // 警告
         warning() {
@@ -459,53 +459,10 @@ const AudioManager = (function() {
             playPerc({ freq: 2200, decay: 0.015, type: 'sine', volume: 0.06 });
         },
 
-        // 倒计时紧急（静默）
-        tickUrgent() {},
-
-        // 倒计时结束（静默）
-        tickEnd() {},
-
-        // 解锁成就（静默）
-        achievement() {},
-
-        // 升级（静默）
-        levelUp() {},
-
-        // 花牌（静默）
-        flower() {},
-
-        // 屏幕切换（静默）
-        screenSwitch() {},
-
-        // 弹出菜单（静默）
-        menuOpen() {},
-
-        // 关闭菜单（静默）
-        menuClose() {},
-
-        // 模态框弹出（静默）
-        modalOpen() {},
-
-        // 金币/分数增加（静默）
-        scoreUp() {},
-
-        // 金币/分数减少（静默）
-        scoreDown() {},
-
-        // 连击（静默）
-        combo() {},
-
-        // 回合开始（静默）
-        turnStart() {},
-
-        // 风标变化（静默）
-        windChange() {},
-
-        // 牌进入弃牌堆（静默）
-        toDiscard() {},
-
-        // 3D翻转（静默）
-        flip3D() {}
+        // 以下未使用/静默的SFX已移除以减少代码体积：
+        // tickUrgent, tickEnd, achievement, levelUp, flower,
+        // screenSwitch, menuOpen, menuClose, modalOpen,
+        // scoreUp, scoreDown, combo, turnStart, windChange, toDiscard, flip3D
     };
 
     // ============ BGM 系统 ============
