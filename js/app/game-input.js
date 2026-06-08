@@ -347,31 +347,31 @@
                 break;
             case '1': {
                 const btn = document.getElementById('btn-chi');
-                if (btn && !btn.disabled) handleAction('chi');
+                if (btn && !btn.disabled) { AudioManager.SFX.buttonClick(); handleAction('chi'); }
                 break;
             }
             case '2': {
                 const btn = document.getElementById('btn-peng');
-                if (btn && !btn.disabled) handleAction('peng');
+                if (btn && !btn.disabled) { AudioManager.SFX.buttonClick(); handleAction('peng'); }
                 break;
             }
             case '3': {
                 const btn = document.getElementById('btn-gang');
-                if (btn && !btn.disabled) handleAction('gang');
+                if (btn && !btn.disabled) { AudioManager.SFX.buttonClick(); handleAction('gang'); }
                 break;
             }
             case '4':
             case ' ': {
                 e.preventDefault();
                 const btn = document.getElementById('btn-hu');
-                if (btn && !btn.disabled) handleAction('hu');
+                if (btn && !btn.disabled) { AudioManager.SFX.buttonClick(); handleAction('hu'); }
                 break;
             }
             case 's':
             case 'S': {
                 e.preventDefault();
                 const skipBtn = document.getElementById('btn-skip');
-                if (skipBtn && !skipBtn.disabled) handleAction('skip');
+                if (skipBtn && !skipBtn.disabled) { AudioManager.SFX.buttonClick(); handleAction('skip'); }
                 break;
             }
         }

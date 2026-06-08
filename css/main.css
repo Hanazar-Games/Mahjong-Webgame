@@ -138,34 +138,6 @@ html, body {
     100% { width: 100%; }
 }
 
-/* ===== 主菜单 ===== */
-.menu-header {
-    text-align: center;
-    padding: 24px 0 16px;
-}
-
-.game-title {
-    font-size: 2.5rem;
-    font-weight: 800;
-    color: var(--accent-gold);
-    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    letter-spacing: 2px;
-}
-
-.game-subtitle {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    margin-top: 4px;
-}
-
-.menu-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    max-width: 420px;
-    margin: 0 auto 20px;
-}
-
 .menu-btn {
     display: flex;
     align-items: center;
@@ -204,32 +176,6 @@ html, body {
     color: var(--text-muted);
 }
 
-/* ===== 统计面板 ===== */
-.stats-panel {
-    background: var(--bg-panel);
-    border-radius: var(--border-radius);
-    padding: 16px;
-    margin: 0 auto 20px;
-    max-width: 420px;
-    border: 1px solid rgba(212, 168, 67, 0.1);
-}
-
-.stats-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-}
-
-.level-badge {
-    background: var(--accent-gold);
-    color: #1a1a1a;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-weight: 700;
-    font-size: 0.85rem;
-}
-
 .exp-text {
     font-size: 0.8rem;
     color: var(--text-muted);
@@ -250,164 +196,11 @@ html, body {
     transition: width 0.5s ease;
 }
 
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-}
-
-.stat-item {
-    text-align: center;
-}
-
-.stat-value {
-    display: block;
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--accent-gold-light);
-}
-
-.stat-value.win {
-    color: var(--win-color);
-}
-
-.stat-value.lose {
-    color: var(--lose-color);
-}
-
-.stat-label {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-}
-
-.reset-stats-btn {
-    width: 100%;
-    margin-top: 14px;
-    padding: 8px;
-    background: transparent;
-    border: 1px solid rgba(244, 67, 54, 0.3);
-    color: var(--lose-color);
-    border-radius: var(--border-radius-sm);
-    cursor: pointer;
-    font-size: 0.8rem;
-    transition: var(--transition-fast);
-}
-
-.reset-stats-btn:hover {
-    background: rgba(244, 67, 54, 0.1);
-}
-
-/* ===== 设置区域 ===== */
-.settings-section {
-    max-width: 420px;
-    margin: 0 auto;
-}
-
-.settings-title {
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 12px;
-    color: var(--accent-gold);
-}
-
-.settings-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-    margin-bottom: 14px;
-}
-
-.setting-item {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.setting-item label {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
-
-.setting-item input,
-.setting-item select {
-    padding: 8px 10px;
-    background: var(--bg-secondary);
-    border: 1px solid rgba(212, 168, 67, 0.15);
-    border-radius: var(--border-radius-sm);
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    outline: none;
-    transition: var(--transition-fast);
-}
-
-.setting-item input:focus,
-.setting-item select:focus {
-    border-color: var(--accent-gold);
-}
-
-.slider-settings {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.slider-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.slider-item label {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    width: 50px;
-}
-
-.slider-item input[type="range"] {
-    flex: 1;
-    -webkit-appearance: none;
-    height: 5px;
-    background: var(--bg-secondary);
-    border-radius: 3px;
-    outline: none;
-}
-
-.slider-item input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
-    background: var(--accent-gold);
-    border-radius: 50%;
-    cursor: pointer;
-}
-
 .slider-value {
     font-size: 0.8rem;
     color: var(--accent-gold);
     width: 36px;
     text-align: right;
-}
-
-/* 高级设置 */
-.advanced-settings {
-    margin-top: 16px;
-}
-
-.advanced-settings .toggle {
-    cursor: pointer;
-    user-select: none;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.advanced-settings .toggle span {
-    transition: transform 0.3s;
-    display: inline-block;
-}
-
-.advanced-settings .toggle.collapsed span {
-    transform: rotate(-90deg);
 }
 
 .advanced-content {
@@ -1187,32 +980,6 @@ html, body {
     border: 1px solid rgba(212, 168, 67, 0.2);
 }
 
-/* 游戏控制栏 */
-.game-controls {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    display: flex;
-    gap: 8px;
-    z-index: 10;
-}
-
-.control-btn {
-    padding: 6px 12px;
-    background: var(--bg-panel);
-    border: 1px solid rgba(212, 168, 67, 0.2);
-    border-radius: var(--border-radius-sm);
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: var(--transition-fast);
-}
-
-.control-btn:hover {
-    border-color: var(--accent-gold);
-    color: var(--text-primary);
-}
-
 /* ===== 模态框 ===== */
 .modal {
     position: fixed;
@@ -1225,27 +992,9 @@ html, body {
     padding: 20px;
 }
 
-.modal-content {
-    background: linear-gradient(135deg, var(--bg-panel), rgba(25, 30, 40, 0.98));
-    border-radius: var(--border-radius);
-    padding: 24px;
-    max-width: 400px;
-    width: 100%;
-    text-align: center;
-    border: 1px solid rgba(212, 168, 67, 0.2);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(212, 168, 67, 0.08);
-    animation: modalIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
 @keyframes modalIn {
     from { opacity: 0; transform: translateY(30px) scale(0.95); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.modal-content h3 {
-    color: var(--accent-gold);
-    margin-bottom: 16px;
-    font-size: 1.2rem;
 }
 
 .modal-btn {

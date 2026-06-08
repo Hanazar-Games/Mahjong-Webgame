@@ -634,7 +634,7 @@
     z-index: 100;
     border: 1px solid rgba(212, 168, 67, 0.15);
     backdrop-filter: blur(10px);
-    animation: actionBarIn 0.3s ease;
+    animation: actionBarIn calc(0.3s * var(--anim-speed, 1)) ease;
 }
 
 @keyframes actionBarIn {
@@ -1081,7 +1081,7 @@
     font-weight: 800;
     color: var(--accent-gold);
     text-shadow: 0 0 30px rgba(212, 168, 67, 0.6), 0 4px 8px rgba(0, 0, 0, 0.5);
-    animation: actionPop 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    animation: actionPop calc(0.9s * var(--anim-speed, 1)) cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
     z-index: 500;
     pointer-events: none;
     white-space: nowrap;

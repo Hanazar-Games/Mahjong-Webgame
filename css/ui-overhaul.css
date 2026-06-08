@@ -599,7 +599,7 @@
 
 .action-feedback.show {
     opacity: 1;
-    animation: actionFeedbackPop 0.8s ease forwards;
+    animation: actionFeedbackPop calc(0.8s * var(--anim-speed, 1)) ease forwards;
 }
 
 @keyframes actionFeedbackPop {

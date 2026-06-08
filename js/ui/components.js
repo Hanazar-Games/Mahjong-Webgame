@@ -241,19 +241,31 @@ const UIComponents = (function() {
         overlay.className = 'modal';
         
         const modal = document.createElement('div');
-        modal.className = 'modal-content neon-border';
+        modal.className = 'modal-panel';
         
+        // 头部
         if (title) {
+            const header = document.createElement('div');
+            header.className = 'modal-panel-header';
             const h3 = document.createElement('h3');
             h3.textContent = title;
-            modal.appendChild(h3);
+            header.appendChild(h3);
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'modal-close';
+            closeBtn.textContent = '✕';
+            closeBtn.addEventListener('click', () => overlay.remove());
+            header.appendChild(closeBtn);
+            modal.appendChild(header);
         }
+        
+        const body = document.createElement('div');
+        body.className = 'modal-panel-body';
+        body.style.textAlign = 'center';
         
         if (content) {
             const contentDiv = document.createElement('div');
-            // 调用方负责对动态内容转义；此处信任调用方传入已安全的HTML
             contentDiv.innerHTML = content;
-            modal.appendChild(contentDiv);
+            body.appendChild(contentDiv);
         }
         
         for (const btn of buttons) {
@@ -264,9 +276,10 @@ const UIComponents = (function() {
                 if (btn.onClick) btn.onClick();
                 overlay.remove();
             });
-            modal.appendChild(button);
+            body.appendChild(button);
         }
         
+        modal.appendChild(body);
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
         
@@ -507,6 +520,8 @@ const UIComponents = (function() {
             duration = 1000,
             type = 'circle'
         } = options;
+        const animSpeed = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--anim-speed')) || 1;
+        const scaledDuration = Math.max(1, duration * animSpeed);
 
         const container = document.getElementById('particle-container') || document.body;
         const fragment = document.createDocumentFragment();
@@ -528,13 +543,13 @@ const UIComponents = (function() {
             const tx = Math.cos(angle) * distance;
             const ty = Math.sin(angle) * distance;
             
-            particle.style.animation = `particleBurst ${duration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards`;
-            particle.style.animationDelay = `${Math.random() * 150}ms`;
+            particle.style.animation = `particleBurst ${scaledDuration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards`;
+            particle.style.animationDelay = `${Math.random() * 150 * animSpeed}ms`;
             particle.style.setProperty('--tx', `${tx}px`);
             particle.style.setProperty('--ty', `${ty}px`);
             
             fragment.appendChild(particle);
-            setTimeout(() => particle.remove(), duration + 300);
+            setTimeout(() => particle.remove(), scaledDuration + 300);
         }
         
         container.appendChild(fragment);
@@ -545,6 +560,8 @@ const UIComponents = (function() {
      */
     function createConfetti(options = {}) {
         const { count = 50, duration = 4000 } = options;
+        const animSpeed = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--anim-speed')) || 1;
+        const scaledDuration = Math.max(1, duration * animSpeed);
         const colors = ['#d4a843', '#e8c870', '#4caf50', '#f44336', '#2196f3', '#ff9800', '#9c27b0', '#00bcd4'];
         const container = document.getElementById('particle-container') || document.body;
         const fragment = document.createDocumentFragment();
@@ -558,15 +575,15 @@ const UIComponents = (function() {
             piece.style.width = (5 + Math.random() * 10) + 'px';
             piece.style.height = (5 + Math.random() * 10) + 'px';
             piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
-            piece.style.animationDuration = (duration * 0.4 + Math.random() * duration * 0.6) + 'ms';
-            piece.style.animationDelay = (Math.random() * 800) + 'ms';
+            piece.style.animationDuration = (scaledDuration * 0.4 + Math.random() * scaledDuration * 0.6) + 'ms';
+            piece.style.animationDelay = (Math.random() * 800 * animSpeed) + 'ms';
             
             // 随机旋转方向
             const rotationDir = Math.random() > 0.5 ? 1 : -1;
             piece.style.setProperty('--rot-dir', rotationDir);
             
             fragment.appendChild(piece);
-            setTimeout(() => piece.remove(), duration + 1500);
+            setTimeout(() => piece.remove(), scaledDuration + 1500);
         }
         
         container.appendChild(fragment);

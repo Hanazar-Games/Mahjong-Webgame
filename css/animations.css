@@ -54,7 +54,7 @@
 }
 
 .tile-flip-in {
-    animation: tileFlipIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    animation: tileFlipIn calc(0.5s * var(--anim-speed, 1)) cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 /* 3D翻转 - 打牌飞出 */
@@ -74,7 +74,7 @@
 }
 
 .tile-fly-out {
-    animation: tileFlyOut 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation: tileFlyOut calc(0.4s * var(--anim-speed, 1)) cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 /* ============ 牌面高级效果（动画部分） ============ */
@@ -307,7 +307,7 @@
 
 /* ============ 分数跳动动画 ============ */
 .score-pop {
-    animation: scorePop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: scorePop calc(0.6s * var(--anim-speed, 1)) cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes scorePop {
@@ -323,7 +323,7 @@
     font-size: 1.2rem;
     font-weight: 700;
     pointer-events: none;
-    animation: scoreFloat 1.2s ease-out forwards;
+    animation: scoreFloat calc(1.2s * var(--anim-speed, 1)) ease-out forwards;
     z-index: 200;
 }
 
@@ -665,7 +665,7 @@
 
 /* ============ 操作按钮弹跳 ============ */
 .action-bar .action-btn:not(:disabled) {
-    animation: actionBtnReady 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: actionBtnReady calc(0.5s * var(--anim-speed, 1)) cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes actionBtnReady {
