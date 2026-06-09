@@ -66,6 +66,7 @@ class MahjongEngine extends Utils.EventEmitter {
 
     /**
      * 初始化玩家
+     * @param {Array<{name: string, isAI: boolean}>} playerConfigs
      */
     initPlayers(playerConfigs) {
         if (this.config.playerCount <= 0) {
@@ -91,7 +92,9 @@ class MahjongEngine extends Utils.EventEmitter {
     }
 
     /**
-     * 开始游戏
+     * 开始新一局游戏
+     * 清理旧状态、生成牌堆、发牌、开始第一回合
+     * @returns {Promise<void>}
      */
     async start() {
         // 取消旧 token，终止所有遗留异步操作
@@ -185,6 +188,8 @@ class MahjongEngine extends Utils.EventEmitter {
 
     /**
      * 发牌
+     * 按轮次为每位玩家发初始手牌
+     * @returns {Promise<void>}
      */
     async dealTiles() {
         if (this.state === 'destroyed') return;
@@ -234,6 +239,8 @@ class MahjongEngine extends Utils.EventEmitter {
 
     /**
      * 四川麻将：选择缺一门
+     * AI 自动选择，人类玩家依赖 UI
+     * @returns {Promise<void>}
      */
     async selectQueYiMen() {
         if (this.state === 'destroyed') return;
@@ -337,7 +344,9 @@ class MahjongEngine extends Utils.EventEmitter {
     }
 
     /**
-     * 开始回合
+     * 开始当前玩家的回合
+     * 启动计时器，AI 自动执行
+     * @returns {Promise<void>}
      */
     async startTurn() {
         if (this.state === 'destroyed') return;
@@ -372,7 +381,9 @@ class MahjongEngine extends Utils.EventEmitter {
     }
 
     /**
-     * 玩家摸牌
+     * 当前玩家摸牌
+     * 处理花牌补牌、自摸检测、暗杠提示
+     * @returns {Promise<{ziMo: boolean, winInfo: object, anGangOptions: Array}|null>}
      */
     async playerDraw() {
         if (this.state !== 'playing') return null;
