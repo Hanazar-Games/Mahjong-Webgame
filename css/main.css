@@ -31,6 +31,15 @@
     -webkit-tap-highlight-color: transparent;
 }
 
+/* 移动端触摸优化：消除300ms点击延迟，禁止双击缩放 */
+button, .menu-btn, .action-btn, .mahjong-tile, .back-btn,
+.replay-btn, .room-item-join, .modal-close, .menu-tool-btn,
+.hud-menu-btn, .primary-btn, .secondary-btn, .pause-action-btn {
+    touch-action: manipulation;
+    min-height: 44px;
+    min-width: 44px;
+}
+
 html, body {
     width: 100%;
     height: 100%;

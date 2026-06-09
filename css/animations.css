@@ -153,6 +153,7 @@
     position: fixed;
     top: 40%;
     left: 50%;
+    will-change: transform, opacity;
     transform: translate(-50%, -50%);
     font-size: 4.5rem;
     font-weight: 900;
@@ -534,6 +535,7 @@
     position: fixed;
     z-index: 1000;
     pointer-events: none;
+    will-change: transform, left, top;
     transform: scale(1.2) rotateZ(5deg) translateZ(100px) !important;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 0 3px var(--accent-gold);
     opacity: 0.9;

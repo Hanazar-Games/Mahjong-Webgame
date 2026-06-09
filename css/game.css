@@ -22,6 +22,7 @@
     flex: 1;
     position: relative;
     display: grid;
+    contain: layout;
     grid-template-areas:
         ". top ."
         "left center right"
@@ -81,6 +82,7 @@
     display: flex;
     align-items: center;
     position: relative;
+    contain: layout;
     transition: var(--transition);
 }
 
@@ -212,6 +214,7 @@
 .mahjong-tile {
     width: 64px;
     height: 88px;
+    will-change: transform;
     background: linear-gradient(
         180deg,
         #2d2d3d 0%,
@@ -330,15 +333,23 @@
     color: #ff99cc;
 }
 
-/* 悬停效果 - 使用当前花色高亮 */
-.mahjong-tile:hover {
-    transform: translateY(-8px) scale(1.06) rotateX(-3deg);
-    box-shadow:
-        0 10px 24px rgba(0, 0, 0, 0.4),
-        0 0 0 2px currentColor,
-        0 0 20px currentColor;
-    z-index: 10;
-    filter: brightness(1.2);
+/* 悬停效果 - 使用当前花色高亮（仅在支持精细指针的设备上生效） */
+@media (hover: hover) and (pointer: fine) {
+    .mahjong-tile:hover {
+        transform: translateY(-8px) scale(1.06) rotateX(-3deg);
+        box-shadow:
+            0 10px 24px rgba(0, 0, 0, 0.4),
+            0 0 0 2px currentColor,
+            0 0 20px currentColor;
+        z-index: 10;
+        filter: brightness(1.2);
+    }
+}
+
+/* 触摸设备：点击反馈 */
+.mahjong-tile:active {
+    transform: translateY(-4px) scale(1.03);
+    filter: brightness(1.15);
 }
 
 /* 选中效果 - 使用当前花色发光 */
@@ -553,6 +564,7 @@
 .discard-pile {
     display: flex;
     flex-wrap: wrap;
+    contain: layout;
     gap: 4px;
     justify-content: center;
     align-content: flex-start;

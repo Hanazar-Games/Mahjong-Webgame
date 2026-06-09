@@ -55,11 +55,27 @@
     /**
      * 处理操作
      */
+    // 待处理的选择器 resolve 函数（用于游戏结束时强制关闭）
+    const _pendingSelectorResolves = [];
+
+    /**
+     * 关闭所有选择器 overlay 并 resolve 挂起的 Promise（防止游戏结束时 Promise 泄漏）
+     */
+    function closeAllSelectors() {
+        const overlay = document.getElementById('tile-selector-overlay');
+        if (overlay) overlay.remove();
+        while (_pendingSelectorResolves.length) {
+            const resolve = _pendingSelectorResolves.pop();
+            resolve(null);
+        }
+    }
+
     /**
      * 通用牌型选项选择器
      */
     function showTileOptionsSelector(options, titleText, getTilesFn) {
         return new Promise((resolve) => {
+            _pendingSelectorResolves.push(resolve);
             const overlay = document.createElement('div');
             overlay.id = 'tile-selector-overlay';
             overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:240;display:flex;align-items:center;justify-content:center;';
@@ -88,6 +104,8 @@
                 });
                 row.addEventListener('click', () => {
                     overlay.remove();
+                    const i = _pendingSelectorResolves.indexOf(resolve);
+                    if (i >= 0) _pendingSelectorResolves.splice(i, 1);
                     resolve(opt);
                 });
                 
@@ -113,6 +131,7 @@
 
     function showAnGangOptionsSelector(options) {
         return new Promise((resolve) => {
+            _pendingSelectorResolves.push(resolve);
             const overlay = document.createElement('div');
             overlay.id = 'tile-selector-overlay';
             overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:240;display:flex;align-items:center;justify-content:center;';
@@ -141,6 +160,8 @@
                 });
                 row.addEventListener('click', () => {
                     overlay.remove();
+                    const i = _pendingSelectorResolves.indexOf(resolve);
+                    if (i >= 0) _pendingSelectorResolves.splice(i, 1);
                     resolve(opt);
                 });
                 
@@ -190,7 +211,7 @@
                     let actionToExecute = engine.pendingAction.action;
                     if (options && options.length > 1) {
                         const selected = await showChiOptionsSelector(options);
-                        if (!engineStillValid()) break;
+                        if (!engineStillValid() || selected === null) break;
                         actionToExecute = { ...engine.pendingAction.action, selectedOption: selected };
                     }
                     await engine.executeAction(player, actionToExecute);
@@ -210,7 +231,7 @@
                     let option = App.anGangOptions[0];
                     if (App.anGangOptions.length > 1) {
                         option = await showAnGangOptionsSelector(App.anGangOptions);
-                        if (!engineStillValid()) break;
+                        if (!engineStillValid() || option === null) break;
                     }
                     await engine.executeAnGang(player, option);
                     App.anGangOptions = null;
@@ -393,8 +414,8 @@
             const touchEndY = e.changedTouches[0].clientY;
             const diff = touchStartY - touchEndY;
             
-            // 上滑显示菜单
-            if (diff > 100 && App.currentScreen === 'game-screen') {
+            // 上滑显示菜单（modal 打开时不触发）
+            if (diff > 100 && App.currentScreen === 'game-screen' && !document.querySelector('.modal:not(.hidden)')) {
                 showIngameMenu();
             }
             touchStartY = 0;

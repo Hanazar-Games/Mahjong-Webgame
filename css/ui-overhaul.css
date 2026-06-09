@@ -717,7 +717,12 @@
 .action-btn:hover:not(:disabled) {
     background: linear-gradient(135deg, rgba(212,168,67,0.2), rgba(139,90,43,0.1));
     border-color: rgba(212, 168, 67, 0.4);
-    transform: translateY(-2px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .action-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+    }
 }
 
 .action-btn:active:not(:disabled) {

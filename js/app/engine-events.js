@@ -23,6 +23,10 @@
     
     function bindEngineEvents() {
         const engine = App.engine;
+        if (!engine) return;
+        // 防止对同一引擎重复绑定
+        if (engine._eventsBound) return;
+        engine._eventsBound = true;
         
         // 回合倒计时 UI 管理
         let _turnTimerInterval = null;
@@ -56,6 +60,11 @@
                 display.classList.remove('urgent');
             }
         }
+        
+        engine.on('beforeDestroy', () => {
+            stopTurnTimerUI();
+            closeAllSelectors();
+        });
         
         engine.on('gameStart', (data) => {
             AppEventBus.emit('engine:gameStart', data);
@@ -122,8 +131,10 @@
             AppEventBus.emit('engine:discard', data);
             stopTurnTimerUI();
             if (!data || !data.player) return;
-            renderDiscardPile(true);
-            renderPlayerHand(data.player.position, data.player.handSize);
+            requestAnimationFrame(() => {
+                renderDiscardPile(true);
+                renderPlayerHand(data.player.position, data.player.handSize);
+            });
             if (_isHumanPlayer(data.player.position)) {
                 AudioManager.SFX.discard();
             }
@@ -151,9 +162,11 @@
             const dir = _getRelativeDir(data.player.position, data.from);
             const text = dir ? `吃${dir}` : '吃';
             UIComponents.showActionEffect(text);
-            renderDiscardPile();
-            renderPlayerMelds(data.player.position);
-            renderPlayerHand(data.player.position, data.player.handSize);
+            requestAnimationFrame(() => {
+                renderDiscardPile();
+                renderPlayerMelds(data.player.position);
+                renderPlayerHand(data.player.position, data.player.handSize);
+            });
             AudioManager.SFX.chi();
             UIComponents.createParticles(window.innerWidth / 2, window.innerHeight / 2, { count: 8, color: '#4caf50' });
             if (App.isNetworkGame) broadcastGameState();
@@ -165,9 +178,11 @@
             const dir = _getRelativeDir(data.player.position, data.from);
             const text = dir ? `碰${dir}` : '碰';
             UIComponents.showActionEffect(text);
-            renderDiscardPile();
-            renderPlayerMelds(data.player.position);
-            renderPlayerHand(data.player.position, data.player.handSize);
+            requestAnimationFrame(() => {
+                renderDiscardPile();
+                renderPlayerMelds(data.player.position);
+                renderPlayerHand(data.player.position, data.player.handSize);
+            });
             AudioManager.SFX.peng();
             UIComponents.createParticles(window.innerWidth / 2, window.innerHeight / 2, { count: 12, color: '#2196f3' });
             if (App.isNetworkGame) broadcastGameState();
@@ -180,9 +195,11 @@
             const dir = _getRelativeDir(data.player.position, data.from);
             const text = dir ? `杠${dir}` : '杠';
             UIComponents.showActionEffect(text);
-            renderDiscardPile();
-            renderPlayerMelds(data.player.position);
-            renderPlayerHand(data.player.position, data.player.handSize);
+            requestAnimationFrame(() => {
+                renderDiscardPile();
+                renderPlayerMelds(data.player.position);
+                renderPlayerHand(data.player.position, data.player.handSize);
+            });
             AudioManager.SFX.gang();
             UIComponents.createParticles(window.innerWidth / 2, window.innerHeight / 2, { count: 30, color: '#ff9800', spread: 180, duration: 1200, type: 'star' });
             UIComponents.screenShake(5, 300);
@@ -194,8 +211,10 @@
             stopTurnTimerUI();
             if (!data || !data.player) return;
             UIComponents.showActionEffect('暗杠');
-            renderPlayerMelds(data.player.position);
-            renderPlayerHand(data.player.position, data.player.handSize);
+            requestAnimationFrame(() => {
+                renderPlayerMelds(data.player.position);
+                renderPlayerHand(data.player.position, data.player.handSize);
+            });
             AudioManager.SFX.anGang();
             UIComponents.createParticles(window.innerWidth / 2, window.innerHeight / 2, { count: 16, color: '#9c27b0', spread: 120 });
             if (App.isNetworkGame) broadcastGameState();
@@ -233,6 +252,8 @@
         
         engine.on('gameEnd', (data) => {
             AppEventBus.emit('engine:gameEnd', data);
+            stopTurnTimerUI();
+            closeAllSelectors();
             // 先保存再显示，确保结算页展示的经验值与实际获得一致
             const saveResult = saveGameResult(data);
             showGameResult(data, saveResult);
@@ -243,7 +264,9 @@
         
         engine.on('drawGame', (data) => {
             AppEventBus.emit('engine:drawGame', data);
-            Utils.toast('流局');
+            stopTurnTimerUI();
+            closeAllSelectors();
+            Utils.toast('流局', 3000, 'warning');
             AudioManager.SFX.drawGame();
             if (App.isNetworkGame) broadcastGameState();
         });
@@ -302,6 +325,8 @@
         
         engine.on('roundEnd', (data) => {
             AppEventBus.emit('engine:roundEnd', data);
+            stopTurnTimerUI();
+            closeAllSelectors();
             console.log('一局结束', data);
             // 更新所有玩家分数显示
             if (!data || !data.players || data.players.length === 0) return;
@@ -312,4 +337,5 @@
             }
             if (App.isNetworkGame) broadcastGameState();
         });
+        
     }

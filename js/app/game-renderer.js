@@ -50,8 +50,11 @@
             const hand = isSelf ? player.hand : (displayMode === 'full' ? player.hand : null);
             if (!hand) return;
             
-            // 防御：如果之前是其他显示模式（如背面牌或文字），先清空
+            // 防御：如果之前是其他显示模式（如背面牌或文字），先清空（并清理拖拽监听器）
             if (handEl.querySelectorAll('.mahjong-tile.back').length > 0 || handEl.querySelector(':scope > span')) {
+                handEl.querySelectorAll('.mahjong-tile').forEach(el => {
+                    if (typeof el._cleanupDrag === 'function') el._cleanupDrag();
+                });
                 handEl.innerHTML = '';
             }
             
@@ -95,8 +98,11 @@
                 fragment.appendChild(tileEl);
             });
             
-            // 移除不再存在的元素
-            existingEls.forEach(el => el.remove());
+            // 移除不再存在的元素（先清理拖拽监听器）
+            existingEls.forEach(el => {
+                if (typeof el._cleanupDrag === 'function') el._cleanupDrag();
+                el.remove();
+            });
             
             // 批量插入（减少重排）
             handEl.appendChild(fragment);

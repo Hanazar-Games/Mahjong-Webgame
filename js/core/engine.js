@@ -1448,6 +1448,7 @@ class MahjongEngine extends Utils.EventEmitter {
      * 销毁
      */
     destroy() {
+        this.emit('beforeDestroy');
         this._token.cancel();
         // 注意：不立即替换 token，让正在执行的异步操作看到取消状态
         // 新 token 在 start() 中创建

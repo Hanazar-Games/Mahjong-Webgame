@@ -59,7 +59,7 @@ const UIComponents = (function() {
         
         // 添加拖拽支持
         if (options.draggable) {
-            setupDrag(div, tile, options.onDragEnd);
+            div._cleanupDrag = setupDrag(div, tile, options.onDragEnd);
         }
         
         return div;
@@ -72,14 +72,18 @@ const UIComponents = (function() {
         let isDragging = false;
         let startX, startY;
         let clone = null;
+        let isListening = false;
         
         element.addEventListener('mousedown', startDrag);
         element.addEventListener('touchstart', startDrag, { passive: false });
-        element.addEventListener('touchcancel', onEnd);
         
         function startDrag(e) {
             if (element.classList.contains('back')) return;
-            e.preventDefault();
+            
+            // 防止重复注册 document-level 监听器（快速连点/多指触摸）
+            if (isListening) {
+                onEnd(e);
+            }
             
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -87,6 +91,7 @@ const UIComponents = (function() {
             isDragging = false;
             startX = clientX;
             startY = clientY;
+            isListening = true;
             
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onEnd);
@@ -107,6 +112,7 @@ const UIComponents = (function() {
             
             if (!isDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
                 isDragging = true;
+                e.preventDefault(); // 只在真正开始拖拽时阻止默认行为（避免页面滚动）
                 element.classList.add('drag-source');
                 
                 clone = element.cloneNode(true);
@@ -131,12 +137,15 @@ const UIComponents = (function() {
         }
         
         function onEnd(e) {
+            if (!isListening) return;
+            isListening = false;
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onEnd);
             document.removeEventListener('touchmove', onMove);
             document.removeEventListener('touchend', onEnd);
+            document.removeEventListener('touchcancel', onEnd);
             
-            const discardPile = document.getElementById('discard-pile');
+            const discardPile = setupDrag._discardPile || document.getElementById('discard-pile');
             if (discardPile) discardPile.classList.remove('discard-target');
             
             if (isDragging && clone) {
@@ -175,6 +184,19 @@ const UIComponents = (function() {
                 clone = null;
             }
         }
+        
+        // 返回清理函数，供增量渲染时清理旧监听器
+        return function cleanupDrag() {
+            element.removeEventListener('mousedown', startDrag);
+            element.removeEventListener('touchstart', startDrag);
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onEnd);
+            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('touchend', onEnd);
+            document.removeEventListener('touchcancel', onEnd);
+            if (clone && clone.parentNode) clone.remove();
+            element.classList.remove('drag-source');
+        };
     }
 
     /**
@@ -379,8 +401,12 @@ const UIComponents = (function() {
         if (feedback) {
             feedback.textContent = text;
             feedback.classList.remove('action-effect');
-            void feedback.offsetWidth; // force reflow
-            feedback.classList.add('action-effect');
+            // 使用双 rAF 替代强制同步布局（void offsetWidth）
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    feedback.classList.add('action-effect');
+                });
+            });
             // 清除之前的定时器
             if (feedback._actionTimer) clearTimeout(feedback._actionTimer);
             feedback._actionTimer = setTimeout(() => {
@@ -472,8 +498,12 @@ const UIComponents = (function() {
     function animateScore(element) {
         if (!element) return;
         element.classList.remove('score-pop');
-        void element.offsetWidth; // 强制重绘
-        element.classList.add('score-pop');
+        // 使用双 rAF 替代强制同步布局
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                element.classList.add('score-pop');
+            });
+        });
     }
 
     /**
