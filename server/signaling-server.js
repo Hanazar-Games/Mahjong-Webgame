@@ -12,6 +12,9 @@ const url = require('url');
 const os = require('os');
 
 const PORT = parseInt(process.argv[2]) || 8081;
+const isDev = process.env.NODE_ENV !== 'production';
+const devLog = isDev ? console.log.bind(console) : () => {};
+const devWarn = isDev ? console.warn.bind(console) : () => {};
 
 // ===== 安全配置 =====
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080').split(',').map(s => s.trim());
@@ -143,7 +146,7 @@ setInterval(() => {
                 players.delete(pid);
             }
             rooms.delete(roomId);
-            console.log(`[清理] 房间 ${roomId} 已过期删除`);
+            devLog(`[清理] 房间 ${roomId} 已过期删除`);
         }
     }
 }, 60 * 1000);
@@ -205,7 +208,7 @@ const server = http.createServer(async (req, res) => {
                 roomId, name: String(body.playerName || '房主').slice(0, 12),
                 isHost: true, res: null, lastEventId: 0
             });
-            console.log(`[创建] 房间 ${roomId} 来自 ${getClientIP(req)}`);
+            devLog(`[创建] 房间 ${roomId} 来自 ${getClientIP(req)}`);
             jsonResponse(res, 200, { roomId, playerId, isHost: true }, req);
             return;
         }
@@ -234,7 +237,7 @@ const server = http.createServer(async (req, res) => {
                 count: room.playerIds.length,
                 maxPlayers: room.maxPlayers
             });
-            console.log(`[加入] ${playerId} -> 房间 ${roomId}`);
+            devLog(`[加入] ${playerId} -> 房间 ${roomId}`);
             jsonResponse(res, 200, { roomId, playerId, isHost: false }, req);
             return;
         }
@@ -359,7 +362,7 @@ const server = http.createServer(async (req, res) => {
             if (room.playerIds.length < 2) { jsonResponse(res, 403, { error: '至少需要2人' }, req); return; }
             room.started = true;
             broadcast(roomId, { type: 'gameStart', from: body.playerId, config: body.config || {} });
-            console.log(`[开始] 房间 ${roomId} 游戏开始 (${room.playerIds.length}人)`);
+            devLog(`[开始] 房间 ${roomId} 游戏开始 (${room.playerIds.length}人)`);
             jsonResponse(res, 200, { ok: true }, req);
             return;
         }
@@ -380,7 +383,7 @@ const server = http.createServer(async (req, res) => {
                 broadcast(roomId, { type: 'playerLeft', playerId: body.playerId, count: room.playerIds.length });
                 if (room.playerIds.length === 0) {
                     rooms.delete(roomId);
-                    console.log(`[解散] 房间 ${roomId} 无人，自动删除`);
+                    devLog(`[解散] 房间 ${roomId} 无人，自动删除`);
                 }
             }
             if (p.res && !p.res.writableEnded) { try { p.res.end(); } catch (e) {} }

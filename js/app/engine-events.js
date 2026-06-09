@@ -68,7 +68,6 @@
         
         engine.on('gameStart', (data) => {
             AppEventBus.emit('engine:gameStart', data);
-            console.log('游戏开始', data);
             renderGameState();
             const typeName = Tiles.getConfig(engine.config.mahjongType)?.name || engine.config.mahjongType;
             Utils.toast(`${typeName} · 第${data.round}局`);
@@ -327,7 +326,6 @@
             AppEventBus.emit('engine:roundEnd', data);
             stopTurnTimerUI();
             closeAllSelectors();
-            console.log('一局结束', data);
             // 更新所有玩家分数显示
             if (!data || !data.players || data.players.length === 0) return;
             const playerCount = engine.config?.playerCount || 4;
