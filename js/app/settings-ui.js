@@ -18,6 +18,7 @@
      * 保存所有设置
      */
     function saveAllSettings() {
+        const prevSettings = Utils.deepClone(App.settings);
         const fields = {
             'player-name': 'playerName',
             'ai-difficulty': 'aiDifficulty',
@@ -43,8 +44,16 @@
             App.settings[key] = value;
         }
         try {
-            Stats.saveSettings(App.settings);
+            const ok = Stats.saveSettings(App.settings);
+            if (!ok) {
+                App.settings = prevSettings;
+                Utils.toast('设置保存失败', 3000, 'error');
+                return false;
+            }
+            // 保存成功后从 Storage 重新加载，确保内存与持久化一致
+            App.settings = Utils.deepClone(Stats.getSettings());
         } catch (e) {
+            App.settings = prevSettings;
             console.error('保存设置失败:', e);
             Utils.toast('设置保存失败', 3000, 'error');
             return false;
@@ -117,42 +126,47 @@
             if (el.type === 'checkbox') {
                 value = el.checked;
             }
+            const prevValue = App.settings[settingKey];
             App.settings[settingKey] = value;
-            Stats.saveSettings(App.settings);
-            
-            // 实时应用某些设置
-            if (key === 'player-name') {
-                const selfNameEl = document.getElementById('self-name');
-                if (selfNameEl) selfNameEl.textContent = value || '玩家';
-            }
-            if (key === 'table-theme') {
-                applyTheme(value);
-            }
-            if (key === 'sfx-enabled') {
-                const enabled = !!value;
-                AudioManager.setSfxEnabled(enabled);
-                if (enabled) AudioManager.SFX.toggleSwitch();
-            }
-            if (key === 'bgm-style') {
-                // BGM 已禁用
-                AudioManager.stopBgm();
-            }
-            if (key === 'game-speed') {
-                if (typeof updateAnimSpeed === 'function') {
-                    updateAnimSpeed(value);
+            const ok = Stats.saveSettings(App.settings);
+            if (!ok) {
+                App.settings[settingKey] = prevValue;
+                Utils.toast('设置保存失败', 3000, 'error');
+            } else {
+                // 实时应用某些设置
+                if (key === 'player-name') {
+                    const selfNameEl = document.getElementById('self-name');
+                    if (selfNameEl) selfNameEl.textContent = value || '玩家';
                 }
-            }
+                if (key === 'table-theme') {
+                    applyTheme(value);
+                }
+                if (key === 'sfx-enabled') {
+                    const enabled = !!value;
+                    AudioManager.setSfxEnabled(enabled);
+                    if (enabled) AudioManager.SFX.toggleSwitch();
+                }
+                if (key === 'bgm-style') {
+                    // BGM 已禁用
+                    AudioManager.stopBgm();
+                }
+                if (key === 'game-speed') {
+                    if (typeof updateAnimSpeed === 'function') {
+                        updateAnimSpeed(value);
+                    }
+                }
 
-            if (key === 'auto-sort') {
-                const enabled = !!value;
-                if (App.engine?.players) {
-                    App.engine.players.forEach(p => { p.autoSort = enabled; });
+                if (key === 'auto-sort') {
+                    const enabled = !!value;
+                    if (App.engine?.players) {
+                        App.engine.players.forEach(p => { p.autoSort = enabled; });
+                    }
                 }
-            }
-            if (key === 'show-tile-names') {
-                const enabled = !!value;
-                if (App.engine && App.currentScreen === 'game-screen') {
-                    renderPlayerHand(0, App.engine.players[0]?.hand?.length || 0);
+                if (key === 'show-tile-names') {
+                    const enabled = !!value;
+                    if (App.engine && App.currentScreen === 'game-screen') {
+                        renderPlayerHand(0, App.engine.players[0]?.hand?.length || 0);
+                    }
                 }
             }
         }
@@ -177,6 +191,7 @@
             'sfx-volume': 'sfxVolume'
         };
         const settingKey = keyMap[el.id];
+        const prevValue = settingKey ? App.settings[settingKey] : undefined;
         if (settingKey) {
             App.settings[settingKey] = parseInt(el.value);
         }
@@ -194,8 +209,13 @@
         _sliderSaveTimer = setTimeout(() => {
             _sliderSaveTimer = null;
             try {
-                Stats.saveSettings(App.settings);
+                const ok = Stats.saveSettings(App.settings);
+                if (!ok) {
+                    if (settingKey) App.settings[settingKey] = prevValue;
+                    Utils.toast('设置保存失败', 3000, 'error');
+                }
             } catch (e) {
+                if (settingKey) App.settings[settingKey] = prevValue;
                 console.error('保存设置失败:', e);
                 Utils.toast('设置保存失败', 3000, 'error');
             }
@@ -369,7 +389,7 @@
         }
     }
     function loadSettings() {
-        App.settings = Stats.getSettings();
+        App.settings = Utils.deepClone(Stats.getSettings());
         
         // 应用设置到UI
         const settingMap = {

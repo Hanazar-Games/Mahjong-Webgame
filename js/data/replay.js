@@ -23,7 +23,18 @@ const Replay = (function() {
             replays.pop();
         }
         
-        Storage.set('replays', replays);
+        try {
+            const ok = Storage.set('replays', replays);
+            if (!ok) {
+                console.error('saveReplay failed: localStorage quota exceeded');
+                Utils.toast('回放保存失败：存储空间不足', 3000, 'error');
+                return false;
+            }
+        } catch (e) {
+            console.error('saveReplay failed:', e);
+            Utils.toast('回放保存失败', 3000, 'error');
+            return false;
+        }
         return replays[0].id;
     }
 

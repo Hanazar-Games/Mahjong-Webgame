@@ -286,10 +286,15 @@ class P2PNetwork extends Utils.EventEmitter {
         channel.onmessage = (e) => {
             try {
                 const msg = JSON.parse(e.data);
-                // 基本校验：只允许对象且必须包含 type 字段
-                if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return;
+                // 基本校验：只允许纯对象且必须包含 type 字段
+                if (!msg || typeof msg !== 'object' || Array.isArray(msg) || typeof msg.type !== 'string') {
+                    console.warn('P2P DataChannel invalid message from', playerId, msg);
+                    return;
+                }
                 this.emit('data', { from: playerId, ...msg });
-            } catch (err) {}
+            } catch (err) {
+                console.warn('P2P DataChannel message parse error from', playerId, err);
+            }
         };
         channel.onclose = () => {
             this.channels.delete(playerId);

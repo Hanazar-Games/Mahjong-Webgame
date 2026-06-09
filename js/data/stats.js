@@ -12,6 +12,22 @@
 const Stats = (function() {
     'use strict';
 
+    const DEFAULT_SETTINGS = {
+        playerName: '玩家',
+        aiDifficulty: 'normal',
+        tableTheme: 'classic-green',
+        gameRounds: 4,
+        gameSpeed: 'normal',
+        bgmVolume: 0,
+        sfxVolume: 50,
+        sfxEnabled: true,
+        bgmStyle: 'none',
+        opponentDisplay: 'small',
+        mahjongType: 'guangdong',
+        showTileNames: false,
+        autoSort: true
+    };
+
     const DEFAULT_STATS = {
         level: 1,
         exp: 0,
@@ -97,7 +113,8 @@ const Stats = (function() {
         const prevLevel = stats.level;
         const prevExp = stats.exp;
         
-        // 防御：Infinity 数据损坏导致无限循环
+        // 防御：Infinity / NaN / 异常 level 数据损坏导致无限循环或计算错误
+        if (!isFinite(stats.level) || stats.level < 1) stats.level = 1;
         if (!isFinite(stats.exp)) stats.exp = 0;
         if (!isFinite(stats.maxExp) || stats.maxExp <= 0) stats.maxExp = 100;
         
@@ -355,26 +372,20 @@ const Stats = (function() {
     }
 
     function getSettings() {
-        return Storage.get('settings', {
-            playerName: '玩家',
-            aiDifficulty: 'normal',
-            tableTheme: 'classic-green',
-            gameRounds: 4,
-            gameSpeed: 'normal',
-            bgmVolume: 0,
-            sfxVolume: 50,
-            sfxEnabled: true,
-            bgmStyle: 'none',
-
-            opponentDisplay: 'small',
-            mahjongType: 'guangdong',
-            showTileNames: false,
-            autoSort: true
-        });
+        let settings = Storage.get('settings', null);
+        if (!settings || typeof settings !== 'object') {
+            settings = Utils.deepClone(DEFAULT_SETTINGS);
+        }
+        for (const key of Object.keys(DEFAULT_SETTINGS)) {
+            if (settings[key] === undefined || settings[key] === null) {
+                settings[key] = DEFAULT_SETTINGS[key];
+            }
+        }
+        return settings;
     }
 
     function saveSettings(settings) {
-        Storage.set('settings', settings);
+        return Storage.set('settings', settings);
     }
 
     return {

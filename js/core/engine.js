@@ -49,8 +49,8 @@ class MahjongEngine extends Utils.EventEmitter {
             fast: 400,
             instant: 0
         };
-        // 防御：无效speed回退到normal
-        if (!this.speedMap[this.config.speed]) {
+        // 防御：无效speed回退到normal（不能用 !speedMap[speed]，因为 instant 的值为 0 是 falsy）
+        if (!(this.config.speed in this.speedMap)) {
             this.config.speed = 'normal';
         }
     }
@@ -129,7 +129,10 @@ class MahjongEngine extends Utils.EventEmitter {
         this.discardPile = [];
         this.lastDiscard = null;
         this.currentPlayerIndex = 0;
-        // 注意：gameHistory 和 matchHistory 不清空，跨局累积
+        // 注意：gameHistory 不清空，跨局累积；matchHistory 在新对局开始时清空
+        if (this.round === 1) {
+            this.matchHistory = [];
+        }
         this.replayData = [];
         
         try {
@@ -288,7 +291,10 @@ class MahjongEngine extends Utils.EventEmitter {
      * 使用while循环确保补花后摸到的花牌也能被处理
      */
     async handleFlower(player) {
-        while (this.deck.length > 0 && player.hand.some(t => t.isFlower)) {
+        let flowerCount = 0;
+        const maxFlowers = 16;
+        while (this.deck.length > 0 && player.hand.some(t => t.isFlower) && flowerCount < maxFlowers) {
+            flowerCount++;
             if (this._token.isCancelled) return;
             const flower = player.hand.find(t => t.isFlower);
             if (!flower) break;
@@ -1233,8 +1239,8 @@ class MahjongEngine extends Utils.EventEmitter {
             // 清空当前局历史，下一局重新累积
             this.gameHistory = [];
             // 防御：防止跨局长 session 内存无限增长
-            if (this.matchHistory.length > 100) {
-                this.matchHistory = this.matchHistory.slice(-50);
+            if (this.matchHistory.length > 1000) {
+                this.matchHistory = this.matchHistory.slice(-500);
             }
         }
 

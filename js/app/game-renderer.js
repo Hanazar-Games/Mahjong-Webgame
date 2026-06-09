@@ -48,7 +48,7 @@
         
         if (isSelf || displayMode === 'full') {
             const hand = isSelf ? player.hand : (displayMode === 'full' ? player.hand : null);
-            if (!hand) return;
+            if (!hand || !Array.isArray(hand)) return;
             
             // 防御：如果之前是其他显示模式（如背面牌或文字），先清空（并清理拖拽监听器）
             if (handEl.querySelectorAll('.mahjong-tile.back').length > 0 || handEl.querySelector(':scope > span')) {
