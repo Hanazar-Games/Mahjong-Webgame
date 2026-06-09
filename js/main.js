@@ -49,6 +49,13 @@
         UIComponents.switchScreen('main-menu');
         
         console.log('🀄 万能麻将已加载');
+        
+        // 页面卸载前保存设置和统计（防止 slider 防抖丢失、统计数据未写）
+        window.addEventListener('beforeunload', () => {
+            if (App.settings) {
+                try { Storage.set('settings', App.settings); } catch (e) {}
+            }
+        });
     }
     function loadStats() {
         App.stats = Stats.getStats();

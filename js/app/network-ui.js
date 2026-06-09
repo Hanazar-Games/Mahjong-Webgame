@@ -26,6 +26,7 @@
     }
 
     let _networkLobbyEventsBound = false;
+    let _lastBroadcastTime = 0;
 
     function canUseSignalServer() {
         return !!(App.network && App.network.serverUrl && (App.networkServerReachable || App.network.connected));
@@ -503,6 +504,9 @@
      */
     function broadcastGameState() {
         if (!App.engine || !App.network || !App.network.isHost) return;
+        const now = Date.now();
+        if (now - _lastBroadcastTime < 200) return;
+        _lastBroadcastTime = now;
         const state = App.engine.getState();
         // 同时发送config以便访客正确初始化引擎
         App.network.broadcast({ type: 'stateSync', state, config: App.engine.config });

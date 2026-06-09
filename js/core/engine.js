@@ -326,26 +326,34 @@ class MahjongEngine extends Utils.EventEmitter {
      */
     async startTurn() {
         if (this.state === 'destroyed') return;
-        this.stopTimer();
-        const player = this.players[this.currentPlayerIndex];
-        if (!player) {
-            console.error('startTurn: invalid player index', this.currentPlayerIndex);
-            await this.handleDrawGame();
-            return;
+        try {
+            this.stopTimer();
+            const player = this.players[this.currentPlayerIndex];
+            if (!player) {
+                console.error('startTurn: invalid player index', this.currentPlayerIndex);
+                await this.handleDrawGame();
+                return;
+            }
+            
+            if (player.isHu) {
+                await this.nextTurn();
+                return;
+            }
+            
+            this.emit('turnStart', { player: player.toJSON(), index: this.currentPlayerIndex });
+            
+            // AI直接操作
+            if (player.isAI) {
+                await this.aiTurn(player);
+            }
+            // 人类玩家的操作由UI控制，摸牌在turnStart事件处理中执行
+        } catch (e) {
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                return;
+            }
+            throw e;
         }
-        
-        if (player.isHu) {
-            await this.nextTurn();
-            return;
-        }
-        
-        this.emit('turnStart', { player: player.toJSON(), index: this.currentPlayerIndex });
-        
-        // AI直接操作
-        if (player.isAI) {
-            await this.aiTurn(player);
-        }
-        // 人类玩家的操作由UI控制，摸牌在turnStart事件处理中执行
     }
 
     /**
@@ -353,55 +361,62 @@ class MahjongEngine extends Utils.EventEmitter {
      */
     async playerDraw() {
         if (this.state !== 'playing') return null;
-        
-        const player = this.players[this.currentPlayerIndex];
-        if (!player) {
-            console.error('playerDraw: invalid player index', this.currentPlayerIndex);
-            await this.handleDrawGame();
-            return null;
-        }
-        
-        if (this.deck.length === 0) {
-            await this.handleDrawGame();
-            return null;
-        }
-        
-        const tile = this.deck.pop();
-        this.deckCount = this.deck.length;
-        player.draw(tile);
-        this.recordHistory('draw', { playerId: player.id, tile: tile.id });
-        
-        this.emit('draw', { player: player.toJSON(), tile: tile ? { ...tile } : null, index: this.currentPlayerIndex, deckCount: this.deckCount });
-        
-        // 花牌补牌
-        if (tile.isFlower && this.ruleConfig.huaPai) {
-            try {
-                await this.handleFlower(player);
-            } catch (e) {
-                if (e.message === 'CANCELLED') throw e;
-                console.error('handleFlower error in playerDraw:', e);
+        try {
+            const player = this.players[this.currentPlayerIndex];
+            if (!player) {
+                console.error('playerDraw: invalid player index', this.currentPlayerIndex);
+                await this.handleDrawGame();
+                return null;
             }
-        }
-        
-        // 检查自摸
-        const winResult = Rules.canWin(player.hand, this.ruleConfig);
-        if (winResult.canWin) {
-            // 四川麻将：缺门未完成时不emit ziMo（避免无效自摸提示）
-            if (this.ruleConfig.queYiMen && !this.checkQueYiMenComplete(player)) {
-                // 继续检查暗杠等
-            } else {
-                this.emit('ziMo', { player: player.toJSON(), winInfo: winResult });
-                return { ziMo: true, winInfo: winResult };
+            
+            if (this.deck.length === 0) {
+                await this.handleDrawGame();
+                return null;
             }
+            
+            const tile = this.deck.pop();
+            this.deckCount = this.deck.length;
+            player.draw(tile);
+            this.recordHistory('draw', { playerId: player.id, tile: tile.id });
+            
+            this.emit('draw', { player: player.toJSON(), tile: tile ? { ...tile } : null, index: this.currentPlayerIndex, deckCount: this.deckCount });
+            
+            // 花牌补牌
+            if (tile.isFlower && this.ruleConfig.huaPai) {
+                try {
+                    await this.handleFlower(player);
+                } catch (e) {
+                    if (e.message === 'CANCELLED') throw e;
+                    console.error('handleFlower error in playerDraw:', e);
+                }
+            }
+            
+            // 检查自摸
+            const winResult = Rules.canWin(player.hand, this.ruleConfig);
+            if (winResult.canWin) {
+                // 四川麻将：缺门未完成时不emit ziMo（避免无效自摸提示）
+                if (this.ruleConfig.queYiMen && !this.checkQueYiMenComplete(player)) {
+                    // 继续检查暗杠等
+                } else {
+                    this.emit('ziMo', { player: player.toJSON(), winInfo: winResult });
+                    return { ziMo: true, winInfo: winResult };
+                }
+            }
+            
+            // 检查暗杠
+            const anGangOptions = Rules.canAnGang(player.hand, player.melds, this.ruleConfig);
+            if (anGangOptions.length > 0) {
+                this.emit('anGangOptions', { player: player.toJSON(), options: anGangOptions });
+            }
+            
+            return { ziMo: false, anGangOptions };
+        } catch (e) {
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                return null;
+            }
+            throw e;
         }
-        
-        // 检查暗杠
-        const anGangOptions = Rules.canAnGang(player.hand, player.melds, this.ruleConfig);
-        if (anGangOptions.length > 0) {
-            this.emit('anGangOptions', { player: player.toJSON(), options: anGangOptions });
-        }
-        
-        return { ziMo: false, anGangOptions };
     }
 
     /**
@@ -409,94 +424,110 @@ class MahjongEngine extends Utils.EventEmitter {
      */
     async playerDiscard(tileId) {
         if (this.state !== 'playing') return;
-        this.stopTimer();
-        
-        const player = this.players[this.currentPlayerIndex];
-        if (!player) {
-            console.error('playerDiscard: invalid player index');
-            await this.handleDrawGame();
-            return;
-        }
-        const tile = player.discard(tileId);
-        
-        if (!tile) {
-            console.error('Invalid discard: tile not in hand', tileId);
-            this.emit('error', { type: 'invalidDiscard', tileId });
-            // 恢复计时器让玩家有机会重新选择（仅当仍在playing状态）
-            if (this.state === 'playing') {
-                this.startTimer();
+        try {
+            this.stopTimer();
+            
+            const player = this.players[this.currentPlayerIndex];
+            if (!player) {
+                console.error('playerDiscard: invalid player index');
+                await this.handleDrawGame();
+                return;
             }
-            return;
+            const tile = player.discard(tileId);
+            
+            if (!tile) {
+                console.error('Invalid discard: tile not in hand', tileId);
+                this.emit('error', { type: 'invalidDiscard', tileId });
+                // 恢复计时器让玩家有机会重新选择（仅当仍在playing状态）
+                if (this.state === 'playing') {
+                    this.startTimer();
+                }
+                return;
+            }
+            
+            this.lastDiscard = tile;
+            this.discardPile.push(tile);
+            
+            this.recordHistory('discard', { playerId: player.id, tile: tile.id });
+            this.emit('discard', { player: player.toJSON(), tile: tile ? { ...tile } : null });
+            
+            // 等待其他玩家响应
+            await this.waitForActions(tile);
+        } catch (e) {
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                return;
+            }
+            throw e;
         }
-        
-        this.lastDiscard = tile;
-        this.discardPile.push(tile);
-        
-        this.recordHistory('discard', { playerId: player.id, tile: tile.id });
-        this.emit('discard', { player: player.toJSON(), tile: tile ? { ...tile } : null });
-        
-        // 等待其他玩家响应
-        await this.waitForActions(tile);
     }
 
     /**
      * 等待其他玩家吃碰杠胡
      */
     async waitForActions(tile) {
-        this.state = 'waiting';
-        this._pendingActions = [];
-        const allActions = [];
-        
-        for (let i = 1; i < this.config.playerCount; i++) {
-            const idx = (this.currentPlayerIndex + i) % this.config.playerCount;
-            const player = this.players[idx];
+        try {
+            this.state = 'waiting';
+            this._pendingActions = [];
+            const allActions = [];
             
-            if (player.isHu) continue;
-            
-            const actions = this.checkActions(player, tile, i === 1);
-            for (const action of actions) {
-                allActions.push({ player, action, priority: action.priority });
+            for (let i = 1; i < this.config.playerCount; i++) {
+                const idx = (this.currentPlayerIndex + i) % this.config.playerCount;
+                const player = this.players[idx];
+                
+                if (player.isHu) continue;
+                
+                const actions = this.checkActions(player, tile, i === 1);
+                for (const action of actions) {
+                    allActions.push({ player, action, priority: action.priority });
+                }
             }
-        }
-        
-        if (allActions.length === 0) {
-            await this.nextTurn();
-            return;
-        }
-        
-        // AI 决策过滤：让 AI 逐项决定是否愿意执行动作
-        const willingActions = [];
-        for (const item of allActions) {
-            if (item.player.isAI) {
-                const ctx = this.buildAIContext(item.player);
-                const wants = AIPlayer.shouldAction(item.player, item.action, tile, this.config.aiDifficulty, ctx);
-                if (wants) {
+            
+            if (allActions.length === 0) {
+                await this.nextTurn();
+                return;
+            }
+            
+            // AI 决策过滤：让 AI 逐项决定是否愿意执行动作
+            const willingActions = [];
+            for (const item of allActions) {
+                if (item.player.isAI) {
+                    const ctx = this.buildAIContext(item.player);
+                    const wants = AIPlayer.shouldAction(item.player, item.action, tile, this.config.aiDifficulty, ctx);
+                    if (wants) {
+                        willingActions.push(item);
+                    }
+                } else {
                     willingActions.push(item);
                 }
-            } else {
-                willingActions.push(item);
             }
+            
+            if (willingActions.length === 0) {
+                await this.nextTurn();
+                return;
+            }
+            
+            // 按优先级排序
+            willingActions.sort((a, b) => b.priority - a.priority);
+            const highestPriority = willingActions[0].priority;
+            const topActions = willingActions.filter(a => a.priority === highestPriority);
+            
+            // 最高优先级中，按逆时针顺序
+            const winner = topActions.sort((a, b) => {
+                const distA = (a.player.position - this.currentPlayerIndex + this.config.playerCount) % this.config.playerCount;
+                const distB = (b.player.position - this.currentPlayerIndex + this.config.playerCount) % this.config.playerCount;
+                return distA - distB;
+            })[0];
+            
+            this._pendingActions = willingActions;
+            await this._offerNextAction();
+        } catch (e) {
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                return;
+            }
+            throw e;
         }
-        
-        if (willingActions.length === 0) {
-            await this.nextTurn();
-            return;
-        }
-        
-        // 按优先级排序
-        willingActions.sort((a, b) => b.priority - a.priority);
-        const highestPriority = willingActions[0].priority;
-        const topActions = willingActions.filter(a => a.priority === highestPriority);
-        
-        // 最高优先级中，按逆时针顺序
-        const winner = topActions.sort((a, b) => {
-            const distA = (a.player.position - this.currentPlayerIndex + this.config.playerCount) % this.config.playerCount;
-            const distB = (b.player.position - this.currentPlayerIndex + this.config.playerCount) % this.config.playerCount;
-            return distA - distB;
-        })[0];
-        
-        this._pendingActions = willingActions;
-        await this._offerNextAction();
     }
 
     /**
@@ -587,6 +618,11 @@ class MahjongEngine extends Utils.EventEmitter {
             }
         } catch (e) {
             // 防御：任何异常都不应让游戏卡死在 action 状态
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                this.pendingAction = null;
+                return;
+            }
             if (e.message !== 'CANCELLED') {
                 console.error('executeAction error:', e);
             }
@@ -606,66 +642,74 @@ class MahjongEngine extends Utils.EventEmitter {
      * 执行吃
      */
     async executeChi(player, action) {
-        if (!action.options || action.options.length === 0) {
-            console.error('executeChi: no options available');
-            if (this.state !== 'ended' && this.state !== 'destroyed') this.state = 'playing';
-            await this.nextTurn();
-            return;
-        }
-        // 防御：lastDiscard 可能为 null
-        if (!this.lastDiscard) {
-            console.error('executeChi: lastDiscard is null');
-            if (this.state !== 'ended' && this.state !== 'destroyed') this.state = 'playing';
-            await this.nextTurn();
-            return;
-        }
-        let chiTiles;
-        if (player.isAI) {
-            const ctx = this.buildAIContext(player);
-            chiTiles = AIPlayer.chooseChiOption(player, action.options, this.config.aiDifficulty, ctx);
-        } else {
-            chiTiles = action.selectedOption || action.options[0];
-        }
-        const discardTile = this.lastDiscard;
-        
-        // 从弃牌堆移除被吃的牌
-        this.removeFromDiscardPile(discardTile);
-        
-        // 移除手牌中的两张
-        const handTiles = chiTiles.filter(t => t.id !== discardTile.id);
-        player.removeFromHand(handTiles);
-        
-        // 添加副露
-        player.addMeld({
-            type: 'sequence',
-            tiles: [...chiTiles],
-            from: this.currentPlayerIndex
-        });
-        
-        const fromPlayerIndex = this.currentPlayerIndex;
-        this.recordHistory('chi', { playerId: player.id, tiles: chiTiles.map(t => t.id), from: fromPlayerIndex });
-        this.emit('chi', { player: player.toJSON(), tiles: chiTiles, from: fromPlayerIndex });
-        
-        this.currentPlayerIndex = player.position;
-        this.state = 'playing';
-        
-        // 吃牌后需要打牌，不摸牌
-        this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
-        
-        if (player.isAI) {
-            try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
-            const ctx = this.buildAIContext(player);
-            let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
-            if (!tileToDiscard) {
-                tileToDiscard = player.hand[0];
-                if (!tileToDiscard) {
-                    console.error('AI has no tile to discard after chi');
-                    this.state = 'playing';
-                    await this.nextTurn();
-                    return;
-                }
+        try {
+            if (!action.options || action.options.length === 0) {
+                console.error('executeChi: no options available');
+                if (this.state !== 'ended' && this.state !== 'destroyed') this.state = 'playing';
+                await this.nextTurn();
+                return;
             }
-            await this.playerDiscard(tileToDiscard.id);
+            // 防御：lastDiscard 可能为 null
+            if (!this.lastDiscard) {
+                console.error('executeChi: lastDiscard is null');
+                if (this.state !== 'ended' && this.state !== 'destroyed') this.state = 'playing';
+                await this.nextTurn();
+                return;
+            }
+            let chiTiles;
+            if (player.isAI) {
+                const ctx = this.buildAIContext(player);
+                chiTiles = AIPlayer.chooseChiOption(player, action.options, this.config.aiDifficulty, ctx);
+            } else {
+                chiTiles = action.selectedOption || action.options[0];
+            }
+            const discardTile = this.lastDiscard;
+            
+            // 从弃牌堆移除被吃的牌
+            this.removeFromDiscardPile(discardTile);
+            
+            // 移除手牌中的两张
+            const handTiles = chiTiles.filter(t => t.id !== discardTile.id);
+            player.removeFromHand(handTiles);
+            
+            // 添加副露
+            player.addMeld({
+                type: 'sequence',
+                tiles: [...chiTiles],
+                from: this.currentPlayerIndex
+            });
+            
+            const fromPlayerIndex = this.currentPlayerIndex;
+            this.recordHistory('chi', { playerId: player.id, tiles: chiTiles.map(t => t.id), from: fromPlayerIndex });
+            this.emit('chi', { player: player.toJSON(), tiles: chiTiles, from: fromPlayerIndex });
+            
+            this.currentPlayerIndex = player.position;
+            this.state = 'playing';
+            
+            // 吃牌后需要打牌，不摸牌
+            this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
+            
+            if (player.isAI) {
+                try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                const ctx = this.buildAIContext(player);
+                let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
+                if (!tileToDiscard) {
+                    tileToDiscard = player.hand[0];
+                    if (!tileToDiscard) {
+                        console.error('AI has no tile to discard after chi');
+                        this.state = 'playing';
+                        await this.nextTurn();
+                        return;
+                    }
+                }
+                await this.playerDiscard(tileToDiscard.id);
+            }
+        } catch (e) {
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                return;
+            }
+            throw e;
         }
     }
 
@@ -673,57 +717,65 @@ class MahjongEngine extends Utils.EventEmitter {
      * 执行碰
      */
     async executePeng(player, action) {
-        const discardTile = this.lastDiscard;
-        if (!discardTile) {
-            console.error('executePeng: lastDiscard is null');
-            this.state = 'playing';
-            await this.nextTurn();
-            return;
-        }
-        
-        // 从弃牌堆移除被碰的牌
-        this.removeFromDiscardPile(discardTile);
-        
-        const sameTiles = player.hand.filter(t => Tiles.isSameTile(t, discardTile));
-        if (sameTiles.length < 2) {
-            console.error('executePeng: not enough tiles');
-            this.state = 'playing';
-            await this.nextTurn();
-            return;
-        }
-        const usedTiles = sameTiles.slice(0, 2);
-        
-        player.removeFromHand(usedTiles);
-        player.addMeld({
-            type: 'triplet',
-            tiles: [...usedTiles, discardTile],
-            from: this.currentPlayerIndex
-        });
-        
-        const fromPlayerIndex = this.currentPlayerIndex;
-        this.recordHistory('peng', { playerId: player.id, tiles: [...usedTiles, discardTile].map(t => t.id), from: fromPlayerIndex });
-        this.emit('peng', { player: player.toJSON(), tiles: [...usedTiles, discardTile], from: fromPlayerIndex });
-        
-        this.currentPlayerIndex = player.position;
-        this.state = 'playing';
-        
-        // 碰牌后需要打牌，不摸牌
-        this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
-        
-        if (player.isAI) {
-            try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
-            const ctx = this.buildAIContext(player);
-            let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
-            if (!tileToDiscard) {
-                tileToDiscard = player.hand[0];
-                if (!tileToDiscard) {
-                    console.error('AI has no tile to discard after peng');
-                    this.state = 'playing';
-                    await this.nextTurn();
-                    return;
-                }
+        try {
+            const discardTile = this.lastDiscard;
+            if (!discardTile) {
+                console.error('executePeng: lastDiscard is null');
+                this.state = 'playing';
+                await this.nextTurn();
+                return;
             }
-            await this.playerDiscard(tileToDiscard.id);
+            
+            // 从弃牌堆移除被碰的牌
+            this.removeFromDiscardPile(discardTile);
+            
+            const sameTiles = player.hand.filter(t => Tiles.isSameTile(t, discardTile));
+            if (sameTiles.length < 2) {
+                console.error('executePeng: not enough tiles');
+                this.state = 'playing';
+                await this.nextTurn();
+                return;
+            }
+            const usedTiles = sameTiles.slice(0, 2);
+            
+            player.removeFromHand(usedTiles);
+            player.addMeld({
+                type: 'triplet',
+                tiles: [...usedTiles, discardTile],
+                from: this.currentPlayerIndex
+            });
+            
+            const fromPlayerIndex = this.currentPlayerIndex;
+            this.recordHistory('peng', { playerId: player.id, tiles: [...usedTiles, discardTile].map(t => t.id), from: fromPlayerIndex });
+            this.emit('peng', { player: player.toJSON(), tiles: [...usedTiles, discardTile], from: fromPlayerIndex });
+            
+            this.currentPlayerIndex = player.position;
+            this.state = 'playing';
+            
+            // 碰牌后需要打牌，不摸牌
+            this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
+            
+            if (player.isAI) {
+                try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                const ctx = this.buildAIContext(player);
+                let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
+                if (!tileToDiscard) {
+                    tileToDiscard = player.hand[0];
+                    if (!tileToDiscard) {
+                        console.error('AI has no tile to discard after peng');
+                        this.state = 'playing';
+                        await this.nextTurn();
+                        return;
+                    }
+                }
+                await this.playerDiscard(tileToDiscard.id);
+            }
+        } catch (e) {
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                return;
+            }
+            throw e;
         }
     }
 
@@ -731,94 +783,102 @@ class MahjongEngine extends Utils.EventEmitter {
      * 执行杠
      */
     async executeGang(player, action) {
-        this.stopTimer();
-        this.state = 'action';
-        
-        const discardTile = this.lastDiscard;
-        if (!discardTile) {
-            console.error('executeGang: lastDiscard is null');
-            this.state = 'playing';
-            await this.nextTurn();
-            return;
-        }
-        
-        // 从弃牌堆移除被杠的牌
-        this.removeFromDiscardPile(discardTile);
-        
-        // 明杠只取3张手牌（防止手牌有4张时变成5张副露）
-        const sameTiles = player.hand.filter(t => Tiles.isSameTile(t, discardTile)).slice(0, 3);
-        if (sameTiles.length < 3) {
-            console.error('executeGang: not enough tiles');
-            this.state = 'playing';
-            await this.nextTurn();
-            return;
-        }
-        
-        player.removeFromHand(sameTiles);
-        player.addMeld({
-            type: 'gang',
-            tiles: [...sameTiles, discardTile],
-            from: this.currentPlayerIndex,
-            isMingGang: true
-        });
-        player.gangCount++;
-        
-        const fromPlayerIndex = this.currentPlayerIndex;
-        this.recordHistory('gang', { playerId: player.id, tiles: [...sameTiles, discardTile].map(t => t.id), from: fromPlayerIndex });
-        
-        // 切换当前玩家为杠的人（必须在gangShangKaiHua检查之前，确保自摸判断正确）
-        this.currentPlayerIndex = player.position;
-        this.state = 'playing';
-        
-        // 杠后摸牌
-        let gangTile = null;
-        if (this.deck.length > 0) {
-            gangTile = this.deck.pop();
-            this.deckCount = this.deck.length;
-            player.draw(gangTile);
-            this.recordHistory('draw', { playerId: player.id, tile: gangTile.id, fromGang: true });
+        try {
+            this.stopTimer();
+            this.state = 'action';
             
-            // 检查花牌（在emit draw之前处理，确保手牌正确）
-            if (gangTile.isFlower && this.ruleConfig.huaPai) {
-                await this.handleFlower(player);
+            const discardTile = this.lastDiscard;
+            if (!discardTile) {
+                console.error('executeGang: lastDiscard is null');
+                this.state = 'playing';
+                await this.nextTurn();
+                return;
             }
             
-            // 先emit摸牌事件，确保UI手牌状态正确
-            this.emit('draw', { player: player.toJSON(), tile: gangTile ? { ...gangTile } : null, fromGang: true, index: this.currentPlayerIndex, deckCount: this.deckCount });
-        } else {
-            // 杠后无牌可摸：流局
-            await this.handleDrawGame();
-            return;
-        }
-        
-        // emit gang事件，确保UI副露状态正确
-        this.emit('gang', { player: player.toJSON(), tiles: [...sameTiles, discardTile], from: fromPlayerIndex });
-        
-        // 检查杠上开花
-        const winResult = Rules.canWin(player.hand, this.ruleConfig);
-        if (winResult.canWin) {
-            const huSuccess = await this.executeHu(player, { type: 'hu', winInfo: winResult, isGangShangKaiHua: true });
-            if (huSuccess) return;
-            // minFan 不足被拒绝，继续打牌
-        }
-        
-        // 杠后已经摸过牌，直接要求打牌（不再走turnStart的摸牌流程）
-        this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
-        
-        if (player.isAI) {
-            try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
-            const ctx = this.buildAIContext(player);
-            let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
-            if (!tileToDiscard) {
-                tileToDiscard = player.hand[0];
-                if (!tileToDiscard) {
-                    console.error('AI has no tile to discard after gang');
-                    this.state = 'playing';
-                    await this.nextTurn();
-                    return;
+            // 从弃牌堆移除被杠的牌
+            this.removeFromDiscardPile(discardTile);
+            
+            // 明杠只取3张手牌（防止手牌有4张时变成5张副露）
+            const sameTiles = player.hand.filter(t => Tiles.isSameTile(t, discardTile)).slice(0, 3);
+            if (sameTiles.length < 3) {
+                console.error('executeGang: not enough tiles');
+                this.state = 'playing';
+                await this.nextTurn();
+                return;
+            }
+            
+            player.removeFromHand(sameTiles);
+            player.addMeld({
+                type: 'gang',
+                tiles: [...sameTiles, discardTile],
+                from: this.currentPlayerIndex,
+                isMingGang: true
+            });
+            player.gangCount++;
+            
+            const fromPlayerIndex = this.currentPlayerIndex;
+            this.recordHistory('gang', { playerId: player.id, tiles: [...sameTiles, discardTile].map(t => t.id), from: fromPlayerIndex });
+            
+            // 切换当前玩家为杠的人（必须在gangShangKaiHua检查之前，确保自摸判断正确）
+            this.currentPlayerIndex = player.position;
+            this.state = 'playing';
+            
+            // 杠后摸牌
+            let gangTile = null;
+            if (this.deck.length > 0) {
+                gangTile = this.deck.pop();
+                this.deckCount = this.deck.length;
+                player.draw(gangTile);
+                this.recordHistory('draw', { playerId: player.id, tile: gangTile.id, fromGang: true });
+                
+                // 检查花牌（在emit draw之前处理，确保手牌正确）
+                if (gangTile.isFlower && this.ruleConfig.huaPai) {
+                    await this.handleFlower(player);
                 }
+                
+                // 先emit摸牌事件，确保UI手牌状态正确
+                this.emit('draw', { player: player.toJSON(), tile: gangTile ? { ...gangTile } : null, fromGang: true, index: this.currentPlayerIndex, deckCount: this.deckCount });
+            } else {
+                // 杠后无牌可摸：流局
+                await this.handleDrawGame();
+                return;
             }
-            await this.playerDiscard(tileToDiscard.id);
+            
+            // emit gang事件，确保UI副露状态正确
+            this.emit('gang', { player: player.toJSON(), tiles: [...sameTiles, discardTile], from: fromPlayerIndex });
+            
+            // 检查杠上开花
+            const winResult = Rules.canWin(player.hand, this.ruleConfig);
+            if (winResult.canWin) {
+                const huSuccess = await this.executeHu(player, { type: 'hu', winInfo: winResult, isGangShangKaiHua: true });
+                if (huSuccess) return;
+                // minFan 不足被拒绝，继续打牌
+            }
+            
+            // 杠后已经摸过牌，直接要求打牌（不再走turnStart的摸牌流程）
+            this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
+            
+            if (player.isAI) {
+                try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                const ctx = this.buildAIContext(player);
+                let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
+                if (!tileToDiscard) {
+                    tileToDiscard = player.hand[0];
+                    if (!tileToDiscard) {
+                        console.error('AI has no tile to discard after gang');
+                        this.state = 'playing';
+                        await this.nextTurn();
+                        return;
+                    }
+                }
+                await this.playerDiscard(tileToDiscard.id);
+            }
+        } catch (e) {
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                return;
+            }
+            throw e;
         }
     }
 
@@ -826,105 +886,113 @@ class MahjongEngine extends Utils.EventEmitter {
      * 执行暗杠
      */
     async executeAnGang(player, option) {
-        this.stopTimer();
-        this.state = 'action';
-        
-        const wasAnGang = option.type === 'an_gang';
-        
-        if (wasAnGang) {
-            if (!option.tiles || !Array.isArray(option.tiles) || option.tiles.length === 0) {
-                console.error('executeAnGang: invalid tiles for an_gang', option);
-                if (this.state !== 'ended' && this.state !== 'destroyed') this.state = 'playing';
-                await this.nextTurn();
-                return;
-            }
-            player.removeFromHand(option.tiles);
-            player.addMeld({
-                type: 'gang',
-                tiles: option.tiles,
-                isAnGang: true
-            });
-            player.gangCount++;
+        try {
+            this.stopTimer();
+            this.state = 'action';
             
-            this.recordHistory('anGang', { playerId: player.id, tiles: option.tiles.map(t => t.id) });
-        } else if (option.type === 'jia_gang') {
-            if (!option.meld || !option.tile) {
-                console.error('executeAnGang: invalid meld/tile for jia_gang', option);
-                if (this.state !== 'ended' && this.state !== 'destroyed') this.state = 'playing';
-                await this.nextTurn();
-                return;
-            }
-            player.removeFromHand([option.tile]);
-            option.meld.type = 'gang';
-            option.meld.tiles.push(option.tile);
-            option.meld.isJiaGang = true;
-            player.gangCount++;
+            const wasAnGang = option.type === 'an_gang';
             
-            this.recordHistory('jiaGang', { playerId: player.id, meldId: option.meld.tiles[0].id });
-        } else {
-            console.error('executeAnGang: unknown option type', option?.type);
-            if (this.state !== 'ended' && this.state !== 'destroyed') this.state = 'playing';
-            await this.nextTurn();
-            return;
-        }
-        
-        // 杠后摸牌
-        let gangTile = null;
-        if (this.deck.length > 0) {
-            gangTile = this.deck.pop();
-            this.deckCount = this.deck.length;
-            player.draw(gangTile);
-            this.recordHistory('draw', { playerId: player.id, tile: gangTile.id, fromGang: true });
-            
-            // 先处理花牌，确保手牌状态正确
-            if (gangTile.isFlower && this.ruleConfig.huaPai) {
-                await this.handleFlower(player);
-            }
-            
-            // 先emit摸牌事件，确保UI手牌状态正确
-            this.emit('draw', { player: player.toJSON(), tile: gangTile ? { ...gangTile } : null, fromGang: true, index: this.currentPlayerIndex, deckCount: this.deckCount });
-        } else {
-            // 杠后无牌可摸：流局
-            await this.handleDrawGame();
-            return;
-        }
-        
-        // emit gang事件，确保UI副露状态正确
-        if (wasAnGang) {
-            this.emit('anGang', { player: player.toJSON(), tiles: option.tiles });
-        } else {
-            this.emit('jiaGang', { player: player.toJSON(), meld: option.meld });
-        }
-        
-        // 检查杠上开花
-        const winResult = Rules.canWin(player.hand, this.ruleConfig);
-        if (winResult.canWin) {
-            const huSuccess = await this.executeHu(player, { type: 'hu', winInfo: winResult, isGangShangKaiHua: true });
-            if (huSuccess) return { gangShangKaiHua: true };
-            // minFan 不足被拒绝，继续打牌
-        }
-        
-        // 暗杠后需要打牌
-        this.state = 'playing';
-        this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
-        
-        if (player.isAI) {
-            try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
-            const ctx = this.buildAIContext(player);
-            let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
-            if (!tileToDiscard) {
-                tileToDiscard = player.hand[0];
-                if (!tileToDiscard) {
-                    console.error('AI has no tile to discard after anGang');
-                    this.state = 'playing';
+            if (wasAnGang) {
+                if (!option.tiles || !Array.isArray(option.tiles) || option.tiles.length === 0) {
+                    console.error('executeAnGang: invalid tiles for an_gang', option);
+                    if (this.state !== 'ended' && this.state !== 'destroyed') this.state = 'playing';
                     await this.nextTurn();
                     return;
                 }
+                player.removeFromHand(option.tiles);
+                player.addMeld({
+                    type: 'gang',
+                    tiles: option.tiles,
+                    isAnGang: true
+                });
+                player.gangCount++;
+                
+                this.recordHistory('anGang', { playerId: player.id, tiles: option.tiles.map(t => t.id) });
+            } else if (option.type === 'jia_gang') {
+                if (!option.meld || !option.tile) {
+                    console.error('executeAnGang: invalid meld/tile for jia_gang', option);
+                    if (this.state !== 'ended' && this.state !== 'destroyed') this.state = 'playing';
+                    await this.nextTurn();
+                    return;
+                }
+                player.removeFromHand([option.tile]);
+                option.meld.type = 'gang';
+                option.meld.tiles.push(option.tile);
+                option.meld.isJiaGang = true;
+                player.gangCount++;
+                
+                this.recordHistory('jiaGang', { playerId: player.id, meldId: option.meld.tiles[0].id });
+            } else {
+                console.error('executeAnGang: unknown option type', option?.type);
+                if (this.state !== 'ended' && this.state !== 'destroyed') this.state = 'playing';
+                await this.nextTurn();
+                return;
             }
-            await this.playerDiscard(tileToDiscard.id);
+            
+            // 杠后摸牌
+            let gangTile = null;
+            if (this.deck.length > 0) {
+                gangTile = this.deck.pop();
+                this.deckCount = this.deck.length;
+                player.draw(gangTile);
+                this.recordHistory('draw', { playerId: player.id, tile: gangTile.id, fromGang: true });
+                
+                // 先处理花牌，确保手牌状态正确
+                if (gangTile.isFlower && this.ruleConfig.huaPai) {
+                    await this.handleFlower(player);
+                }
+                
+                // 先emit摸牌事件，确保UI手牌状态正确
+                this.emit('draw', { player: player.toJSON(), tile: gangTile ? { ...gangTile } : null, fromGang: true, index: this.currentPlayerIndex, deckCount: this.deckCount });
+            } else {
+                // 杠后无牌可摸：流局
+                await this.handleDrawGame();
+                return;
+            }
+            
+            // emit gang事件，确保UI副露状态正确
+            if (wasAnGang) {
+                this.emit('anGang', { player: player.toJSON(), tiles: option.tiles });
+            } else {
+                this.emit('jiaGang', { player: player.toJSON(), meld: option.meld });
+            }
+            
+            // 检查杠上开花
+            const winResult = Rules.canWin(player.hand, this.ruleConfig);
+            if (winResult.canWin) {
+                const huSuccess = await this.executeHu(player, { type: 'hu', winInfo: winResult, isGangShangKaiHua: true });
+                if (huSuccess) return { gangShangKaiHua: true };
+                // minFan 不足被拒绝，继续打牌
+            }
+            
+            // 暗杠后需要打牌
+            this.state = 'playing';
+            this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
+            
+            if (player.isAI) {
+                try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                const ctx = this.buildAIContext(player);
+                let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
+                if (!tileToDiscard) {
+                    tileToDiscard = player.hand[0];
+                    if (!tileToDiscard) {
+                        console.error('AI has no tile to discard after anGang');
+                        this.state = 'playing';
+                        await this.nextTurn();
+                        return;
+                    }
+                }
+                await this.playerDiscard(tileToDiscard.id);
+            }
+            
+            return { gangShangKaiHua: false };
+        } catch (e) {
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                return;
+            }
+            throw e;
         }
-        
-        return { gangShangKaiHua: false };
     }
 
     /**
@@ -1102,6 +1170,10 @@ class MahjongEngine extends Utils.EventEmitter {
                 }
             }
         } catch (e) {
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                return false;
+            }
             // 回滚胡牌标记，防止半事务状态
             // 只有在 catch 前确实是我们设置的 isHu 才回滚（防止覆盖之前合法的状态）
             player.isHu = false;
@@ -1211,25 +1283,33 @@ class MahjongEngine extends Utils.EventEmitter {
      * 下一回合
      */
     async nextTurn() {
-        // 防御：playerCount 为 0 时避免除零
-        if (!this.config.playerCount || this.config.playerCount <= 0) {
-            console.error('nextTurn: invalid playerCount', this.config.playerCount);
-            await this.endRound();
-            return;
-        }
-        do {
-            this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.config.playerCount;
-            // 防御：players数组异常时的保护
-            if (!this.players[this.currentPlayerIndex]) {
-                console.error('nextTurn: invalid player index', this.currentPlayerIndex);
-                break;
+        try {
+            // 防御：playerCount 为 0 时避免除零
+            if (!this.config.playerCount || this.config.playerCount <= 0) {
+                console.error('nextTurn: invalid playerCount', this.config.playerCount);
+                await this.endRound();
+                return;
             }
-        } while (this.players[this.currentPlayerIndex]?.isHu && !this.isRoundOver());
-        
-        if (this.isRoundOver()) {
-            await this.endRound();
-        } else {
-            await this.startTurn();
+            do {
+                this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.config.playerCount;
+                // 防御：players数组异常时的保护
+                if (!this.players[this.currentPlayerIndex]) {
+                    console.error('nextTurn: invalid player index', this.currentPlayerIndex);
+                    break;
+                }
+            } while (this.players[this.currentPlayerIndex]?.isHu && !this.isRoundOver());
+            
+            if (this.isRoundOver()) {
+                await this.endRound();
+            } else {
+                await this.startTurn();
+            }
+        } catch (e) {
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                return;
+            }
+            throw e;
         }
     }
 
@@ -1302,19 +1382,27 @@ class MahjongEngine extends Utils.EventEmitter {
      * 跳过操作
      */
     async skipAction() {
-        if (this.pendingAction) {
-            const skippedPlayerPos = this.pendingAction.player.position;
-            const skippedActionType = this.pendingAction.action.type;
-            this.pendingAction = null;
-            
-            // 从 pendingActions 中移除已跳过的动作
-            if (this._pendingActions) {
-                this._pendingActions = this._pendingActions.filter(
-                    a => !(a.player.position === skippedPlayerPos && a.action.type === skippedActionType)
-                );
+        try {
+            if (this.pendingAction) {
+                const skippedPlayerPos = this.pendingAction.player.position;
+                const skippedActionType = this.pendingAction.action.type;
+                this.pendingAction = null;
+                
+                // 从 pendingActions 中移除已跳过的动作
+                if (this._pendingActions) {
+                    this._pendingActions = this._pendingActions.filter(
+                        a => !(a.player.position === skippedPlayerPos && a.action.type === skippedActionType)
+                    );
+                }
+                
+                await this._offerNextAction();
             }
-            
-            await this._offerNextAction();
+        } catch (e) {
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                return;
+            }
+            throw e;
         }
     }
     
@@ -1322,52 +1410,60 @@ class MahjongEngine extends Utils.EventEmitter {
      * 从待处理动作列表中选择下一个动作并发出
      */
     async _offerNextAction() {
-        if (!this._pendingActions || this._pendingActions.length === 0) {
-            this.pendingAction = null;
-            await this.nextTurn();
-            return;
-        }
-        
-        // 按优先级排序
-        this._pendingActions.sort((a, b) => b.priority - a.priority);
-        const highestPriority = this._pendingActions[0].priority;
-        const topActions = this._pendingActions.filter(a => a.priority === highestPriority);
-        
-        // 最高优先级中，按逆时针顺序
-        const winner = topActions.sort((a, b) => {
-            const distA = (a.player.position - this.currentPlayerIndex + this.config.playerCount) % this.config.playerCount;
-            const distB = (b.player.position - this.currentPlayerIndex + this.config.playerCount) % this.config.playerCount;
-            return distA - distB;
-        })[0];
-        
-        this.pendingAction = winner;
-        this.emit('actionAvailable', {
-            player: winner.player.toJSON(),
-            action: winner.action ? { ...winner.action, winInfo: winner.action.winInfo ? { ...winner.action.winInfo } : undefined } : null,
-            tile: this.lastDiscard ? { ...this.lastDiscard } : null
-        });
-        
-        if (winner.player.isAI) {
-            try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
-            try {
-                await this.executeAction(winner.player, winner.action);
-            } catch (e) {
-                if (e.message === 'CANCELLED') return;
-                console.error('waitForActions executeAction error:', e);
-                if (this.state !== 'ended' && this.state !== 'destroyed') {
-                    this.state = 'playing';
-                }
+        try {
+            if (!this._pendingActions || this._pendingActions.length === 0) {
                 this.pendingAction = null;
-                this._pendingActions = [];
-                if (this.state !== 'ended' && this.state !== 'destroyed') {
-                    await this.nextTurn();
-                }
+                await this.nextTurn();
+                return;
             }
-        } else {
-            this.emit('playerAction', {
+            
+            // 按优先级排序
+            this._pendingActions.sort((a, b) => b.priority - a.priority);
+            const highestPriority = this._pendingActions[0].priority;
+            const topActions = this._pendingActions.filter(a => a.priority === highestPriority);
+            
+            // 最高优先级中，按逆时针顺序
+            const winner = topActions.sort((a, b) => {
+                const distA = (a.player.position - this.currentPlayerIndex + this.config.playerCount) % this.config.playerCount;
+                const distB = (b.player.position - this.currentPlayerIndex + this.config.playerCount) % this.config.playerCount;
+                return distA - distB;
+            })[0];
+            
+            this.pendingAction = winner;
+            this.emit('actionAvailable', {
                 player: winner.player.toJSON(),
-                action: winner.action ? { ...winner.action, winInfo: winner.action.winInfo ? { ...winner.action.winInfo } : undefined } : null
+                action: winner.action ? { ...winner.action, winInfo: winner.action.winInfo ? { ...winner.action.winInfo } : undefined } : null,
+                tile: this.lastDiscard ? { ...this.lastDiscard } : null
             });
+            
+            if (winner.player.isAI) {
+                try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try {
+                    await this.executeAction(winner.player, winner.action);
+                } catch (e) {
+                    if (e.message === 'CANCELLED') return;
+                    console.error('waitForActions executeAction error:', e);
+                    if (this.state !== 'ended' && this.state !== 'destroyed') {
+                        this.state = 'playing';
+                    }
+                    this.pendingAction = null;
+                    this._pendingActions = [];
+                    if (this.state !== 'ended' && this.state !== 'destroyed') {
+                        await this.nextTurn();
+                    }
+                }
+            } else {
+                this.emit('playerAction', {
+                    player: winner.player.toJSON(),
+                    action: winner.action ? { ...winner.action, winInfo: winner.action.winInfo ? { ...winner.action.winInfo } : undefined } : null
+                });
+            }
+        } catch (e) {
+            if (e.message === 'CANCELLED') {
+                if (this.state !== 'destroyed') this.state = 'idle';
+                return;
+            }
+            throw e;
         }
     }
 

@@ -117,9 +117,13 @@ function getClientIP(req) {
 
 function generateRoomId() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let id = '';
-    for (let i = 0; i < 5; i++) id += chars[Math.floor(Math.random() * chars.length)];
-    return rooms.has(id) ? generateRoomId() : id;
+    const maxAttempts = 100;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        let id = '';
+        for (let i = 0; i < 5; i++) id += chars[Math.floor(Math.random() * chars.length)];
+        if (!rooms.has(id)) return id;
+    }
+    throw new Error('无法生成唯一房间ID');
 }
 
 function generatePlayerId() {
@@ -298,6 +302,9 @@ const server = http.createServer(async (req, res) => {
                 catch (e) { clearInterval(heartbeat); }
             }, 25000);
 
+            req.on('error', () => {
+                clearInterval(heartbeat);
+            });
             req.on('close', () => {
                 clearInterval(heartbeat);
                 p.res = null;
@@ -364,7 +371,7 @@ const server = http.createServer(async (req, res) => {
             const body = await readBody(req);
             const p = players.get(body.playerId);
             if (!p || p.roomId !== roomId) {
-                jsonResponse(res, 403, { error: '无效玩家' }, req);
+                jsonResponse(res, 403, { error: 'Forbidden' }, req);
                 return;
             }
             const room = rooms.get(roomId);
