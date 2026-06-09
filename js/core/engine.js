@@ -1472,9 +1472,14 @@ class MahjongEngine extends Utils.EventEmitter {
                     if (this.state !== 'ended' && this.state !== 'destroyed') {
                         this.state = 'playing';
                     }
+                    // 仅移除当前失败动作，保留其他玩家的 pendingActions
+                    this._pendingActions = this._pendingActions.filter(
+                        a => !(a.player.position === winner.player.position && a.action.type === winner.action.type)
+                    );
                     this.pendingAction = null;
-                    this._pendingActions = [];
-                    if (this.state !== 'ended' && this.state !== 'destroyed') {
+                    if (this._pendingActions.length > 0 && this.state !== 'ended' && this.state !== 'destroyed') {
+                        await this._offerNextAction();
+                    } else if (this.state !== 'ended' && this.state !== 'destroyed') {
                         await this.nextTurn();
                     }
                 }
