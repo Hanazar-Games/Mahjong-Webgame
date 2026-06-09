@@ -175,7 +175,7 @@
                 el.dataset.index = idx;
                 el.innerHTML = `
                     <span class="step-num">${idx + 1}</span>
-                    <span class="step-action">${desc.icon} ${desc.text}</span>
+                    <span class="step-action">${desc.icon} ${Utils.escapeHtml(desc.text)}</span>
                     <span class="step-player">${Utils.escapeHtml(desc.player || '')}</span>
                 `;
                 el.addEventListener('click', () => {
@@ -599,7 +599,7 @@
             const item = round?.history?.[stepIdx];
             const desc = item ? this._describeAction(item) : { text: '', sub: '' };
             const detailEl = document.getElementById('replay-action-text');
-            if (detailEl) detailEl.innerHTML = `${desc.icon} <strong>${Utils.escapeHtml(desc.text)}</strong>`;
+            if (detailEl) detailEl.innerHTML = `${Utils.escapeHtml(desc.icon)} <strong>${Utils.escapeHtml(desc.text)}</strong>`;
 
             const subEl = document.getElementById('replay-action-sub');
             if (subEl) subEl.textContent = desc.player ? `玩家: ${Utils.escapeHtml(desc.player)}` : '';
