@@ -2,6 +2,15 @@
  * 万能麻将 - 核心游戏引擎
  */
 
+const MAX_FLOWERS = 16;
+const MAX_GAME_HISTORY = 5000;
+const GAME_HISTORY_TRIM_TO = 3000;
+const MAX_MATCH_HISTORY = 1000;
+const MATCH_HISTORY_TRIM_TO = 500;
+const DEAL_ANIMATION_DELAY = 30;
+const FLOWER_ANIMATION_DELAY = 250;
+const AI_POST_ACTION_DELAY_MULTIPLIER = 0.5;
+
 class MahjongEngine extends Utils.EventEmitter {
     constructor(config = {}) {
         super();
@@ -216,7 +225,7 @@ class MahjongEngine extends Utils.EventEmitter {
             }
             
             if (this.config.speed !== 'instant') {
-                try { await Utils.sleep(30, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(DEAL_ANIMATION_DELAY, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
             }
         }
         
@@ -292,7 +301,7 @@ class MahjongEngine extends Utils.EventEmitter {
      */
     async handleFlower(player) {
         let flowerCount = 0;
-        const maxFlowers = 16;
+        const maxFlowers = MAX_FLOWERS;
         while (this.deck.length > 0 && player.hand.some(t => t.isFlower) && flowerCount < maxFlowers) {
             flowerCount++;
             if (this._token.isCancelled) return;
@@ -314,7 +323,7 @@ class MahjongEngine extends Utils.EventEmitter {
             }
             
             if (this.config.speed !== 'instant') {
-                try { await Utils.sleep(250, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(FLOWER_ANIMATION_DELAY, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
             }
         }
         
@@ -617,10 +626,10 @@ class MahjongEngine extends Utils.EventEmitter {
                     return;
                 }
                 default:
-                    console.error('Unknown action type:', action.type);
+                    console.warn('Unknown action type:', action.type);
                     this.state = 'playing';
                     await this.nextTurn();
-                    return;
+                    return false;
             }
         } catch (e) {
             // 防御：任何异常都不应让游戏卡死在 action 状态
@@ -696,7 +705,7 @@ class MahjongEngine extends Utils.EventEmitter {
             this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
             
             if (player.isAI) {
-                try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
                 const ctx = this.buildAIContext(player);
                 let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
                 if (!tileToDiscard) {
@@ -762,7 +771,7 @@ class MahjongEngine extends Utils.EventEmitter {
             this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
             
             if (player.isAI) {
-                try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
                 const ctx = this.buildAIContext(player);
                 let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
                 if (!tileToDiscard) {
@@ -865,7 +874,7 @@ class MahjongEngine extends Utils.EventEmitter {
             this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
             
             if (player.isAI) {
-                try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
                 const ctx = this.buildAIContext(player);
                 let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
                 if (!tileToDiscard) {
@@ -976,7 +985,7 @@ class MahjongEngine extends Utils.EventEmitter {
             this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
             
             if (player.isAI) {
-                try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
                 const ctx = this.buildAIContext(player);
                 let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
                 if (!tileToDiscard) {
@@ -1239,8 +1248,8 @@ class MahjongEngine extends Utils.EventEmitter {
             // 清空当前局历史，下一局重新累积
             this.gameHistory = [];
             // 防御：防止跨局长 session 内存无限增长
-            if (this.matchHistory.length > 1000) {
-                this.matchHistory = this.matchHistory.slice(-500);
+            if (this.matchHistory.length > MAX_MATCH_HISTORY) {
+                this.matchHistory = this.matchHistory.slice(-MATCH_HISTORY_TRIM_TO);
             }
         }
 
@@ -1443,7 +1452,7 @@ class MahjongEngine extends Utils.EventEmitter {
             });
             
             if (winner.player.isAI) {
-                try { await Utils.sleep(this.speedMap[this.config.speed] * 0.5, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
                 try {
                     await this.executeAction(winner.player, winner.action);
                 } catch (e) {
@@ -1524,8 +1533,8 @@ class MahjongEngine extends Utils.EventEmitter {
     recordHistory(action, data) {
         this.gameHistory.push({ action, data, timestamp: Date.now(), round: this.round });
         // 防止内存无限增长
-        if (this.gameHistory.length > 5000) {
-            this.gameHistory = this.gameHistory.slice(-3000);
+        if (this.gameHistory.length > MAX_GAME_HISTORY) {
+            this.gameHistory = this.gameHistory.slice(-GAME_HISTORY_TRIM_TO);
         }
     }
 

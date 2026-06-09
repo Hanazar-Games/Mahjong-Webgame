@@ -12,6 +12,8 @@
 const Stats = (function() {
     'use strict';
 
+    const MAX_LEVEL_CAP = 10000;
+
     const DEFAULT_SETTINGS = {
         playerName: '玩家',
         aiDifficulty: 'normal',
@@ -122,14 +124,14 @@ const Stats = (function() {
         
         let levelsGained = 0;
         // 升级检查（防御：exp异常大时限制升级次数）
-        while (isFinite(stats.exp) && stats.exp >= stats.maxExp && levelsGained < 10000) {
+        while (isFinite(stats.exp) && stats.exp >= stats.maxExp && levelsGained < MAX_LEVEL_CAP) {
             stats.exp -= stats.maxExp;
             stats.level++;
             levelsGained++;
             stats.maxExp = Math.floor(100 * Math.pow(1.2, stats.level - 1));
         }
         
-        return {
+        const levelResult = {
             prevLevel,
             newLevel: stats.level,
             levelsGained,
@@ -138,6 +140,32 @@ const Stats = (function() {
             newExp: stats.exp,
             maxExp: stats.maxExp
         };
+        // 防御：levelResult 中任何字段出现 Infinity / NaN 或越界
+        if (!isFinite(levelResult.prevLevel) || levelResult.prevLevel < 1 || levelResult.prevLevel >= MAX_LEVEL_CAP) {
+            console.warn('Invalid levelResult prevLevel', levelResult.prevLevel);
+            levelResult.prevLevel = 1;
+        }
+        if (!isFinite(levelResult.newLevel) || levelResult.newLevel < 1 || levelResult.newLevel >= MAX_LEVEL_CAP) {
+            console.warn('Invalid levelResult newLevel', levelResult.newLevel);
+            levelResult.newLevel = 1;
+        }
+        if (!isFinite(levelResult.levelsGained) || levelResult.levelsGained < 0 || levelResult.levelsGained >= MAX_LEVEL_CAP) {
+            console.warn('Invalid levelResult levelsGained', levelResult.levelsGained);
+            levelResult.levelsGained = 0;
+        }
+        if (!isFinite(levelResult.maxExp) || levelResult.maxExp <= 0) {
+            console.warn('Invalid levelResult maxExp', levelResult.maxExp);
+            levelResult.maxExp = 100;
+        }
+        if (!isFinite(levelResult.prevExp) || levelResult.prevExp < 0) {
+            console.warn('Invalid levelResult prevExp', levelResult.prevExp);
+            levelResult.prevExp = 0;
+        }
+        if (!isFinite(levelResult.newExp) || levelResult.newExp < 0) {
+            console.warn('Invalid levelResult newExp', levelResult.newExp);
+            levelResult.newExp = 0;
+        }
+        return levelResult;
     }
 
     /**
@@ -325,7 +353,7 @@ const Stats = (function() {
 
     function _calcTotalExp(stats) {
         // 防御：level异常大时避免无限循环
-        const level = Math.min(Math.max(1, Math.floor(stats.level || 1)), 10000);
+        const level = Math.min(Math.max(1, Math.floor(stats.level || 1)), MAX_LEVEL_CAP);
         let total = stats.exp || 0;
         for (let lv = 1; lv < level; lv++) {
             total += Math.floor(100 * Math.pow(1.2, lv - 1));
