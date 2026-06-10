@@ -174,7 +174,7 @@
             });
         } catch (e) {
             console.error('保存游戏结果失败:', e);
-            Utils.toast('保存结果失败: ' + e.message, 3000, 'error');
+            Utils.toast('保存结果失败: ' + (e?.message || '未知错误'), 3000, 'error');
             result = null;
         }
         

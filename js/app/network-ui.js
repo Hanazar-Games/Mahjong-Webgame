@@ -115,7 +115,7 @@
                     refreshRoomList();
                 } catch (err) {
                     updateConnectionStatus('offline');
-                    showNetworkError('连接失败: ' + (err.message || '无法连接到服务器'));
+                    showNetworkError('连接失败: ' + (err?.message || '无法连接到服务器'));
                 } finally {
                     button.disabled = false;
                     button.textContent = originalText;
@@ -143,7 +143,7 @@
                 await App.network.createRoom(name, type, playerName);
                 Utils.toast(`房间 ${Utils.escapeHtml(name)} 已创建`, 3000, 'success');
             } catch (err) {
-                showNetworkError('创建房间失败: ' + (err.message || '未知错误'));
+                showNetworkError('创建房间失败: ' + (err?.message || '未知错误'));
             } finally {
                 if (createBtn) createBtn.disabled = false;
             }
@@ -195,7 +195,7 @@
             try {
                 await App.network.startGame(config);
             } catch (err) {
-                showNetworkError('开始游戏失败: ' + (err.message || '未知错误'));
+                showNetworkError('开始游戏失败: ' + (err?.message || '未知错误'));
                 if (startBtnNet) startBtnNet.disabled = false;
             }
         });
@@ -259,7 +259,7 @@
         net.on('gameStart', (config) => {
             startNetworkGame(config).catch(err => {
                 console.error('startNetworkGame error:', err);
-                Utils.toast('启动游戏失败: ' + (err.message || '未知错误'), 3000, 'error');
+                Utils.toast('启动游戏失败: ' + (err?.message || '未知错误'), 3000, 'error');
             });
         });
 
@@ -346,7 +346,7 @@
                         await App.network.joinRoom(room.id, playerName);
                         Utils.toast(`已加入房间`, 3000, 'success');
                     } catch (err) {
-                        showNetworkError('加入房间失败: ' + (err.message || '未知错误'));
+                        showNetworkError('加入房间失败: ' + (err?.message || '未知错误'));
                         joinBtn.disabled = false;
                     }
                 });

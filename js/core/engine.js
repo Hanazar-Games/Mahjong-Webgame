@@ -665,7 +665,7 @@ class MahjongEngine extends Utils.EventEmitter {
                 this.pendingAction = null;
                 return;
             }
-            if (e.message !== 'CANCELLED') {
+            if (e?.message !== 'CANCELLED') {
                 console.error('executeAction error:', e);
             }
             // 不要覆盖已结束/已销毁的状态
@@ -1579,7 +1579,7 @@ class MahjongEngine extends Utils.EventEmitter {
                     await this.handleDrawGame();
                 }
             } catch (e) {
-                if (e.message !== 'CANCELLED') {
+                if (e?.message !== 'CANCELLED') {
                     console.error('Timer callback error:', e);
                 }
             }
