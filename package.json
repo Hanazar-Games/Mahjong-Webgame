@@ -11,5 +11,13 @@
   },
   "devDependencies": {},
   "keywords": ["mahjong", "game", "browser"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Hanazar-Games/Mahjong-Webgame.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Hanazar-Games/Mahjong-Webgame/issues"
+  },
+  "homepage": "https://github.com/Hanazar-Games/Mahjong-Webgame#readme",
   "license": "MIT"
 }
