@@ -186,7 +186,7 @@ class MahjongEngine extends Utils.EventEmitter {
                 return;
             }
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return;
             }
@@ -234,11 +234,11 @@ class MahjongEngine extends Utils.EventEmitter {
             });
             
             if (tile.isFlower && this.ruleConfig.huaPai) {
-                try { await this.handleFlower(this.players[playerIndex]); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await this.handleFlower(this.players[playerIndex]); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
             }
             
             if (this.config.speed !== 'instant') {
-                try { await Utils.sleep(DEAL_ANIMATION_DELAY, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(DEAL_ANIMATION_DELAY, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
             }
         }
         
@@ -338,7 +338,7 @@ class MahjongEngine extends Utils.EventEmitter {
             }
             
             if (this.config.speed !== 'instant') {
-                try { await Utils.sleep(FLOWER_ANIMATION_DELAY, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(FLOWER_ANIMATION_DELAY, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
             }
         }
         
@@ -380,7 +380,7 @@ class MahjongEngine extends Utils.EventEmitter {
             }
             // 人类玩家的操作由UI控制，摸牌在turnStart事件处理中执行
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return;
             }
@@ -421,7 +421,7 @@ class MahjongEngine extends Utils.EventEmitter {
                 try {
                     await this.handleFlower(player);
                 } catch (e) {
-                    if (e.message === 'CANCELLED') throw e;
+                    if (e?.message === 'CANCELLED') throw e;
                     console.error('handleFlower error in playerDraw:', e);
                     throw e;
                 }
@@ -447,7 +447,7 @@ class MahjongEngine extends Utils.EventEmitter {
             
             return { ziMo: false, anGangOptions };
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return null;
             }
@@ -490,7 +490,7 @@ class MahjongEngine extends Utils.EventEmitter {
             // 等待其他玩家响应
             await this.waitForActions(tile);
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return;
             }
@@ -563,7 +563,7 @@ class MahjongEngine extends Utils.EventEmitter {
             this._pendingActions = willingActions;
             await this._offerNextAction();
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return;
             }
@@ -660,7 +660,7 @@ class MahjongEngine extends Utils.EventEmitter {
             }
         } catch (e) {
             // 防御：任何异常都不应让游戏卡死在 action 状态
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 this.pendingAction = null;
                 return;
@@ -733,7 +733,7 @@ class MahjongEngine extends Utils.EventEmitter {
             this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
             
             if (player.isAI) {
-                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
                 const ctx = this.buildAIContext(player);
                 let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
                 if (!tileToDiscard) {
@@ -748,7 +748,7 @@ class MahjongEngine extends Utils.EventEmitter {
                 await this.playerDiscard(tileToDiscard.id);
             }
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return;
             }
@@ -800,7 +800,7 @@ class MahjongEngine extends Utils.EventEmitter {
             this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
             
             if (player.isAI) {
-                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
                 const ctx = this.buildAIContext(player);
                 let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
                 if (!tileToDiscard) {
@@ -815,7 +815,7 @@ class MahjongEngine extends Utils.EventEmitter {
                 await this.playerDiscard(tileToDiscard.id);
             }
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return;
             }
@@ -904,7 +904,7 @@ class MahjongEngine extends Utils.EventEmitter {
             this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
             
             if (player.isAI) {
-                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
                 const ctx = this.buildAIContext(player);
                 let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
                 if (!tileToDiscard) {
@@ -919,7 +919,7 @@ class MahjongEngine extends Utils.EventEmitter {
                 await this.playerDiscard(tileToDiscard.id);
             }
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return;
             }
@@ -1016,7 +1016,7 @@ class MahjongEngine extends Utils.EventEmitter {
             this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
             
             if (player.isAI) {
-                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+                try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
                 const ctx = this.buildAIContext(player);
                 let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
                 if (!tileToDiscard) {
@@ -1033,7 +1033,7 @@ class MahjongEngine extends Utils.EventEmitter {
             
             return { gangShangKaiHua: false };
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return;
             }
@@ -1222,7 +1222,7 @@ class MahjongEngine extends Utils.EventEmitter {
             player.isHu = false;
             this.lastHuPlayer = null;
             this.players.forEach((p, i) => { p.score = scoreSnapshot[i]; });
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return false;
             }
@@ -1254,7 +1254,7 @@ class MahjongEngine extends Utils.EventEmitter {
             });
             await this.endRound();
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return;
             }
@@ -1337,12 +1337,12 @@ class MahjongEngine extends Utils.EventEmitter {
             }
             this.lastHuPlayer = null;
 
-            try { await Utils.sleep(1500, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+            try { await Utils.sleep(1500, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
             if (this.state === 'destroyed') return;
             try {
                 await this.start();
             } catch (e) {
-                if (e.message === 'CANCELLED') return;
+                if (e?.message === 'CANCELLED') return;
                 throw e;
             }
         }
@@ -1375,7 +1375,7 @@ class MahjongEngine extends Utils.EventEmitter {
                 await this.startTurn();
             }
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return;
             }
@@ -1396,7 +1396,7 @@ class MahjongEngine extends Utils.EventEmitter {
      */
     async aiTurn(player) {
         try {
-            try { await Utils.sleep(this.speedMap[this.config.speed] * 0.8, this._token); } catch (e) { if (e.message === 'CANCELLED') return; throw e; }
+            try { await Utils.sleep(this.speedMap[this.config.speed] * 0.8, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
             
             // 防御：引擎可能在sleep期间被销毁
             if (this.state === 'idle' || !this.players || !this.players[this.currentPlayerIndex]) {
@@ -1438,7 +1438,7 @@ class MahjongEngine extends Utils.EventEmitter {
             }
             await this.playerDiscard(tileToDiscard.id);
         } catch (e) {
-            if (e.message === 'CANCELLED') return;
+            if (e?.message === 'CANCELLED') return;
             console.error('aiTurn error:', e);
             // 尝试恢复：如果还在本局，强制进入安全状态
             if (this.state !== 'ended' && this.state !== 'destroyed') {
@@ -1468,7 +1468,7 @@ class MahjongEngine extends Utils.EventEmitter {
                 await this._offerNextAction();
             }
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return;
             }
@@ -1508,7 +1508,7 @@ class MahjongEngine extends Utils.EventEmitter {
             
             if (winner.player.isAI) {
                 try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) {
-                    if (e.message === 'CANCELLED') {
+                    if (e?.message === 'CANCELLED') {
                         this.pendingAction = null;
                         return;
                     }
@@ -1517,7 +1517,7 @@ class MahjongEngine extends Utils.EventEmitter {
                 try {
                     await this.executeAction(winner.player, winner.action);
                 } catch (e) {
-                    if (e.message === 'CANCELLED') return;
+                    if (e?.message === 'CANCELLED') return;
                     console.error('waitForActions executeAction error:', e);
                     if (this.state !== 'ended' && this.state !== 'destroyed') {
                         this.state = 'playing';
@@ -1540,7 +1540,7 @@ class MahjongEngine extends Utils.EventEmitter {
                 });
             }
         } catch (e) {
-            if (e.message === 'CANCELLED') {
+            if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
                 return;
             }

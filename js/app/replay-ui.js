@@ -81,7 +81,8 @@
             this._handlers.progress = (e) => {
                 const max = this._getTotalSteps() - 1;
                 const val = parseInt(e.target.value);
-                if (max > 0) this.goToStep(Math.round(val / 100 * max));
+                if (!Number.isFinite(val) || max <= 0) return;
+                this.goToStep(Math.round(val / 100 * max));
             };
             this._handlers.roundPrev = () => { AudioManager.SFX.buttonClick(); if (this.currentRoundIdx > 0) this.loadRound(this.currentRoundIdx - 1); };
             this._handlers.roundNext = () => { AudioManager.SFX.buttonClick(); if (this.currentRoundIdx < this.rounds.length - 1) this.loadRound(this.currentRoundIdx + 1); };
@@ -540,6 +541,7 @@
                 if (handEl && state?.hand) {
                     handEl.innerHTML = '';
                     for (const t of state.hand) {
+                        if (!t) continue;
                         const tile = this._findTile(t.id || t);
                         if (tile) {
                             handEl.appendChild(UIComponents.createTileElement(tile, { small: true }));
@@ -555,6 +557,7 @@
                         group.className = 'meld-group';
                         const tiles = meld.tiles || meld;
                         for (const t of tiles) {
+                            if (!t) continue;
                             const tile = this._findTile(t.id || t);
                             if (tile) {
                                 group.appendChild(UIComponents.createTileElement(tile, { small: true }));
