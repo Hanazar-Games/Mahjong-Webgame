@@ -274,6 +274,7 @@
 
     /**
      * 更新向听数显示（仅人类玩家）
+     * 向听数为0时额外显示听牌张数
      */
     function updateShantenDisplay(playerIndex) {
         const display = document.getElementById('shanten-display');
@@ -290,7 +291,15 @@
         }
         try {
             const shanten = AIUtils.calculateShanten(player.hand, player.melds, App.engine.ruleConfig);
-            valueEl.textContent = shanten < 0 ? '胡' : shanten;
+            if (shanten < 0) {
+                valueEl.textContent = '胡';
+            } else if (shanten === 0) {
+                const ctx = App.engine.buildAIContext ? App.engine.buildAIContext(player) : {};
+                const winningTiles = AIUtils.countWinningTiles(player.hand, player.melds, App.engine.ruleConfig, ctx);
+                valueEl.textContent = `听 ${winningTiles}张`;
+            } else {
+                valueEl.textContent = shanten;
+            }
             display.classList.remove('hidden');
         } catch (e) {
             display.classList.add('hidden');
