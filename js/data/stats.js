@@ -27,6 +27,7 @@ const Stats = (function() {
         opponentDisplay: 'small',
         mahjongType: 'guangdong',
         showTileNames: false,
+        showShanten: true,
         autoSort: true
     };
 

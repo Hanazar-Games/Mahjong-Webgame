@@ -284,6 +284,10 @@
             display.classList.add('hidden');
             return;
         }
+        if (App.settings && App.settings.showShanten === false) {
+            display.classList.add('hidden');
+            return;
+        }
         const player = App.engine.players[0];
         if (!player || !player.hand) {
             display.classList.add('hidden');

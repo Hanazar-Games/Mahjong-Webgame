@@ -30,6 +30,7 @@
             'sfx-enabled': 'sfxEnabled',
             'bgm-style': 'bgmStyle',
             'show-tile-names': 'showTileNames',
+            'show-shanten': 'showShanten',
             'auto-sort': 'autoSort',
             'bgm-volume': 'bgmVolume',
             'sfx-volume': 'sfxVolume'
@@ -117,6 +118,7 @@
 
             'opponent-display': 'opponentDisplay',
             'show-tile-names': 'showTileNames',
+            'show-shanten': 'showShanten',
             'auto-sort': 'autoSort'
         };
         
@@ -167,6 +169,9 @@
                     if (App.engine && App.currentScreen === 'game-screen') {
                         renderPlayerHand(0, App.engine.players[0]?.hand?.length || 0);
                     }
+                }
+                if (key === 'show-shanten') {
+                    updateShantenDisplay(0);
                 }
             }
         }
@@ -405,6 +410,7 @@
 
             'opponent-display': App.settings.opponentDisplay,
             'show-tile-names': App.settings.showTileNames,
+            'show-shanten': App.settings.showShanten,
             'auto-sort': App.settings.autoSort
         };
         
