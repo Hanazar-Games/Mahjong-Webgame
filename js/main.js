@@ -124,7 +124,20 @@
         }
         
         // 开始游戏
-        await App.engine.start();
+        try {
+            await App.engine.start();
+        } catch (e) {
+            if (e?.message === 'CANCELLED') {
+                console.log('游戏启动被取消');
+                return;
+            }
+            console.error('游戏启动失败:', e);
+            Utils.toast('游戏启动失败，请返回主菜单重试', 3000, 'error');
+            if (App.engine) {
+                App.engine.destroy();
+                App.engine = null;
+            }
+        }
     }
 
     // 根据游戏速度更新CSS动画倍率
