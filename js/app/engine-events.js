@@ -90,6 +90,7 @@
             updatePlayerHighlight(data.index);
             
             if (data.index === 0) {
+                updateShantenDisplay(0);
                 // 本地玩家回合：摸牌
                 engine.playerDraw().then((result) => {
                     // 防御引擎被销毁或替换的竞态
@@ -119,6 +120,7 @@
             AppEventBus.emit('engine:draw', data);
             if (!data || !data.player) return;
             renderPlayerHand(data.index, data.player.handSize, true, data.tile?.id);
+            updateShantenDisplay(0);
             updateDeckCount(data.deckCount);
             if (_isHumanPlayer(data.player.position)) {
                 AudioManager.SFX.draw();

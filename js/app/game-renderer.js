@@ -271,3 +271,28 @@
         }
         return ['bottom', 'right', 'top', 'left'][index];
     }
+
+    /**
+     * 更新向听数显示（仅人类玩家）
+     */
+    function updateShantenDisplay(playerIndex) {
+        const display = document.getElementById('shanten-display');
+        const valueEl = document.getElementById('shanten-value');
+        if (!display || !valueEl) return;
+        if (playerIndex !== 0 || !App.engine) {
+            display.classList.add('hidden');
+            return;
+        }
+        const player = App.engine.players[0];
+        if (!player || !player.hand) {
+            display.classList.add('hidden');
+            return;
+        }
+        try {
+            const shanten = AIUtils.calculateShanten(player.hand, player.melds, App.engine.ruleConfig);
+            valueEl.textContent = shanten < 0 ? '胡' : shanten;
+            display.classList.remove('hidden');
+        } catch (e) {
+            display.classList.add('hidden');
+        }
+    }
