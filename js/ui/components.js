@@ -104,8 +104,9 @@ const UIComponents = (function() {
         let cachedWidth = 0, cachedHeight = 0;
         
         function onMove(e) {
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            if (isDragging) e.preventDefault();
+            const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+            const clientY = (e.touches && e.touches.length > 0) ? e.touches[0].clientY : e.clientY;
             
             const dx = clientX - startX;
             const dy = clientY - startY;
@@ -141,7 +142,7 @@ const UIComponents = (function() {
             isListening = false;
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onEnd);
-            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('touchmove', onMove, { passive: false });
             document.removeEventListener('touchend', onEnd);
             document.removeEventListener('touchcancel', onEnd);
             
@@ -149,8 +150,8 @@ const UIComponents = (function() {
             if (discardPile) discardPile.classList.remove('discard-target');
             
             if (isDragging && clone) {
-                const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
-                const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+                const clientX = (e.changedTouches && e.changedTouches.length > 0) ? e.changedTouches[0].clientX : e.clientX;
+                const clientY = (e.changedTouches && e.changedTouches.length > 0) ? e.changedTouches[0].clientY : e.clientY;
                 
                 const rect = discardPile?.getBoundingClientRect();
                 const dropped = rect && clientX >= rect.left && clientX <= rect.right &&
@@ -188,10 +189,10 @@ const UIComponents = (function() {
         // 返回清理函数，供增量渲染时清理旧监听器
         return function cleanupDrag() {
             element.removeEventListener('mousedown', startDrag);
-            element.removeEventListener('touchstart', startDrag);
+            element.removeEventListener('touchstart', startDrag, { passive: false });
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onEnd);
-            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('touchmove', onMove, { passive: false });
             document.removeEventListener('touchend', onEnd);
             document.removeEventListener('touchcancel', onEnd);
             if (clone && clone.parentNode) clone.remove();
@@ -443,6 +444,7 @@ const UIComponents = (function() {
      */
     function showWinEffect(isZiMo = false) {
         const app = document.getElementById('app');
+        if (!app) return;
         
         // 创建覆盖层
         const overlay = document.createElement('div');

@@ -15,10 +15,13 @@
     function handleTileClick(tile) {
         if (!App.engine || App.engine.state !== 'playing') return;
         if (App.engine.currentPlayerIndex !== 0) return;
+        if (App._actionPending) return;
         
         // 限定查询范围到手牌区域，避免选中副露区的牌
         const handEl = document.getElementById('hand-bottom');
         if (!handEl) return;
+        const targetEl = handEl.querySelector(`[data-id="${escapeCssSelector(tile.id)}"]`);
+        if (!targetEl || targetEl.classList.contains('disabled')) return;
         const selected = handEl.querySelector('.mahjong-tile.selected');
         
         if (selected) {
@@ -339,8 +342,8 @@
         // 忽略重复按键（长按不触发）
         if (e.repeat) return;
         
-        // 忽略输入法/文本框/下拉框中的按键
-        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable)) {
+        // 忽略输入法/文本框/下拉框/按钮中的按键
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.isContentEditable)) {
             return;
         }
         
@@ -430,6 +433,7 @@
     AppEventBus.on('tile:click', handleTileClick);
     AppEventBus.on('tile:dragend', (tile) => {
         if (!App.engine || App.engine.state !== 'playing') return;
+        if (App.engine.currentPlayerIndex !== 0) return;
         _doDiscard(tile.id);
         enablePlayerActions(false);
     });

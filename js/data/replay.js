@@ -27,11 +27,14 @@ const Replay = (function() {
             const ok = Storage.set('replays', replays);
             if (!ok) {
                 console.error('saveReplay failed: localStorage quota exceeded');
-                Utils.toast('回放保存失败：存储空间不足', 3000, 'error');
                 return false;
             }
         } catch (e) {
-            console.error('saveReplay failed:', e);
+            if (e.message?.includes('circular')) {
+                console.error('saveReplay failed: circular reference in replay data');
+            } else {
+                console.error('saveReplay failed:', e);
+            }
             Utils.toast('回放保存失败', 3000, 'error');
             return false;
         }
@@ -56,7 +59,7 @@ const Replay = (function() {
         if (!engine || !engine.config) return {};
 
         // 合并 matchHistory 和当前局（如果游戏还没完全结束）
-        const allRounds = [...(engine.matchHistory || [])];
+        const allRounds = Array.isArray(engine.matchHistory) ? [...engine.matchHistory] : [];
         // 如果当前局已有历史且未保存到 matchHistory，追加
         if (engine.gameHistory && engine.gameHistory.length > 0) {
             const lastSaved = allRounds.length > 0 ? allRounds[allRounds.length - 1].round : -1;
@@ -64,8 +67,8 @@ const Replay = (function() {
                 allRounds.push({
                     round: engine.round,
                     wind: engine.currentWind,
-                    history: [...engine.gameHistory],
-                    players: (engine.players || []).map(p => p.toJSON(true))
+                    history: Array.isArray(engine.gameHistory) ? [...engine.gameHistory] : [],
+                    players: (engine.players || []).map(p => p?.toJSON ? p.toJSON(true) : null).filter(Boolean)
                 });
             }
         }
@@ -74,7 +77,7 @@ const Replay = (function() {
             mahjongType: engine.config.mahjongType,
             maxRounds: engine.config.maxRounds,
             players: (engine.players || []).map(p => ({
-                id: p?.id || '',
+                id: p?.id ?? '',
                 name: p?.name || '',
                 isAI: p?.isAI || false,
                 position: p?.position || 0

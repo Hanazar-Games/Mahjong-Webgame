@@ -66,14 +66,15 @@ const Stats = (function() {
             }
         }
         // 防御：Infinity 数据损坏导致无限循环
-        if (!isFinite(stats.exp)) stats.exp = 0;
+        if (!isFinite(stats.exp) || stats.exp < 0) stats.exp = 0;
         if (!isFinite(stats.maxExp) || stats.maxExp <= 0) stats.maxExp = 100;
         if (!isFinite(stats.level) || stats.level < 1) stats.level = 1;
         // 防御：旧数据中 bestGame 可能为 0（默认值），如果 totalGames>0 且 totalScore<0，
         // 说明可能从未赢过，bestGame 应从真实历史重新计算
         if (stats.bestGame === 0 && stats.totalGames > 0) {
-            const histBest = (stats.history || []).reduce((best, h) => 
-                Math.max(best, h.netScore ?? -999999), -999999);
+            const safeHistory = Array.isArray(stats.history) ? stats.history : [];
+            const histBest = safeHistory.reduce((best, h) => 
+                Math.max(best, isFinite(h.netScore) ? h.netScore : -999999), -999999);
             if (histBest > -999999) {
                 stats.bestGame = histBest;
             }
@@ -118,7 +119,7 @@ const Stats = (function() {
         
         // 防御：Infinity / NaN / 异常 level 数据损坏导致无限循环或计算错误
         if (!isFinite(stats.level) || stats.level < 1) stats.level = 1;
-        if (!isFinite(stats.exp)) stats.exp = 0;
+        if (!isFinite(stats.exp) || stats.exp < 0) stats.exp = 0;
         if (!isFinite(stats.maxExp) || stats.maxExp <= 0) stats.maxExp = 100;
         
         stats.exp += amount;
@@ -129,7 +130,7 @@ const Stats = (function() {
             stats.exp -= stats.maxExp;
             stats.level++;
             levelsGained++;
-            stats.maxExp = Math.floor(100 * Math.pow(1.2, stats.level - 1));
+            stats.maxExp = Math.min(Math.floor(100 * Math.pow(1.2, stats.level - 1)), Number.MAX_SAFE_INTEGER);
         }
         
         const levelResult = {
@@ -312,7 +313,7 @@ const Stats = (function() {
             case 'veteran':         return Math.min(stats.totalGames / 50 * 100, 100);
             case 'master':          return Math.min(stats.level / 10 * 100, 100);
             case 'all_types':       {
-                const totalTypes = Tiles.getMahjongTypes?.().length || 12;
+                const totalTypes = (Tiles.getMahjongTypes?.() || []).length || 12;
                 return Math.min((stats.playedTypes?.length || 0) / Math.min(10, totalTypes) * 100, 100);
             }
             default: return stats.unlockedAchievements.includes(achievement.id) ? 100 : 0;
@@ -341,7 +342,7 @@ const Stats = (function() {
         const stats = getStats();
         const nextLevelExp = stats.maxExp;
         const currentExp = stats.exp;
-        const percent = nextLevelExp > 0 ? Math.round((currentExp / nextLevelExp) * 100) : 0;
+        const percent = nextLevelExp > 0 ? Math.max(0, Math.round((currentExp / nextLevelExp) * 100)) : 0;
         
         return {
             level: stats.level,
@@ -367,7 +368,8 @@ const Stats = (function() {
      */
     function getMatchSummary() {
         const stats = getStats();
-        const history = stats.history || [];
+        const safeHistory = Array.isArray(stats.history) ? stats.history : [];
+        const history = safeHistory;
         
         // 最近7场
         const recent = history.slice(0, 7);

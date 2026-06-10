@@ -257,16 +257,27 @@
         });
 
         net.on('gameStart', (config) => {
-            startNetworkGame(config);
+            startNetworkGame(config).catch(err => {
+                console.error('startNetworkGame error:', err);
+                Utils.toast('启动游戏失败: ' + (err.message || '未知错误'), 3000, 'error');
+            });
         });
 
         net.on('data', ({ from, type, data }) => {
-            handleNetworkData(type, data, from);
+            if (type === 'playerAction') {
+                handleRemotePlayerAction(from, data).catch(err => {
+                    console.warn('Remote action error:', err);
+                });
+            } else {
+                handleNetworkData(type, data, from);
+            }
         });
 
         net.on('left', () => {
-            updateConnectionStatus(App.network.connected ? 'online' : 'offline');
+            updateConnectionStatus(App.network?.connected ? 'online' : 'offline');
             showLobbyContent();
+            App.isNetworkGame = false;
+            if (App.engine) { App.engine.destroy(); App.engine = null; }
         });
     }
 
@@ -522,7 +533,9 @@
         if (net.isHost) {
             // 房主接收访客动作
             if (type === 'playerAction') {
-                handleRemotePlayerAction(fromPlayerId, data);
+                handleRemotePlayerAction(fromPlayerId, data).catch(err => {
+                    console.warn('Remote action error:', err);
+                });
             }
         } else {
             // 访客接收房主状态同步
@@ -540,6 +553,7 @@
      * 房主处理远程玩家动作
      */
     async function handleRemotePlayerAction(fromPlayerId, action) {
+        if (!action || typeof action !== 'object' || !action.type) return;
         const engine = App.engine;
         if (!engine || engine.state !== 'playing') return;
 

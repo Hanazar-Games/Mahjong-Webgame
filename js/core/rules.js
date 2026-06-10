@@ -13,7 +13,8 @@ const Rules = (function() {
     const _MAX_CANWIN_CACHE = 5000;
 
     function _canWinCacheKey(hand, config) {
-        const tileKey = hand.map(t => `${t.suit}-${t.value}`).sort().join(',');
+        const tileKey = hand.filter(t => t && t.suit !== undefined)
+                    .map(t => `${t.suit}-${t.value}`).sort().join(',');
         // 缓存键必须包含所有影响胡牌判断的规则参数
         const cfg = config || {};
         const configKey = [
@@ -133,7 +134,7 @@ const Rules = (function() {
      */
     function canWin(hand, config = {}) {
         if (!hand || !Array.isArray(hand)) return { canWin: false };
-        if (hand.length % 3 !== 1 && hand.length % 3 !== 2) return { canWin: false };
+        if (hand.length % 3 !== 2 && (hand.length < 14 || hand.length % 2 !== 0)) return { canWin: false };
 
         const cached = _getCanWinCached(hand, config);
         if (cached !== undefined) return cached;
@@ -291,6 +292,7 @@ const Rules = (function() {
      * 标准规则：7个不同的对子，每种牌恰好2张，不允许四张相同牌拆成两对
      */
     function isSevenPairs(tiles) {
+        if (tiles.length === 0) return false;
         if (tiles.length % 2 !== 0) return false;
         const counts = countTiles(tiles);
         let pairCount = 0;
@@ -351,6 +353,7 @@ const Rules = (function() {
      * 判断是否可以吃
      */
     function canChi(hand, discard, config = {}) {
+        if (!hand || !Array.isArray(hand)) return [];
         if (!discard) return [];
         if (config.allowChi === false) return [];
         if (discard.isHonor || discard.isFlower) return [];
@@ -371,7 +374,7 @@ const Rules = (function() {
             const tileA = hand.find(t => t.suit === suit && t.value === a);
             const tileB = hand.find(t => t.suit === suit && t.value === b);
             if (tileA && tileB) {
-                results.push([tileA, tileB, { ...discard }]);
+                results.push([{ ...tileA }, { ...tileB }, { ...discard }]);
             }
         }
         
@@ -382,6 +385,7 @@ const Rules = (function() {
      * 判断是否可以碰
      */
     function canPeng(hand, discard, config = {}) {
+        if (!hand || !Array.isArray(hand)) return false;
         if (!discard) return false;
         if (config.allowPeng === false) return false;
         const sameTiles = hand.filter(t => isSameTile(t, discard));
@@ -392,6 +396,7 @@ const Rules = (function() {
      * 判断是否可以明杠
      */
     function canGang(hand, discard, config = {}) {
+        if (!hand || !Array.isArray(hand)) return false;
         if (!discard) return false;
         if (config.allowGang === false) return false;
         const sameTiles = hand.filter(t => isSameTile(t, discard));
@@ -402,6 +407,7 @@ const Rules = (function() {
      * 判断是否可以暗杠/加杠
      */
     function canAnGang(hand, melds, config = {}) {
+        if (!hand || !Array.isArray(hand)) return [];
         if (config.allowAnGang === false) return [];
         if (!Array.isArray(melds)) melds = [];
         const results = [];
@@ -561,7 +567,7 @@ const Rules = (function() {
         }
 
         // 杠
-        if (context.gangCount) {
+        if (Number.isFinite(context.gangCount) && context.gangCount > 0) {
             const gangFan = getFanValue(config, 'gang') * context.gangCount;
             if (gangFan > 0) {
                 fan += gangFan;

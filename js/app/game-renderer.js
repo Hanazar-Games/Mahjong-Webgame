@@ -42,9 +42,9 @@
         if (!handEl || !App.engine) return;
         
         const isSelf = playerIndex === 0;
-        const player = App.engine.players[playerIndex];
+        const player = App.engine.players?.[playerIndex];
         if (!player) return;
-        const displayMode = isSelf ? 'full' : App.settings.opponentDisplay;
+        const displayMode = isSelf ? 'full' : (App.settings?.opponentDisplay ?? 'small');
         
         if (isSelf || displayMode === 'full') {
             const hand = isSelf ? player.hand : (displayMode === 'full' ? player.hand : null);
@@ -70,18 +70,22 @@
             const fragment = document.createDocumentFragment();
             
             hand.forEach((tile, index) => {
+                if (!tile) {
+                    console.warn('renderPlayerHand: null tile at index', index);
+                    return;
+                }
                 let tileEl = existingEls.get(tile.id);
                 if (!tileEl) {
                     // 创建新元素
                     if (isSelf) {
                         tileEl = UIComponents.createTileElement(tile, {
                             draggable: true,
-                            showName: App.settings.showTileNames,
+                            showName: App.settings?.showTileNames ?? false,
                             onClick: (t) => AppEventBus.emit('tile:click', t),
                             onDragEnd: (t) => AppEventBus.emit('tile:dragend', t)
                         });
                     } else {
-                        tileEl = UIComponents.createTileElement(tile, { small: true, showName: App.settings.showTileNames });
+                        tileEl = UIComponents.createTileElement(tile, { small: true, showName: App.settings?.showTileNames ?? false });
                     }
                 } else {
                     // 复用现有元素，从Map中移除
@@ -145,7 +149,12 @@
                 }
             }
         } else if (displayMode === 'hidden') {
-            handEl.innerHTML = `<span style="color:var(--text-muted);font-size:0.8rem">${handSize}张</span>`;
+            const safeSize = Number(handSize) || 0;
+            const span = document.createElement('span');
+            span.style.cssText = 'color:var(--text-muted);font-size:0.8rem';
+            span.textContent = safeSize + '张';
+            handEl.innerHTML = '';
+            handEl.appendChild(span);
         }
     }
 
@@ -156,7 +165,7 @@
         const meldsEl = document.getElementById(`melds-${getPositionName(playerIndex)}`);
         if (!meldsEl || !App.engine) return;
         
-        const player = App.engine.players[playerIndex];
+        const player = App.engine.players?.[playerIndex];
         if (!player || !player.melds) return;
         
         const existingGroups = meldsEl.querySelectorAll('.meld-group');
@@ -288,7 +297,7 @@
             display.classList.add('hidden');
             return;
         }
-        const player = App.engine.players[0];
+        const player = App.engine.players?.[0];
         if (!player || !player.hand) {
             display.classList.add('hidden');
             return;
