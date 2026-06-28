@@ -2,10 +2,11 @@
  * 万能麻将 - Service Worker
  * 缓存静态资源，支持离线运行
  */
-const CACHE_NAME = 'mahjong-v1';
+const CACHE_NAME = 'mahjong-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
+  '/assets/tiles/red-dragon.svg',
   '/css/main.css',
   '/css/themes.css',
   '/css/game.css',
@@ -19,6 +20,7 @@ const STATIC_ASSETS = [
   '/js/core/engine.js',
   '/js/ai/ai-utils.js',
   '/js/ai/ai-player.js',
+  '/js/network/p2p.js',
   '/js/data/storage.js',
   '/js/data/stats.js',
   '/js/data/replay.js',
@@ -27,6 +29,7 @@ const STATIC_ASSETS = [
   '/js/app/event-bus.js',
   '/js/app/game-renderer.js',
   '/js/app/game-input.js',
+  '/js/app/event-bindings.js',
   '/js/app/engine-events.js',
   '/js/app/game-result.js',
   '/js/app/settings-ui.js',

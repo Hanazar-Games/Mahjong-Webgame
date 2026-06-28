@@ -9,9 +9,9 @@
   "orientation": "landscape",
   "icons": [
     {
-      "src": "assets/tiles/red-dragon.png",
-      "sizes": "64x64",
-      "type": "image/png"
+      "src": "assets/tiles/red-dragon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
     }
   ]
 }

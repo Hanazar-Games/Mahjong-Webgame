@@ -16,6 +16,7 @@
             if (!state.players[i]) continue;
             renderPlayerHand(i, state.players[i].handSize);
             renderPlayerMelds(i);
+            updatePlayerInfo(i, state.players[i]);
             updatePlayerScore(i, state.players[i].score);
         }
         
@@ -41,7 +42,8 @@
         const handEl = document.getElementById(`hand-${getPositionName(playerIndex)}`);
         if (!handEl || !App.engine) return;
         
-        const isSelf = playerIndex === 0;
+        const localIndex = App.localPlayerIndex ?? 0;
+        const isSelf = playerIndex === localIndex;
         const player = App.engine.players?.[playerIndex];
         if (!player) return;
         const displayMode = isSelf ? 'full' : (App.settings?.opponentDisplay ?? 'small');
@@ -114,7 +116,7 @@
             // 设置禁用状态和恢复选中
             if (isSelf) {
                 const engine = App.engine;
-                const shouldDisable = !engine || engine.currentPlayerIndex !== 0 || engine.state !== 'playing';
+                const shouldDisable = !engine || engine.currentPlayerIndex !== localIndex || engine.state !== 'playing';
                 handEl.querySelectorAll('.mahjong-tile').forEach(tile => {
                     tile.classList.toggle('disabled', shouldDisable);
                     if (selectedId && tile.dataset.id === selectedId) {
@@ -243,6 +245,16 @@
         if (scoreEl) scoreEl.textContent = score ?? '—';
     }
 
+    function updatePlayerInfo(index, player) {
+        const position = getPositionName(index);
+        const area = document.getElementById(`player-${position}`);
+        if (!area || !player) return;
+        const nameEl = area.querySelector('.player-name');
+        const avatarEl = area.querySelector('.player-avatar');
+        if (nameEl) nameEl.textContent = player.name || `玩家${index + 1}`;
+        if (avatarEl) avatarEl.textContent = player.isAI ? '🤖' : '👤';
+    }
+
     /**
      * 更新牌堆数量显示
      */
@@ -275,10 +287,12 @@
      */
     function getPositionName(index) {
         const count = App.engine?.config?.playerCount ?? 4;
+        const localIndex = App.localPlayerIndex ?? 0;
+        const relativeIndex = (index - localIndex + count) % count;
         if (count === 3) {
-            return ['bottom', 'left', 'right'][index];
+            return ['bottom', 'left', 'right'][relativeIndex];
         }
-        return ['bottom', 'right', 'top', 'left'][index];
+        return ['bottom', 'right', 'top', 'left'][relativeIndex];
     }
 
     /**
@@ -289,7 +303,8 @@
         const display = document.getElementById('shanten-display');
         const valueEl = document.getElementById('shanten-value');
         if (!display || !valueEl) return;
-        if (playerIndex !== 0 || !App.engine) {
+        const localIndex = App.localPlayerIndex ?? 0;
+        if (playerIndex !== localIndex || !App.engine) {
             display.classList.add('hidden');
             return;
         }
@@ -297,7 +312,7 @@
             display.classList.add('hidden');
             return;
         }
-        const player = App.engine.players?.[0];
+        const player = App.engine.players?.[localIndex];
         if (!player || !player.hand) {
             display.classList.add('hidden');
             return;

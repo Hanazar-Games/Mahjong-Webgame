@@ -89,8 +89,9 @@
             AppEventBus.emit('engine:turnStart', data);
             updatePlayerHighlight(data.index);
             
-            if (data.index === 0) {
-                updateShantenDisplay(0);
+            const localIndex = App.localPlayerIndex ?? 0;
+            if (data.index === localIndex) {
+                updateShantenDisplay(localIndex);
                 // 本地玩家回合：摸牌
                 engine.playerDraw().then((result) => {
                     // 防御引擎被销毁或替换的竞态
@@ -107,6 +108,17 @@
                 }).catch(err => {
                     console.warn('playerDraw error:', err);
                 });
+            } else if (App.isNetworkGame && App.network?.isHost) {
+                // 房主权威模式：远程玩家的摸牌也由房主引擎执行，再同步给对应访客。
+                engine.playerDraw().then(() => {
+                    if (!App.engine || App.engine !== engine || engine.state !== 'playing') {
+                        return;
+                    }
+                    engine.startTimer();
+                    broadcastGameState(true);
+                }).catch(err => {
+                    console.warn('remote playerDraw error:', err);
+                });
             } else if (App.isNetworkGame) {
                 // 联机模式下远程AI回合：广播状态让远程玩家可以观看
                 broadcastGameState();
@@ -120,7 +132,7 @@
             AppEventBus.emit('engine:draw', data);
             if (!data || !data.player) return;
             renderPlayerHand(data.index, data.player.handSize, true, data.tile?.id);
-            updateShantenDisplay(0);
+            updateShantenDisplay(App.localPlayerIndex ?? 0);
             updateDeckCount(data.deckCount);
             if (_isHumanPlayer(data.player.position)) {
                 AudioManager.SFX.draw();
@@ -147,7 +159,7 @@
         engine.on('actionAvailable', (data) => {
             AppEventBus.emit('engine:actionAvailable', data);
             if (!data || !data.player) return;
-            if (data.player.position === 0) {
+            if (data.player.position === (App.localPlayerIndex ?? 0)) {
                 enableActionButtons(data.action);
                 const now = Date.now();
                 if (now - _lastTickTime > 400) {
@@ -155,6 +167,7 @@
                     AudioManager.SFX.tick();
                 }
             }
+            if (App.isNetworkGame && App.network?.isHost) broadcastGameState(true);
         });
         
         engine.on('chi', (data) => {
@@ -275,7 +288,7 @@
         engine.on('ziMo', (data) => {
             AppEventBus.emit('engine:ziMo', data);
             if (!data || !data.player) return;
-            if (data.player.position === 0) {
+            if (data.player.position === (App.localPlayerIndex ?? 0)) {
                 enableActionButtons({ type: 'hu' });
             }
         });
@@ -283,7 +296,7 @@
         engine.on('anGangOptions', (data) => {
             AppEventBus.emit('engine:anGangOptions', data);
             if (!data || !data.player) return;
-            if (data.player.position === 0) {
+            if (data.player.position === (App.localPlayerIndex ?? 0)) {
                 App.anGangOptions = data.options;
                 enableActionButtons({ type: 'gang' });
             }
@@ -291,7 +304,7 @@
         
         engine.on('needDiscard', (data) => {
             AppEventBus.emit('engine:needDiscard', data);
-            if (data.index === 0) {
+            if (data.index === (App.localPlayerIndex ?? 0)) {
                 // 防御引擎被销毁的竞态
                 if (!App.engine || App.engine !== engine || engine.state !== 'playing') {
                     return;

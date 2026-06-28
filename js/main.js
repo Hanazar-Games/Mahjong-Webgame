@@ -12,6 +12,7 @@
         stats: null,
         currentScreen: 'main-menu',
         network: null,
+        localPlayerIndex: 0,
         anGangOptions: null,
         networkServerReachable: false
     };
@@ -76,6 +77,7 @@
         
         // 创建引擎
         App.engine = new MahjongEngine(config);
+        App.localPlayerIndex = 0;
         
         // 初始化玩家
         const playerConfigs = [

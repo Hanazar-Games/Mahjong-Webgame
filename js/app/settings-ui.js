@@ -167,11 +167,12 @@
                 if (key === 'show-tile-names') {
                     const enabled = !!value;
                     if (App.engine && App.currentScreen === 'game-screen') {
-                        renderPlayerHand(0, App.engine.players[0]?.hand?.length || 0);
+                        const localIndex = App.localPlayerIndex ?? 0;
+                        renderPlayerHand(localIndex, App.engine.players[localIndex]?.hand?.length || 0);
                     }
                 }
                 if (key === 'show-shanten') {
-                    updateShantenDisplay(0);
+                    updateShantenDisplay(App.localPlayerIndex ?? 0);
                 }
             }
         }

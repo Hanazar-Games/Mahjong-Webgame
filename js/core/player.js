@@ -8,6 +8,7 @@ class Player extends Utils.EventEmitter {
         this.id = id;
         this.name = name;
         this.isAI = isAI;
+        this.networkId = null;
         this.autoSort = autoSort;
         this.hand = [];
         this.melds = [];
@@ -116,6 +117,7 @@ class Player extends Utils.EventEmitter {
             id: this.id,
             name: this.name,
             isAI: this.isAI,
+            networkId: this.networkId,
             score: this.score,
             position: this.position,
             isDealer: this.isDealer,

@@ -14,7 +14,8 @@
 
     function handleTileClick(tile) {
         if (!App.engine || App.engine.state !== 'playing') return;
-        if (App.engine.currentPlayerIndex !== 0) return;
+        const localIndex = App.localPlayerIndex ?? 0;
+        if (App.engine.currentPlayerIndex !== localIndex) return;
         if (App._actionPending) return;
         
         // 限定查询范围到手牌区域，避免选中副露区的牌
@@ -49,10 +50,33 @@
     async function _doDiscard(tileId) {
         try {
             if (!App.engine || App.engine.state !== 'playing') return;
+            if (App.isNetworkGame && App.network && !App.network.isHost) {
+                sendNetworkPlayerAction({ type: 'discard', tileId });
+                return;
+            }
             await App.engine.playerDiscard(tileId);
         } catch (e) {
             console.warn('playerDiscard error:', e);
         }
+    }
+
+    function sendNetworkPlayerAction(action) {
+        if (!App.network || App.network.isHost) return false;
+        const host = (App.network.players || []).find(p => p.isHost);
+        if (!host) {
+            Utils.toast('未连接到房主，操作发送失败', 3000, 'error');
+            return false;
+        }
+        const sent = App.network.sendTo(host.id, { type: 'playerAction', data: action });
+        if (!sent) {
+            Utils.toast('操作发送失败，请检查联机连接', 3000, 'error');
+        } else {
+            disableActionButtons();
+            const skipBtn = document.getElementById('btn-skip');
+            if (skipBtn) skipBtn.disabled = true;
+            enablePlayerActions(false);
+        }
+        return sent;
     }
 
     /**
@@ -197,7 +221,8 @@
         App._actionPending = true;
         
         const engine = App.engine;
-        const player = engine.players[0];
+        const localIndex = App.localPlayerIndex ?? 0;
+        const player = engine.players[localIndex];
         if (!player) {
             App._actionPending = false;
             return;
@@ -212,29 +237,50 @@
                 if (engine.pendingAction?.action.type === 'chi' && engineStillValid()) {
                     const options = engine.pendingAction.action.options;
                     let actionToExecute = engine.pendingAction.action;
+                    let selectedOptionIndex = 0;
                     if (options && options.length > 1) {
                         const selected = await showChiOptionsSelector(options);
                         if (!engineStillValid() || selected === null) break;
+                        selectedOptionIndex = options.indexOf(selected);
                         actionToExecute = { ...engine.pendingAction.action, selectedOption: selected };
+                    }
+                    if (App.isNetworkGame && App.network && !App.network.isHost) {
+                        sendNetworkPlayerAction({ type: 'chi', selectedOptionIndex });
+                        break;
                     }
                     await engine.executeAction(player, actionToExecute);
                 }
                 break;
             case 'peng':
                 if (engine.pendingAction?.action.type === 'peng' && engineStillValid()) {
+                    if (App.isNetworkGame && App.network && !App.network.isHost) {
+                        sendNetworkPlayerAction({ type: 'peng' });
+                        break;
+                    }
                     await engine.executeAction(player, engine.pendingAction.action);
                 }
                 break;
             case 'gang':
                 if (engine.pendingAction?.action.type === 'gang' && engineStillValid()) {
                     // 明杠（碰后加杠或别人打出杠）
+                    if (App.isNetworkGame && App.network && !App.network.isHost) {
+                        sendNetworkPlayerAction({ type: 'gang' });
+                        break;
+                    }
                     await engine.executeAction(player, engine.pendingAction.action);
                 } else if (App.anGangOptions && App.anGangOptions.length > 0 && engineStillValid()) {
                     // 暗杠/加杠
                     let option = App.anGangOptions[0];
+                    let optionIndex = 0;
                     if (App.anGangOptions.length > 1) {
                         option = await showAnGangOptionsSelector(App.anGangOptions);
                         if (!engineStillValid() || option === null) break;
+                        optionIndex = App.anGangOptions.indexOf(option);
+                    }
+                    if (App.isNetworkGame && App.network && !App.network.isHost) {
+                        sendNetworkPlayerAction({ type: 'gang', optionIndex });
+                        App.anGangOptions = null;
+                        break;
                     }
                     await engine.executeAnGang(player, option);
                     App.anGangOptions = null;
@@ -246,24 +292,43 @@
                     console.error('Rules模块未加载');
                     break;
                 }
-                const isMyTurn = engine.currentPlayerIndex === 0;
-                const selfWin = isMyTurn ? Rules.canWin(player.hand, engine.ruleConfig) : null;
+                const isLocalTurn = engine.currentPlayerIndex === localIndex;
+                const selfWin = isLocalTurn ? Rules.canWin(player.hand, engine.ruleConfig) : null;
                 if (selfWin && selfWin.canWin && engineStillValid()) {
+                    if (App.isNetworkGame && App.network && !App.network.isHost) {
+                        sendNetworkPlayerAction({ type: 'hu', selfWin: true });
+                        break;
+                    }
                     await engine.executeAction(player, { type: 'hu', winInfo: selfWin });
                 } else if (engine.pendingAction?.action.type === 'hu' && engine.lastDiscard && engineStillValid()) {
                     // 点炮胡：必须通过pendingAction验证，防止利用过期lastDiscard作弊
+                    if (App.isNetworkGame && App.network && !App.network.isHost) {
+                        sendNetworkPlayerAction({ type: 'hu' });
+                        break;
+                    }
                     await engine.executeAction(player, engine.pendingAction.action);
                 }
                 break;
             case 'skip':
                 if (engine.pendingAction && engineStillValid()) {
+                    if (App.isNetworkGame && App.network && !App.network.isHost) {
+                        sendNetworkPlayerAction({ type: 'skip' });
+                        break;
+                    }
                     await engine.skipAction();
                 } else if (App.anGangOptions) {
+                    if (App.isNetworkGame && App.network && !App.network.isHost) {
+                        sendNetworkPlayerAction({ type: 'skip' });
+                    }
                     // 跳过暗杠，继续打牌
                     App.anGangOptions = null;
                     disableActionButtons();
                     enablePlayerActions(true);
-                } else if (engine.currentPlayerIndex === 0 && player.hand?.length > (engine.typeConfig?.handSize || 13) && engineStillValid()) {
+                } else if (engine.currentPlayerIndex === localIndex && player.hand?.length > (engine.typeConfig?.handSize || 13) && engineStillValid()) {
+                    if (App.isNetworkGame && App.network && !App.network.isHost) {
+                        sendNetworkPlayerAction({ type: 'skip' });
+                        break;
+                    }
                     // 跳过自摸，允许继续打牌
                     enablePlayerActions(true);
                     engine.startTimer();
@@ -433,7 +498,8 @@
     AppEventBus.on('tile:click', handleTileClick);
     AppEventBus.on('tile:dragend', (tile) => {
         if (!App.engine || App.engine.state !== 'playing') return;
-        if (App.engine.currentPlayerIndex !== 0) return;
+        const localIndex = App.localPlayerIndex ?? 0;
+        if (App.engine.currentPlayerIndex !== localIndex) return;
         _doDiscard(tile.id);
         enablePlayerActions(false);
     });

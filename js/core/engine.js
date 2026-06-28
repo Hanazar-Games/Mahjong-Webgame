@@ -84,6 +84,7 @@ class MahjongEngine extends Utils.EventEmitter {
         for (let i = 0; i < this.config.playerCount; i++) {
             const cfg = configs[i] || { name: `玩家${i + 1}`, isAI: true };
             const player = new Player(i, cfg.name, cfg.isAI, this.config.autoSort !== false);
+            player.networkId = cfg.networkId || null;
             player.position = i;
             player.score = this.config.targetScore;
             this.players.push(player);

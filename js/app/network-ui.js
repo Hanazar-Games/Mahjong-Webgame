@@ -76,6 +76,17 @@
         return true;
     }
 
+    function getHostPlayerId() {
+        return (App.network?.players || []).find(p => p.isHost)?.id || null;
+    }
+
+    function getLocalNetworkPlayerIndex(players) {
+        const localId = App.network?.playerId;
+        if (!localId || !Array.isArray(players)) return 0;
+        const idx = players.findIndex(p => p?.networkId === localId);
+        return idx >= 0 ? idx : 0;
+    }
+
     function bindNetworkLobbyEvents() {
         if (_networkLobbyEventsBound) return;
         _networkLobbyEventsBound = true;
@@ -111,6 +122,8 @@
                 try {
                     // 测试连接：discoverRooms 可以验证服务器可达
                     await App.network.discoverRooms();
+                    App.networkServerReachable = true;
+                    updateConnectionStatus('online');
                     Utils.toast('已连接到服务器', 3000, 'success');
                     refreshRoomList();
                 } catch (err) {
@@ -486,8 +499,8 @@
             const isHost = i === 0;
             playerConfigs.push({
                 name: p.name || (isHost ? '房主' : names[nameIdx++] || '玩家'),
-                isAI: !isHost,  // 非房主用AI，远程玩家可通过消息覆盖
-                networkId: isHost ? null : p.id
+                isAI: false,
+                networkId: p.id
             });
         }
 
@@ -496,6 +509,7 @@
         if (App.engine) { App.engine.destroy(); }
 
         App.engine = new MahjongEngine(config);
+        App.localPlayerIndex = 0;
         App.engine.initPlayers(playerConfigs);
         bindEngineEvents();
 
@@ -507,20 +521,50 @@
         await App.engine.start();
 
         // 广播初始状态给所有访客
-        broadcastGameState();
+        broadcastGameState(true);
     }
 
     /**
      * 广播游戏状态（房主）
      */
-    function broadcastGameState() {
+    function broadcastGameState(force = false) {
         if (!App.engine || !App.network || !App.network.isHost) return;
         const now = Date.now();
-        if (now - _lastBroadcastTime < 200) return;
+        if (!force && now - _lastBroadcastTime < 200) return;
         _lastBroadcastTime = now;
-        const state = App.engine.getState();
-        // 同时发送config以便访客正确初始化引擎
-        App.network.broadcast({ type: 'stateSync', state, config: App.engine.config });
+        const net = App.network;
+        for (const p of net.players || []) {
+            if (!p || p.id === net.playerId) continue;
+            const state = buildNetworkStateFor(p.id);
+            net.sendTo(p.id, { type: 'stateSync', state, config: App.engine.config });
+        }
+    }
+
+    function buildNetworkStateFor(targetPlayerId) {
+        const engine = App.engine;
+        const state = engine.getState();
+        state.players = engine.players.map(player => player.toJSON(player.networkId === targetPlayerId));
+        state.pendingAction = null;
+        state.selfActions = {};
+
+        if (engine.pendingAction?.player?.networkId === targetPlayerId) {
+            state.pendingAction = {
+                playerIndex: engine.pendingAction.player.position,
+                action: engine.pendingAction.action ? {
+                    ...engine.pendingAction.action,
+                    winInfo: engine.pendingAction.action.winInfo ? { ...engine.pendingAction.action.winInfo } : undefined
+                } : null
+            };
+        }
+
+        const targetPlayer = engine.players.find(p => p.networkId === targetPlayerId);
+        if (targetPlayer && engine.currentPlayerIndex === targetPlayer.position && engine.state === 'playing') {
+            const win = Rules.canWin(targetPlayer.hand, engine.ruleConfig);
+            state.selfActions.canHu = !!win.canWin;
+            state.selfActions.anGangOptions = Rules.canAnGang(targetPlayer.hand, targetPlayer.melds, engine.ruleConfig);
+        }
+
+        return state;
     }
 
     /**
@@ -559,18 +603,20 @@
 
         // 找到对应玩家索引
         const net = App.network;
-        const playerIdx = net.players.findIndex(p => p.id === fromPlayerId);
+        const playerIdx = engine.players.findIndex(p => p.networkId === fromPlayerId);
         if (playerIdx < 0) return;
         const player = engine.players[playerIdx];
         if (!player) return;
 
         // 安全检查：区分回合动作和claim动作
-        const turnActions = ['draw', 'discard'];
+        const turnActions = ['draw', 'discard', 'hu', 'gang', 'skip'];
         const claimActions = ['chi', 'peng', 'gang', 'hu', 'skip'];
         if (turnActions.includes(action.type)) {
             if (engine.currentPlayerIndex !== playerIdx) {
-                console.warn('Remote turn action from non-current player ignored');
-                return;
+                if (!claimActions.includes(action.type)) {
+                    console.warn('Remote turn action from non-current player ignored');
+                    return;
+                }
             }
             // draw 由引擎自动处理，无需远程触发
             if (action.type === 'draw') return;
@@ -591,7 +637,9 @@
                     break;
                 case 'chi':
                     if (engine.pendingAction?.action?.type === 'chi') {
-                        await engine.executeAction(player, engine.pendingAction.action);
+                        const options = engine.pendingAction.action.options || [];
+                        const selectedOption = options[action.selectedOptionIndex] || options[0];
+                        await engine.executeAction(player, { ...engine.pendingAction.action, selectedOption });
                     }
                     break;
                 case 'peng':
@@ -600,17 +648,24 @@
                     }
                     break;
                 case 'gang':
-                    if (engine.pendingAction?.action?.type === 'gang') {
+                    if (engine.pendingAction?.player?.position === playerIdx && engine.pendingAction?.action?.type === 'gang') {
                         await engine.executeAction(player, engine.pendingAction.action);
+                    } else if (engine.currentPlayerIndex === playerIdx) {
+                        const options = Rules.canAnGang(player.hand, player.melds, engine.ruleConfig);
+                        const option = options[action.optionIndex || 0];
+                        if (option) await engine.executeAnGang(player, option);
                     }
                     break;
                 case 'hu':
-                    if (engine.pendingAction?.action?.type === 'hu' && engine.lastDiscard) {
+                    if (action.selfWin && engine.currentPlayerIndex === playerIdx) {
+                        const win = Rules.canWin(player.hand, engine.ruleConfig);
+                        if (win.canWin) await engine.executeHu(player, { type: 'hu', winInfo: win });
+                    } else if (engine.pendingAction?.player?.position === playerIdx && engine.pendingAction?.action?.type === 'hu' && engine.lastDiscard) {
                         await engine.executeAction(player, engine.pendingAction.action);
                     }
                     break;
                 case 'skip':
-                    if (engine.pendingAction) {
+                    if (engine.pendingAction?.player?.position === playerIdx) {
                         await engine.skipAction();
                     }
                     break;
@@ -633,6 +688,7 @@
         }
         const state = data.state;
         const config = data.config || state.config || { mahjongType: 'guangdong', playerCount: state.players.length };
+        App.localPlayerIndex = getLocalNetworkPlayerIndex(state.players);
 
         // 如果还没有engine，创建一个用于渲染
         if (!App.engine) {
@@ -641,7 +697,8 @@
                 // 初始化玩家（名字从状态中恢复）
                 const playerConfigs = (state.players || []).map((p, i) => ({
                     name: p.name || `玩家${i+1}`,
-                    isAI: p.isAI !== false
+                    isAI: p.networkId !== App.network?.playerId,
+                    networkId: p.networkId || null
                 }));
                 App.engine.initPlayers(playerConfigs);
                 bindEngineEvents();
@@ -669,14 +726,48 @@
                 const ep = engine.players[i];
                 if (!sp || !ep) continue;
                 ep.score = sp.score ?? ep.score;
+                ep.networkId = sp.networkId || ep.networkId;
+                ep.name = sp.name || ep.name;
+                ep.isAI = i !== (App.localPlayerIndex ?? 0);
                 ep.handSize = sp.handSize ?? ep.handSize;
+                if (Array.isArray(sp.hand)) {
+                    ep.hand = sp.hand;
+                }
                 ep.melds = sp.melds || ep.melds;
+                ep.discards = sp.discards || ep.discards;
+                ep.flowers = sp.flowers || ep.flowers;
                 ep.isDealer = sp.isDealer ?? ep.isDealer;
                 ep.isHu = sp.isHu ?? ep.isHu;
                 ep.gangCount = sp.gangCount ?? ep.gangCount;
             }
         }
 
+        disableActionButtons();
+        const skipBtn = document.getElementById('btn-skip');
+        if (skipBtn) skipBtn.disabled = true;
+
+        if (state.pendingAction?.action && state.pendingAction.playerIndex === (App.localPlayerIndex ?? 0)) {
+            const player = engine.players[App.localPlayerIndex ?? 0];
+            engine.pendingAction = { player, action: state.pendingAction.action };
+            enableActionButtons(state.pendingAction.action);
+            if (skipBtn) skipBtn.disabled = false;
+        } else {
+            engine.pendingAction = null;
+        }
+
+        App.anGangOptions = state.selfActions?.anGangOptions || null;
+        if (state.selfActions?.canHu) enableActionButtons({ type: 'hu' });
+        if (App.anGangOptions?.length) enableActionButtons({ type: 'gang' });
+        if ((state.selfActions?.canHu || App.anGangOptions?.length) && skipBtn) {
+            skipBtn.disabled = false;
+        }
+
         // 渲染
         renderGameState();
+
+        if (engine.currentPlayerIndex === (App.localPlayerIndex ?? 0) && engine.state === 'playing') {
+            enablePlayerActions(true);
+        } else {
+            enablePlayerActions(false);
+        }
     }
