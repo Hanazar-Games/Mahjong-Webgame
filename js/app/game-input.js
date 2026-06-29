@@ -373,13 +373,15 @@
             const btn = document.getElementById(btnId);
             if (btn) btn.disabled = false;
         }
+        const skipBtn = document.getElementById('btn-skip');
+        if (skipBtn) skipBtn.disabled = false;
     }
 
     /**
      * 禁用操作按钮
      */
     function disableActionButtons() {
-        ['btn-chi', 'btn-peng', 'btn-gang', 'btn-hu'].forEach(id => {
+        ['btn-chi', 'btn-peng', 'btn-gang', 'btn-hu', 'btn-skip'].forEach(id => {
             const btn = document.getElementById(id);
             if (btn) btn.disabled = true;
         });

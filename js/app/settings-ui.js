@@ -149,8 +149,11 @@
                     if (enabled) AudioManager.SFX.toggleSwitch();
                 }
                 if (key === 'bgm-style') {
-                    // BGM 已禁用
-                    AudioManager.stopBgm();
+                    if (value === 'none' || (App.settings.bgmVolume || 0) <= 0) {
+                        AudioManager.stopBgm();
+                    } else {
+                        AudioManager.startBgm(value);
+                    }
                 }
                 if (key === 'game-speed') {
                     if (typeof updateAnimSpeed === 'function') {
@@ -205,6 +208,10 @@
         // 同步音频系统（即时）
         if (el.id === 'bgm-volume') {
             AudioManager.setBgmVolume(parseInt(el.value) / 100);
+            const style = App.settings.bgmStyle;
+            if (style && style !== 'none' && parseInt(el.value) > 0 && !AudioManager.isPlaying) {
+                AudioManager.startBgm(style);
+            }
         }
         if (el.id === 'sfx-volume') {
             AudioManager.setSfxVolume(parseInt(el.value) / 100);

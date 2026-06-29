@@ -507,9 +507,33 @@ const AudioManager = (function() {
     };
 
     function startBgm(style = 'calm') {
-        // BGM 已禁用 - 不播放任何背景音乐
         stopBgm();
-        return;
+        const pattern = BGM_PATTERNS[style];
+        currentBgm = pattern ? style : null;
+        if (!pattern || bgmVolume <= 0.0001) return;
+
+        init();
+        resume();
+        if (!audioCtx || !bgmGain) return;
+
+        bgmPlaying = true;
+        const loop = () => {
+            if (!bgmPlaying || currentBgm !== style) return;
+            const activePattern = BGM_PATTERNS[style];
+            const melody = activePattern.notes[Math.floor(Math.random() * activePattern.notes.length)];
+            const startTime = audioCtx.currentTime + 0.08;
+            const endTime = schedulePhrase(
+                melody,
+                startTime,
+                activePattern.tempo,
+                activePattern.scale,
+                activePattern.type,
+                activePattern.harmony
+            );
+            const delay = Math.max(250, (endTime - audioCtx.currentTime) * 1000);
+            bgmTimer = setTimeout(loop, delay);
+        };
+        loop();
     }
 
     function schedulePhrase(melody, startTime, tempo, scale, oscType, addHarmony) {
@@ -569,6 +593,7 @@ const AudioManager = (function() {
 
     function stopBgm() {
         bgmPlaying = false;
+        currentBgm = null;
         if (bgmTimer) {
             clearTimeout(bgmTimer);
             bgmTimer = null;
@@ -580,6 +605,7 @@ const AudioManager = (function() {
     function setBgmVolume(vol) {
         bgmVolume = Math.max(0, Math.min(1, vol));
         if (bgmGain) bgmGain.gain.value = bgmVolume;
+        if (bgmVolume <= 0.0001 && bgmPlaying) stopBgm();
     }
 
     function setSfxVolume(vol) {
@@ -616,6 +642,7 @@ const AudioManager = (function() {
         setBgmVolume, setSfxVolume, setMuted, setSfxEnabled,
         getBgmVolume, getSfxVolume,
         get isPlaying() { return bgmPlaying; },
+        get currentBgm() { return currentBgm; },
         get isSfxEnabled() { return sfxEnabled; }
     };
 })();

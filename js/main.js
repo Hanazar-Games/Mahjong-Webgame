@@ -31,11 +31,14 @@
         // 初始化动画速度
         updateAnimSpeed(App.settings.gameSpeed);
         
-        // 初始化音频系统（BGM 已禁用，仅保留 SFX）
+        // 初始化音频系统（BGM 默认关闭，可在设置中开启）
         AudioManager.setupUserInteraction();
-        AudioManager.setBgmVolume(0);
+        AudioManager.setBgmVolume((App.settings.bgmVolume || 0) / 100);
         AudioManager.setSfxVolume(App.settings.sfxVolume / 100);
         AudioManager.setSfxEnabled(App.settings.sfxEnabled !== false);
+        if (App.settings.bgmStyle && App.settings.bgmStyle !== 'none' && (App.settings.bgmVolume || 0) > 0) {
+            AudioManager.startBgm(App.settings.bgmStyle);
+        }
         
         // 隐藏加载画面
         setTimeout(() => {

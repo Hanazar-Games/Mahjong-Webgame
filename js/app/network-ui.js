@@ -599,7 +599,7 @@
     async function handleRemotePlayerAction(fromPlayerId, action) {
         if (!action || typeof action !== 'object' || !action.type) return;
         const engine = App.engine;
-        if (!engine || engine.state !== 'playing') return;
+        if (!engine || (engine.state !== 'playing' && engine.state !== 'waiting')) return;
 
         // 找到对应玩家索引
         const net = App.network;
