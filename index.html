@@ -114,17 +114,17 @@
             <div class="modal-panel settings-panel">
                 <div class="modal-panel-header">
                     <h3 id="settings-title">⚙️ 游戏设置</h3>
-                    <button class="modal-close" id="settings-close">✕</button>
+                    <button class="modal-close" id="settings-close" title="关闭设置" aria-label="关闭设置">✕</button>
                 </div>
                 <div class="modal-panel-body">
                     <div class="settings-group">
                         <h4>玩家</h4>
                         <div class="setting-row">
-                            <label>名称</label>
+                            <label for="player-name">名称</label>
                             <input type="text" id="player-name" value="玩家" maxlength="8">
                         </div>
                         <div class="setting-row">
-                            <label>AI 难度</label>
+                            <label for="ai-difficulty">AI 难度</label>
                             <select id="ai-difficulty">
                                 <option value="easy">简单</option>
                                 <option value="normal" selected>普通</option>
@@ -136,7 +136,7 @@
                     <div class="settings-group">
                         <h4>牌局</h4>
                         <div class="setting-row">
-                            <label>局数</label>
+                            <label for="game-rounds">局数</label>
                             <select id="game-rounds">
                                 <option value="1">1局</option>
                                 <option value="4" selected>4局</option>
@@ -145,7 +145,7 @@
                             </select>
                         </div>
                         <div class="setting-row">
-                            <label>速度</label>
+                            <label for="game-speed">速度</label>
                             <select id="game-speed">
                                 <option value="slow">慢速</option>
                                 <option value="normal" selected>正常</option>
@@ -157,7 +157,7 @@
                     <div class="settings-group">
                         <h4>外观</h4>
                         <div class="setting-row">
-                            <label>牌桌主题</label>
+                            <label for="table-theme">牌桌主题</label>
                             <select id="table-theme">
                                 <option value="classic-green" selected>经典绿</option>
                                 <option value="dark-blue">深海蓝</option>
@@ -169,7 +169,7 @@
                             </select>
                         </div>
                         <div class="setting-row">
-                            <label>对手牌显示</label>
+                            <label for="opponent-display">对手牌显示</label>
                             <select id="opponent-display">
                                 <option value="hidden">隐藏</option>
                                 <option value="small" selected>小牌堆</option>
@@ -180,24 +180,24 @@
                     <div class="settings-group">
                         <h4>声音</h4>
                         <div class="setting-row slider-row">
-                            <label>BGM</label>
+                            <label for="bgm-volume">BGM</label>
                             <input type="range" id="bgm-volume" min="0" max="100" value="50">
-                            <span class="slider-value" id="bgm-value">50%</span>
+                            <span class="slider-value" id="bgm-volume-value">50%</span>
                         </div>
                         <div class="setting-row slider-row">
-                            <label>音效</label>
+                            <label for="sfx-volume">音效</label>
                             <input type="range" id="sfx-volume" min="0" max="100" value="50">
-                            <span class="slider-value" id="sfx-value">50%</span>
+                            <span class="slider-value" id="sfx-volume-value">50%</span>
                         </div>
                         <div class="setting-row toggle-row">
-                            <label>音效开关</label>
+                            <label for="sfx-enabled">音效开关</label>
                             <label class="toggle-switch">
                                 <input type="checkbox" id="sfx-enabled" checked>
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
                         <div class="setting-row">
-                            <label>BGM 风格</label>
+                            <label for="bgm-style">BGM 风格</label>
                             <select id="bgm-style">
                                 <option value="none" selected>关闭</option>
                                 <option value="calm">悠然</option>
@@ -209,21 +209,21 @@
                     <div class="settings-group">
                         <h4>辅助</h4>
                         <div class="setting-row toggle-row">
-                            <label>显示牌名</label>
+                            <label for="show-tile-names">显示牌名</label>
                             <label class="toggle-switch">
                                 <input type="checkbox" id="show-tile-names">
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
                         <div class="setting-row toggle-row">
-                            <label>显示向听数</label>
+                            <label for="show-shanten">显示向听数</label>
                             <label class="toggle-switch">
                                 <input type="checkbox" id="show-shanten">
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
                         <div class="setting-row toggle-row">
-                            <label>自动理牌</label>
+                            <label for="auto-sort">自动理牌</label>
                             <label class="toggle-switch">
                                 <input type="checkbox" id="auto-sort" checked>
                                 <span class="toggle-slider"></span>
@@ -340,7 +340,7 @@
             <div class="modal-panel pause-panel">
                 <div class="modal-panel-header">
                     <h3 id="ingame-title">☰ 暂停</h3>
-                    <button class="modal-close" id="btn-resume">✕</button>
+                    <button class="modal-close" id="btn-resume" title="关闭菜单" aria-label="关闭菜单">✕</button>
                 </div>
                 <div class="modal-panel-body pause-actions">
                     <button class="pause-action-btn primary" id="btn-resume-main">

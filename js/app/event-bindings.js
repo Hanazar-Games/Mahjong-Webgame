@@ -66,7 +66,10 @@
         });
         
         // 游戏内暂停菜单
-        document.getElementById('btn-menu')?.addEventListener('click', showIngameMenu);
+        document.getElementById('btn-menu')?.addEventListener('click', () => {
+            AudioManager.SFX.buttonClick();
+            showIngameMenu();
+        });
         document.getElementById('btn-resume')?.addEventListener('click', () => {
             AudioManager.SFX.buttonClick();
             hideIngameMenu();

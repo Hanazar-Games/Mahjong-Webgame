@@ -48,6 +48,11 @@ const AudioManager = (function() {
         }
     }
 
+    function ensureAudio() {
+        init();
+        resume();
+        return !!audioCtx;
+    }
 
     // SFX timer 管理（防止游戏切换后旧音效仍播放）
     function sfxTimeout(fn, delay) {
@@ -70,7 +75,7 @@ const AudioManager = (function() {
      * FM合成器 - 用于丰富音色
      */
     function playFM(options = {}) {
-        if (!audioCtx || !sfxEnabled) return;
+        if (!ensureAudio() || !sfxEnabled) return;
         const {
             carrier = 440,
             modulator = 220,
@@ -126,7 +131,7 @@ const AudioManager = (function() {
      * 噪声合成器 - 用于滑动/碰撞声
      */
     function playNoise(options = {}) {
-        if (!audioCtx || !sfxEnabled) return;
+        if (!ensureAudio() || !sfxEnabled) return;
         const {
             duration = 0.2,
             frequency = 1000,
@@ -179,7 +184,7 @@ const AudioManager = (function() {
      * 打击合成器
      */
     function playPerc(options = {}) {
-        if (!audioCtx || !sfxEnabled) return;
+        if (!ensureAudio() || !sfxEnabled) return;
         const {
             freq = 200,
             decay = 0.15,
@@ -235,7 +240,7 @@ const AudioManager = (function() {
      * 和弦合成器
      */
     function playChord(freqs, options = {}) {
-        if (!audioCtx || !sfxEnabled) return;
+        if (!ensureAudio() || !sfxEnabled) return;
         const { duration = 0.5, volume = 0.4, type = 'sine', stagger = 0.04 } = options;
         const amp = (volume || 0) * sfxVolume;
         if (amp <= 0.0001) return;
@@ -270,7 +275,7 @@ const AudioManager = (function() {
      * 铃铛合成器
      */
     function playBell(freq, options = {}) {
-        if (!audioCtx || !sfxEnabled) return;
+        if (!ensureAudio() || !sfxEnabled) return;
         const { duration = 1.5, volume = 0.4 } = options;
         const amp = (volume || 0) * sfxVolume;
         if (amp <= 0.0001) return;
@@ -628,8 +633,10 @@ const AudioManager = (function() {
     function setupUserInteraction() {
         const events = ['click', 'touchstart', 'keydown'];
         const handler = () => {
+            const bgmToResume = bgmPlaying ? currentBgm : null;
             init();
             resume();
+            if (bgmToResume) startBgm(bgmToResume);
             events.forEach(e => document.removeEventListener(e, handler));
         };
         events.forEach(e => document.addEventListener(e, handler, { once: true }));

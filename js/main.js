@@ -36,9 +36,7 @@
         AudioManager.setBgmVolume((App.settings.bgmVolume || 0) / 100);
         AudioManager.setSfxVolume(App.settings.sfxVolume / 100);
         AudioManager.setSfxEnabled(App.settings.sfxEnabled !== false);
-        if (App.settings.bgmStyle && App.settings.bgmStyle !== 'none' && (App.settings.bgmVolume || 0) > 0) {
-            AudioManager.startBgm(App.settings.bgmStyle);
-        }
+        startConfiguredBgm();
         
         // 隐藏加载画面
         setTimeout(() => {
@@ -77,6 +75,7 @@
             App.engine.destroy();
         }
         AudioManager.stopAllSfx();
+        startConfiguredBgm();
         
         // 创建引擎
         App.engine = new MahjongEngine(config);
@@ -150,7 +149,15 @@
         const scale = speed === 'instant' ? 0.01 : (speed === 'fast' ? 0.5 : 1);
         document.documentElement.style.setProperty('--anim-speed', String(scale));
     }
+
+    function startConfiguredBgm() {
+        if (App.settings?.bgmStyle && App.settings.bgmStyle !== 'none' && (App.settings.bgmVolume || 0) > 0) {
+            AudioManager.setBgmVolume(App.settings.bgmVolume / 100);
+            AudioManager.startBgm(App.settings.bgmStyle);
+        }
+    }
     window.updateAnimSpeed = updateAnimSpeed;
+    window.startConfiguredBgm = startConfiguredBgm;
 
     // 暴露全局引用供拆分模块使用
     window.App = App;

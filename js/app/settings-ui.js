@@ -149,9 +149,18 @@
                     if (enabled) AudioManager.SFX.toggleSwitch();
                 }
                 if (key === 'bgm-style') {
-                    if (value === 'none' || (App.settings.bgmVolume || 0) <= 0) {
+                    if (value === 'none') {
                         AudioManager.stopBgm();
                     } else {
+                        if ((App.settings.bgmVolume || 0) <= 0) {
+                            App.settings.bgmVolume = 30;
+                            const bgmSlider = document.getElementById('bgm-volume');
+                            const bgmLabel = document.getElementById('bgm-volume-value');
+                            if (bgmSlider) bgmSlider.value = '30';
+                            if (bgmLabel) bgmLabel.textContent = '30%';
+                            Stats.saveSettings(App.settings);
+                        }
+                        AudioManager.setBgmVolume(App.settings.bgmVolume / 100);
                         AudioManager.startBgm(value);
                     }
                 }

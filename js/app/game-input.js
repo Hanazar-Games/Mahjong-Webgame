@@ -418,7 +418,7 @@
         if (e.ctrlKey || e.altKey || e.metaKey) return;
         
         // 如果有模态框打开，忽略游戏快捷键（ESC除外）
-        const hasModal = document.querySelector('.modal');
+        const hasModal = document.querySelector('.modal:not(.hidden)');
         if (hasModal && e.key !== 'Escape') return;
         
         // 如果菜单已打开，ESC关闭菜单
