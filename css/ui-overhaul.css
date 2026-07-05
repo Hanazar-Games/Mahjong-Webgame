@@ -613,13 +613,74 @@
 
 /* 牌桌布局调整 */
 #game-screen .game-table {
-    padding-top: 56px;
-    padding-bottom: 90px;
+    display: grid;
+    grid-template-areas:
+        ". top ."
+        "left center right"
+        ". bottom .";
+    grid-template-columns: clamp(96px, 9vw, 142px) minmax(0, 1fr) clamp(96px, 9vw, 142px);
+    grid-template-rows: clamp(96px, 13vh, 140px) minmax(0, 1fr) clamp(172px, 25vh, 238px);
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    gap: 8px;
+    padding: max(56px, env(safe-area-inset-top)) 14px max(18px, env(safe-area-inset-bottom)) 14px;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 /* 玩家区域 */
 .player-area {
+    position: relative !important;
+    inset: auto !important;
+    min-width: 0;
+    min-height: 0;
+    max-width: 100%;
+    max-height: 100%;
+    overflow: visible;
     z-index: 5;
+    transform: none !important;
+}
+
+.player-area.top {
+    grid-area: top;
+    align-self: stretch;
+    justify-self: stretch;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    overflow: hidden;
+}
+
+.player-area.left {
+    grid-area: left;
+    align-self: stretch;
+    justify-self: center;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.player-area.right {
+    grid-area: right;
+    align-self: stretch;
+    justify-self: center;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.player-area.bottom {
+    grid-area: bottom;
+    align-self: end;
+    justify-self: stretch;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    overflow: hidden;
 }
 
 .player-info {
@@ -641,6 +702,57 @@
     font-variant-numeric: tabular-nums;
     min-width: 40px;
     text-align: right;
+}
+
+.player-area.top .hand-area,
+.player-area.bottom .hand-area {
+    max-width: 100%;
+    min-width: 0;
+    justify-content: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.player-area.top .hand-area::-webkit-scrollbar,
+.player-area.bottom .hand-area::-webkit-scrollbar {
+    display: none;
+}
+
+.player-area.left .hand-area,
+.player-area.right .hand-area {
+    flex-direction: column;
+    align-items: center;
+    max-height: calc(100% - 52px);
+    overflow: hidden;
+}
+
+.player-area.left .melds-area,
+.player-area.right .melds-area {
+    max-height: 30%;
+    overflow: hidden;
+}
+
+#game-screen .table-center {
+    position: relative;
+    inset: auto;
+    grid-area: center;
+    align-self: stretch;
+    justify-self: stretch;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    transform: none !important;
+}
+
+#game-screen .game-table.three-player {
+    grid-template-areas:
+        ". . ."
+        "left center right"
+        ". bottom .";
+    grid-template-columns: clamp(88px, 8vw, 128px) minmax(0, 1fr) clamp(88px, 8vw, 128px);
+    grid-template-rows: clamp(44px, 8vh, 72px) minmax(0, 1fr) clamp(172px, 25vh, 238px);
 }
 
 /* 回合指示器 */
@@ -684,7 +796,7 @@
 /* 动作按钮栏 */
 .action-bar {
     position: absolute;
-    bottom: 16px;
+    bottom: clamp(128px, 19vh, 190px);
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -1213,12 +1325,16 @@
         gap: 3px;
     }
 
-    /* 3人模式移动端 */
-    .game-table.three-player .player-area.left {
-        left: 4px;
+    #game-screen .game-table {
+        grid-template-columns: 70px minmax(0, 1fr) 70px;
+        grid-template-rows: 92px minmax(0, 1fr) 170px;
+        gap: 4px;
+        padding-left: 8px;
+        padding-right: 8px;
     }
-    .game-table.three-player .player-area.right {
-        right: 4px;
+    #game-screen .game-table.three-player {
+        grid-template-columns: 66px minmax(0, 1fr) 66px;
+        grid-template-rows: 40px minmax(0, 1fr) 170px;
     }
 
     /* 结算页移动端 */
