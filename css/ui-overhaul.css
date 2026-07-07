@@ -693,7 +693,7 @@
     gap: 10px;
 }
 
-.player-info.current-turn {
+.player-area.current-turn .player-info {
     box-shadow: var(--turn-glow);
     border-color: rgba(212, 168, 67, 0.4);
 }
@@ -723,14 +723,46 @@
 .player-area.right .hand-area {
     flex-direction: column;
     align-items: center;
-    max-height: calc(100% - 52px);
-    overflow: hidden;
+    gap: 1px;
+    max-height: calc(100% - 48px);
+    overflow: visible;
 }
 
 .player-area.left .melds-area,
 .player-area.right .melds-area {
     max-height: 30%;
     overflow: hidden;
+}
+
+#game-screen .player-area.left .player-info,
+#game-screen .player-area.right .player-info {
+    max-width: 100%;
+    padding: 5px 8px;
+    gap: 6px;
+}
+
+#game-screen .player-area.left .player-name,
+#game-screen .player-area.right .player-name {
+    max-width: clamp(48px, 5vw, 72px);
+}
+
+#game-screen .player-area.left .player-score,
+#game-screen .player-area.right .player-score {
+    min-width: 34px;
+}
+
+#game-screen .player-area.left .mahjong-tile,
+#game-screen .player-area.right .mahjong-tile,
+#game-screen .player-area.left .mahjong-tile.back,
+#game-screen .player-area.right .mahjong-tile.back {
+    width: clamp(24px, 2.8vw, 36px);
+    height: clamp(30px, 3.8vh, 48px);
+    border-radius: 7px;
+}
+
+#game-screen .player-area.left .mahjong-tile .tile-face,
+#game-screen .player-area.right .mahjong-tile .tile-face {
+    font-size: clamp(1rem, 1.8vw, 1.45rem);
 }
 
 #game-screen .table-center {
@@ -1335,6 +1367,13 @@
     #game-screen .game-table.three-player {
         grid-template-columns: 66px minmax(0, 1fr) 66px;
         grid-template-rows: 40px minmax(0, 1fr) 170px;
+    }
+    #game-screen .player-area.left .mahjong-tile,
+    #game-screen .player-area.right .mahjong-tile,
+    #game-screen .player-area.left .mahjong-tile.back,
+    #game-screen .player-area.right .mahjong-tile.back {
+        width: 30px;
+        height: 40px;
     }
 
     /* 结算页移动端 */
