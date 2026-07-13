@@ -42,6 +42,25 @@ const AudioManager = (function() {
         }
     }
 
+    /**
+     * 重新连接分轨总线，让已经排程的旧音源立即静音。
+     * Web Audio 的 stop 定时只能阻止后续排程，断开旧总线才能可靠停止正在播放的长音。
+     */
+    function resetGainBus(kind) {
+        if (!audioCtx || !masterGain) return;
+        const previous = kind === 'bgm' ? bgmGain : sfxGain;
+        const next = audioCtx.createGain();
+        next.gain.value = kind === 'bgm' ? bgmVolume : sfxVolume;
+        next.connect(masterGain);
+        if (kind === 'bgm') bgmGain = next;
+        else sfxGain = next;
+        try {
+            previous?.disconnect();
+        } catch (_) {
+            // 某些旧浏览器会在重复 disconnect 时抛错；新总线已经接管，不影响后续播放。
+        }
+    }
+
     function resume() {
         if (audioCtx && audioCtx.state === 'suspended') {
             audioCtx.resume();
@@ -67,6 +86,7 @@ const AudioManager = (function() {
     function clearAllSfxTimers() {
         activeSfxTimers.forEach(id => clearTimeout(id));
         activeSfxTimers.clear();
+        resetGainBus('sfx');
     }
 
     // ============ 高级合成器 ============
@@ -87,7 +107,7 @@ const AudioManager = (function() {
             volume = 0.3
         } = options;
 
-        const amp = (volume || 0) * sfxVolume;
+        const amp = Math.max(0, volume || 0);
         if (amp <= 0.0001) return;
 
         const now = audioCtx.currentTime;
@@ -141,7 +161,7 @@ const AudioManager = (function() {
             decay = 0.15
         } = options;
 
-        const amp = (volume || 0) * sfxVolume;
+        const amp = Math.max(0, volume || 0);
         if (amp <= 0.0001) return;
 
         const now = audioCtx.currentTime;
@@ -194,7 +214,7 @@ const AudioManager = (function() {
             harmonics = []
         } = options;
 
-        const amp = (volume || 0) * sfxVolume;
+        const amp = Math.max(0, volume || 0);
         if (amp <= 0.0001) return;
 
         const now = audioCtx.currentTime;
@@ -242,7 +262,7 @@ const AudioManager = (function() {
     function playChord(freqs, options = {}) {
         if (!ensureAudio() || !sfxEnabled) return;
         const { duration = 0.5, volume = 0.4, type = 'sine', stagger = 0.04 } = options;
-        const amp = (volume || 0) * sfxVolume;
+        const amp = Math.max(0, volume || 0);
         if (amp <= 0.0001) return;
 
         const now = audioCtx.currentTime;
@@ -277,7 +297,7 @@ const AudioManager = (function() {
     function playBell(freq, options = {}) {
         if (!ensureAudio() || !sfxEnabled) return;
         const { duration = 1.5, volume = 0.4 } = options;
-        const amp = (volume || 0) * sfxVolume;
+        const amp = Math.max(0, volume || 0);
         if (amp <= 0.0001) return;
 
         const now = audioCtx.currentTime;
@@ -563,7 +583,7 @@ const AudioManager = (function() {
         osc.frequency.value = freq;
 
         gain.gain.setValueAtTime(0, time);
-        gain.gain.linearRampToValueAtTime(bgmVolume * 0.06, time + 0.08);
+        gain.gain.linearRampToValueAtTime(0.06, time + 0.08);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration - 0.03);
 
         osc.connect(gain);
@@ -582,7 +602,7 @@ const AudioManager = (function() {
             harm.type = 'sine';
             harm.frequency.value = freq * 1.5;
             harmGain.gain.setValueAtTime(0, time + 0.05);
-            harmGain.gain.linearRampToValueAtTime(Math.max(bgmVolume * 0.025, 0.0001), time + 0.12);
+            harmGain.gain.linearRampToValueAtTime(0.025, time + 0.12);
             harmGain.gain.exponentialRampToValueAtTime(0.001, time + duration * 0.6);
             harm.connect(harmGain);
             harmGain.connect(bgmGain);
@@ -603,6 +623,7 @@ const AudioManager = (function() {
             clearTimeout(bgmTimer);
             bgmTimer = null;
         }
+        resetGainBus('bgm');
     }
 
     // ============ 音量控制 ============
@@ -624,7 +645,8 @@ const AudioManager = (function() {
     }
 
     function setSfxEnabled(enabled) {
-        sfxEnabled = enabled;
+        sfxEnabled = !!enabled;
+        if (!sfxEnabled) clearAllSfxTimers();
     }
 
     function getBgmVolume() { return bgmVolume; }

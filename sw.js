@@ -2,7 +2,7 @@
  * 万能麻将 - Service Worker
  * 缓存静态资源，支持离线运行
  */
-const CACHE_NAME = 'mahjong-v6';
+const CACHE_NAME = 'mahjong-v7';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -56,7 +56,12 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
+  if (e.request.method !== 'GET') return;
+
   e.respondWith(
-    caches.match(e.request).then((res) => res || fetch(e.request))
+    caches.match(e.request).then((res) => res || fetch(e.request)).catch(() => {
+      if (e.request.mode === 'navigate') return caches.match('./index.html');
+      return Response.error();
+    })
   );
 });

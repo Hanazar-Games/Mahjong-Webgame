@@ -403,23 +403,45 @@
      * 键盘事件
      */
     function handleKeydown(e) {
+        // 忽略重复按键（长按不连续关闭多层弹窗或触发游戏操作）
+        if (e.repeat) return;
+
+        // 模态框键盘行为不依赖当前页面：主菜单设置同样应支持 Esc 和焦点循环。
+        const openModal = document.querySelector('.modal:not(.hidden)');
+        if (openModal) {
+            if (e.key === 'Escape') {
+                if (openModal.id === 'settings-modal') hideSettingsModal();
+                else if (openModal.id === 'ingame-menu') hideIngameMenu();
+                e.preventDefault();
+            } else if (e.key === 'Tab') {
+                const focusable = [...openModal.querySelectorAll(
+                    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                )].filter(el => el.getClientRects().length > 0);
+                if (focusable.length > 0) {
+                    const first = focusable[0];
+                    const last = focusable[focusable.length - 1];
+                    if (e.shiftKey && document.activeElement === first) {
+                        last.focus();
+                        e.preventDefault();
+                    } else if (!e.shiftKey && document.activeElement === last) {
+                        first.focus();
+                        e.preventDefault();
+                    }
+                }
+            }
+            return;
+        }
+
         if (App.currentScreen !== 'game-screen') return;
         if (!App.engine) return;
         
-        // 忽略重复按键（长按不触发）
-        if (e.repeat) return;
-        
         // 忽略输入法/文本框/下拉框/按钮中的按键
-        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.isContentEditable)) {
+        if (e.key !== 'Escape' && e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.isContentEditable)) {
             return;
         }
         
         // 忽略带修饰键的按键（防止阻止Ctrl+S等浏览器快捷键）
         if (e.ctrlKey || e.altKey || e.metaKey) return;
-        
-        // 如果有模态框打开，忽略游戏快捷键（ESC除外）
-        const hasModal = document.querySelector('.modal:not(.hidden)');
-        if (hasModal && e.key !== 'Escape') return;
         
         // 如果菜单已打开，ESC关闭菜单
         const menu = document.getElementById('ingame-menu');

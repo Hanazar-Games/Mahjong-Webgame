@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#1a3a1a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -238,7 +238,7 @@
         <div id="game-screen" class="screen">
             <!-- 顶部状态栏 -->
             <div class="hud-topbar">
-                <button class="hud-menu-btn" id="btn-menu" title="菜单">
+                <button class="hud-menu-btn" id="btn-menu" title="菜单" aria-label="打开游戏菜单">
                     <span>☰</span>
                 </button>
                 <div class="hud-match-info">
@@ -391,9 +391,9 @@
             <!-- 连接配置 -->
             <div class="network-config" id="network-config">
                 <div class="config-row">
-                    <label>信令服务器</label>
+                    <label for="signal-server">信令服务器</label>
                     <input type="text" id="signal-server" value="http://localhost:8081" placeholder="http://IP:端口">
-                    <span class="conn-status offline" id="conn-status">未连接</span>
+                    <span class="conn-status offline" id="conn-status" role="status" aria-live="polite">未连接</span>
                 </div>
                 <div class="config-hint">
                     💡 在同一局域网的设备上运行 <code>node server/signaling-server.js</code>，然后输入其 IP 地址
@@ -405,9 +405,9 @@
                 <div class="room-section" id="create-room-section">
                     <h3>创建房间</h3>
                     <div class="room-config">
-                        <label>房间名称</label>
+                        <label for="room-name">房间名称</label>
                         <input type="text" id="room-name" value="我的麻将房" maxlength="12">
-                        <label>麻将种类</label>
+                        <label for="room-mahjong-type">麻将种类</label>
                         <select id="room-mahjong-type">
                             <option value="guangdong">广东麻将</option>
                             <option value="sichuan">四川麻将</option>
@@ -420,7 +420,7 @@
                 </div>
                 <div class="room-section" id="join-room-section">
                     <h3>加入房间</h3>
-                    <div class="room-list" id="room-list">
+                    <div class="room-list" id="room-list" role="status" aria-live="polite">
                         <div class="empty-state">点击「刷新」搜索局域网房间</div>
                     </div>
                     <button class="secondary-btn" id="refresh-rooms">🔄 刷新房间列表</button>
@@ -449,7 +449,7 @@
             </div>
 
             <!-- 网络错误提示 -->
-            <div class="network-error hidden" id="network-error"></div>
+            <div class="network-error hidden" id="network-error" role="alert"></div>
         </div>
         
         <!-- 自定义模式 -->
@@ -562,7 +562,7 @@
             <!-- 播放控制栏 -->
             <div class="replay-controls">
                 <div class="replay-progress-wrap">
-                    <input type="range" class="replay-progress" id="replay-progress" min="0" max="100" value="0">
+                    <input type="range" class="replay-progress" id="replay-progress" min="0" max="100" value="0" aria-label="回放进度">
                 </div>
                 <div class="replay-control-bar">
                     <div class="replay-control-group">

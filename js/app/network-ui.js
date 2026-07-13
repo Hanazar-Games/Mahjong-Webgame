@@ -339,13 +339,15 @@
             const item = document.createElement('div');
             item.className = 'room-item';
             const typeName = getMahjongTypeName(room.type);
-            const playerText = `${room.players || 0}/${room.maxPlayers || 4}`;
+            const playerCount = Number.isFinite(Number(room.players)) ? Math.max(0, Math.floor(Number(room.players))) : 0;
+            const maxPlayers = Number.isFinite(Number(room.maxPlayers)) ? Math.max(1, Math.floor(Number(room.maxPlayers))) : 4;
+            const playerText = `${playerCount}/${maxPlayers}`;
             item.innerHTML = `
                 <div class="room-item-info">
                     <span class="room-item-name">${Utils.escapeHtml(room.name || '未命名房间')}</span>
-                    <span class="room-item-meta">${typeName} · ${playerText}人</span>
+                    <span class="room-item-meta">${Utils.escapeHtml(typeName)} · ${playerText}人</span>
                 </div>
-                <button class="room-item-join" data-room-id="${Utils.escapeHtml(room.id)}">加入</button>
+                <button class="room-item-join">加入</button>
             `;
             const joinBtn = item.querySelector('.room-item-join');
             if (joinBtn) {

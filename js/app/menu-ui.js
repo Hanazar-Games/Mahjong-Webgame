@@ -104,9 +104,11 @@
         const types = Tiles.getMahjongTypes();
         
         for (const type of types) {
-            const card = document.createElement('div');
+            const card = document.createElement('button');
+            card.type = 'button';
             card.className = 'mahjong-type-card';
             card.dataset.type = type.key;
+            card.setAttribute('aria-pressed', 'false');
             card.innerHTML = `
                 <div class="type-icon">${Utils.escapeHtml(type.icon)}</div>
                 <div class="type-name">${Utils.escapeHtml(type.name)}</div>
@@ -115,8 +117,12 @@
             
             card.addEventListener('click', () => {
                 AudioManager.SFX.buttonClick();
-                container.querySelectorAll('.mahjong-type-card').forEach(c => c.classList.remove('selected'));
+                container.querySelectorAll('.mahjong-type-card').forEach(c => {
+                    c.classList.remove('selected');
+                    c.setAttribute('aria-pressed', 'false');
+                });
                 card.classList.add('selected');
+                card.setAttribute('aria-pressed', 'true');
                 renderRuleOptions(type.key);
             });
             
@@ -180,7 +186,7 @@
             const div = document.createElement('div');
             div.className = 'rule-option';
             div.innerHTML = `
-                <label>${label}</label>
+                <span>${label}</span>
                 <span style="color:${value ? 'var(--win-color)' : 'var(--text-muted)'}">${value ? '✓ 开启' : '✗ 关闭'}</span>
             `;
             container.appendChild(div);

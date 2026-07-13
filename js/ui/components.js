@@ -207,10 +207,11 @@ const UIComponents = (function() {
         if (!player) return document.createElement('div');
         const div = document.createElement('div');
         div.className = `player-info ${isCurrent ? 'current-turn' : ''}`;
+        const score = Number.isFinite(Number(player.score)) ? Number(player.score) : 0;
         div.innerHTML = `
             <div class="player-avatar">${player.isAI ? '🤖' : '👤'}</div>
             <div class="player-name">${Utils.escapeHtml(player.name)}</div>
-            <div class="player-score">${player.score || 0}</div>
+            <div class="player-score">${score}</div>
         `;
         return div;
     }
@@ -669,7 +670,7 @@ const UIComponents = (function() {
         const ach = elementOrAch;
         const el = document.createElement('div');
         el.className = 'achievement-flash';
-        el.innerHTML = `<span class="achievement-flash-icon">${ach.icon || '🏆'}</span><span class="achievement-flash-text">${Utils.escapeHtml(ach.name || '')}</span>`;
+        el.innerHTML = `<span class="achievement-flash-icon">${Utils.escapeHtml(ach.icon || '🏆')}</span><span class="achievement-flash-text">${Utils.escapeHtml(ach.name || '')}</span>`;
         el.style.cssText = 'position:fixed;top:20%;left:50%;transform:translateX(-50%) scale(0.8);z-index:300;padding:16px 28px;background:linear-gradient(135deg,rgba(30,35,45,0.95),rgba(20,25,35,0.98));border:1px solid rgba(212,168,67,0.3);border-radius:12px;color:var(--accent-gold);font-size:1.1rem;font-weight:700;box-shadow:0 12px 40px rgba(0,0,0,0.4);pointer-events:none;opacity:0;';
         document.getElementById('app')?.appendChild(el) || document.body.appendChild(el);
         requestAnimationFrame(() => {

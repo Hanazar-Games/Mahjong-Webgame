@@ -149,9 +149,10 @@
 
             const scoresEl = document.getElementById('replay-scores');
             if (scoresEl && this.data.finalScores) {
-                scoresEl.innerHTML = this.data.finalScores.map(s =>
-                    `<span class="score-tag${s.isWin ? ' win' : ''}">${Utils.escapeHtml(s.name)}: ${s.score}</span>`
-                ).join('');
+                scoresEl.innerHTML = this.data.finalScores.map(s => {
+                    const score = Number.isFinite(Number(s.score)) ? Number(s.score) : 0;
+                    return `<span class="score-tag${s.isWin ? ' win' : ''}">${Utils.escapeHtml(s.name)}: ${score}</span>`;
+                }).join('');
             }
 
             const roundInfoEl = document.getElementById('replay-round-info');
@@ -176,7 +177,7 @@
                 el.dataset.index = idx;
                 el.innerHTML = `
                     <span class="step-num">${idx + 1}</span>
-                    <span class="step-action">${desc.icon} ${Utils.escapeHtml(desc.text)}</span>
+                    <span class="step-action">${Utils.escapeHtml(desc.icon)} ${Utils.escapeHtml(desc.text)}</span>
                     <span class="step-player">${Utils.escapeHtml(desc.player || '')}</span>
                 `;
                 el.addEventListener('click', () => {

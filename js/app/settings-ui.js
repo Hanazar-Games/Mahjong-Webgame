@@ -2,9 +2,19 @@
  * 万能麻将 - 设置、主题与游戏内菜单模块
  * 从 main.js 拆分（架构拆分轮次 2）
  */
-    function showSettingsModal() {
+    let _settingsTrigger = null;
+    let _settingsReturnToIngameMenu = false;
+
+    function showSettingsModal(returnToIngameMenu = false) {
         const modal = document.getElementById('settings-modal');
-        if (modal) modal.classList.remove('hidden');
+        if (!modal) return;
+        _settingsTrigger = document.activeElement;
+        _settingsReturnToIngameMenu = !!returnToIngameMenu;
+        if (_settingsReturnToIngameMenu) {
+            document.getElementById('ingame-menu')?.classList.add('hidden');
+        }
+        modal.classList.remove('hidden');
+        requestAnimationFrame(() => document.getElementById('settings-close')?.focus());
     }
 
     function hideSettingsModal() {
@@ -12,6 +22,14 @@
         if (modal) modal.classList.add('hidden');
         // 保存设置
         saveAllSettings();
+        if (_settingsReturnToIngameMenu) {
+            document.getElementById('ingame-menu')?.classList.remove('hidden');
+        }
+        if (_settingsTrigger instanceof HTMLElement && _settingsTrigger.isConnected) {
+            _settingsTrigger.focus();
+        }
+        _settingsTrigger = null;
+        _settingsReturnToIngameMenu = false;
     }
 
     /**
@@ -185,6 +203,12 @@
                 }
                 if (key === 'show-shanten') {
                     updateShantenDisplay(App.localPlayerIndex ?? 0);
+                }
+                if (key === 'opponent-display' && App.engine && App.currentScreen === 'game-screen') {
+                    const localIndex = App.localPlayerIndex ?? 0;
+                    App.engine.players.forEach((player, index) => {
+                        if (index !== localIndex) renderPlayerHand(index, player.hand?.length || 0);
+                    });
                 }
             }
         }

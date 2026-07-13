@@ -618,8 +618,8 @@
         ". top ."
         "left center right"
         ". bottom .";
-    grid-template-columns: clamp(96px, 9vw, 142px) minmax(0, 1fr) clamp(96px, 9vw, 142px);
-    grid-template-rows: clamp(96px, 13vh, 140px) minmax(0, 1fr) clamp(172px, 25vh, 238px);
+    grid-template-columns: clamp(92px, 8vw, 132px) minmax(0, 1fr) clamp(92px, 8vw, 132px);
+    grid-template-rows: clamp(116px, 14vh, 144px) minmax(0, 1fr) clamp(158px, 23vh, 220px);
     width: 100%;
     height: 100%;
     min-width: 0;
@@ -719,13 +719,27 @@
     display: none;
 }
 
+/* 覆盖 game.css 的大屏固定牌高，避免 720p 窗口中对家手牌挤出顶部区域。 */
+#game-screen .player-area.top .mahjong-tile,
+#game-screen .player-area.top .mahjong-tile.back {
+    min-width: 0;
+    min-height: 0;
+    width: clamp(34px, 3.5vw, 48px);
+    height: clamp(46px, 7vh, 64px);
+}
+
 .player-area.left .hand-area,
 .player-area.right .hand-area {
     flex-direction: column;
     align-items: center;
     gap: 1px;
-    max-height: calc(100% - 48px);
-    overflow: visible;
+    max-height: calc(100% - 38px);
+    justify-content: flex-start;
+    overflow: hidden;
+}
+
+.melds-area:empty {
+    display: none;
 }
 
 .player-area.left .melds-area,
@@ -736,33 +750,48 @@
 
 #game-screen .player-area.left .player-info,
 #game-screen .player-area.right .player-info {
+    width: 100%;
     max-width: 100%;
-    padding: 5px 8px;
-    gap: 6px;
+    padding: 4px;
+    gap: 4px;
+    justify-content: center;
+}
+
+#game-screen .player-area.left .player-avatar,
+#game-screen .player-area.right .player-avatar {
+    display: none;
 }
 
 #game-screen .player-area.left .player-name,
 #game-screen .player-area.right .player-name {
-    max-width: clamp(48px, 5vw, 72px);
+    max-width: clamp(42px, 4vw, 64px);
 }
 
 #game-screen .player-area.left .player-score,
 #game-screen .player-area.right .player-score {
-    min-width: 34px;
+    min-width: 30px;
 }
 
 #game-screen .player-area.left .mahjong-tile,
 #game-screen .player-area.right .mahjong-tile,
 #game-screen .player-area.left .mahjong-tile.back,
 #game-screen .player-area.right .mahjong-tile.back {
-    width: clamp(24px, 2.8vw, 36px);
-    height: clamp(30px, 3.8vh, 48px);
+    min-width: 0;
+    min-height: 0;
+    width: clamp(22px, 2.4vw, 32px);
+    height: clamp(26px, 2.8vh, 32px);
     border-radius: 7px;
 }
 
 #game-screen .player-area.left .mahjong-tile .tile-face,
 #game-screen .player-area.right .mahjong-tile .tile-face {
     font-size: clamp(1rem, 1.8vw, 1.45rem);
+}
+
+/* 侧家最多会短暂持有 14 张；轻微叠放可确保 720p 窗口也完整显示。 */
+#game-screen .player-area.left .hand-area .mahjong-tile + .mahjong-tile,
+#game-screen .player-area.right .hand-area .mahjong-tile + .mahjong-tile {
+    margin-top: -5px;
 }
 
 #game-screen .table-center {
@@ -783,8 +812,8 @@
         ". . ."
         "left center right"
         ". bottom .";
-    grid-template-columns: clamp(88px, 8vw, 128px) minmax(0, 1fr) clamp(88px, 8vw, 128px);
-    grid-template-rows: clamp(44px, 8vh, 72px) minmax(0, 1fr) clamp(172px, 25vh, 238px);
+    grid-template-columns: clamp(84px, 7vw, 116px) minmax(0, 1fr) clamp(84px, 7vw, 116px);
+    grid-template-rows: clamp(40px, 7vh, 64px) minmax(0, 1fr) clamp(158px, 23vh, 220px);
 }
 
 /* 回合指示器 */
@@ -1326,7 +1355,7 @@
     .action-bar {
         gap: 6px;
         padding: 4px;
-        bottom: 10px;
+        bottom: 176px;
     }
     .action-btn {
         min-width: 48px;
@@ -1358,22 +1387,40 @@
     }
 
     #game-screen .game-table {
+        grid-template-areas:
+            "top top top"
+            "left center right"
+            "bottom bottom bottom";
         grid-template-columns: 70px minmax(0, 1fr) 70px;
-        grid-template-rows: 92px minmax(0, 1fr) 170px;
+        grid-template-rows: 112px minmax(0, 1fr) 170px;
         gap: 4px;
         padding-left: 8px;
         padding-right: 8px;
     }
     #game-screen .game-table.three-player {
+        grid-template-areas:
+            ". . ."
+            "left center right"
+            "bottom bottom bottom";
         grid-template-columns: 66px minmax(0, 1fr) 66px;
         grid-template-rows: 40px minmax(0, 1fr) 170px;
+    }
+    #game-screen .player-area.top .hand-area .mahjong-tile + .mahjong-tile {
+        margin-left: -10px;
+    }
+    #game-screen .player-area.bottom .hand-area {
+        justify-content: flex-start;
     }
     #game-screen .player-area.left .mahjong-tile,
     #game-screen .player-area.right .mahjong-tile,
     #game-screen .player-area.left .mahjong-tile.back,
     #game-screen .player-area.right .mahjong-tile.back {
         width: 30px;
-        height: 40px;
+        height: clamp(26px, 4vh, 34px);
+    }
+    #game-screen .player-area.left .hand-area .mahjong-tile + .mahjong-tile,
+    #game-screen .player-area.right .hand-area .mahjong-tile + .mahjong-tile {
+        margin-top: -8px;
     }
 
     /* 结算页移动端 */
@@ -1407,8 +1454,128 @@
     }
     .menu-body {
         gap: 8px;
+        justify-content: flex-start;
+        padding-top: 4px;
+        padding-bottom: 4px;
     }
     .menu-btn.primary {
         padding: 12px 16px;
+    }
+}
+
+/* 横屏手机和低高度窗口：压缩牌桌纵向占用，并用叠放牌背保留完整手牌数量。 */
+@media (max-height: 560px) and (orientation: landscape) {
+    #game-screen .game-table,
+    #game-screen .game-table.three-player {
+        grid-template-columns: 76px minmax(0, 1fr) 76px;
+        grid-template-rows: 72px minmax(0, 1fr) 108px;
+        gap: 4px;
+        padding: 52px 8px 8px;
+    }
+
+    #game-screen .game-table.three-player {
+        grid-template-rows: 16px minmax(0, 1fr) 108px;
+    }
+
+    #game-screen .player-area.top .player-info {
+        padding: 3px 8px;
+    }
+
+    #game-screen .player-area.top .player-avatar {
+        display: none;
+    }
+
+    #game-screen .player-area.top .hand-area {
+        padding: 2px;
+        gap: 1px;
+    }
+
+    #game-screen .player-area.top .mahjong-tile,
+    #game-screen .player-area.top .mahjong-tile.back {
+        min-width: 0;
+        min-height: 0;
+        width: 28px;
+        height: 38px;
+        border-radius: 5px;
+    }
+
+    #game-screen .player-area.left .player-info,
+    #game-screen .player-area.right .player-info {
+        flex-direction: column;
+        min-height: 34px;
+        padding: 2px 4px;
+        gap: 0;
+        line-height: 1.05;
+    }
+
+    #game-screen .player-area.left .player-name,
+    #game-screen .player-area.right .player-name {
+        max-width: 66px;
+        font-size: 0.65rem;
+    }
+
+    #game-screen .player-area.left .player-score,
+    #game-screen .player-area.right .player-score {
+        min-width: 0;
+        text-align: center;
+        font-size: 0.7rem;
+    }
+
+    #game-screen .player-area.left .hand-area,
+    #game-screen .player-area.right .hand-area {
+        max-height: calc(100% - 34px);
+        padding: 2px;
+        gap: 0;
+        overflow: hidden;
+    }
+
+    #game-screen .player-area.left .hand-area .mahjong-tile,
+    #game-screen .player-area.right .hand-area .mahjong-tile {
+        min-width: 0;
+        min-height: 0;
+        width: 24px;
+        height: 26px;
+        border-radius: 4px;
+    }
+
+    #game-screen .player-area.left .hand-area .mahjong-tile + .mahjong-tile,
+    #game-screen .player-area.right .hand-area .mahjong-tile + .mahjong-tile {
+        margin-top: -21px;
+    }
+
+    #game-screen .player-area.bottom .player-info {
+        padding: 3px 8px;
+    }
+
+    #game-screen .player-area.bottom .hand-area {
+        padding: 2px 2px 4px;
+        gap: 2px;
+    }
+
+    #game-screen .player-area.bottom .mahjong-tile {
+        width: 42px;
+        height: 58px;
+        border-radius: 6px;
+    }
+
+    #game-screen .player-area.bottom .mahjong-tile .tile-face {
+        font-size: 1.7rem;
+    }
+
+    .action-bar {
+        bottom: 110px;
+        gap: 4px;
+        padding: 4px;
+    }
+
+    .action-btn {
+        min-width: 44px;
+        height: 38px;
+        padding: 0 10px;
+        font-size: 0.85rem;
+    }
+
+    .discard-pile {
+        height: min(24vh, 96px);
     }
 }

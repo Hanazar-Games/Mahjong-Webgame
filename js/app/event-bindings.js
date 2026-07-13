@@ -80,8 +80,11 @@
         });
         document.getElementById('btn-ingame-settings')?.addEventListener('click', () => {
             AudioManager.SFX.buttonClick();
-            hideIngameMenu();
-            showSettingsModal();
+            // 暂停菜单已经停止计时；设置关闭后仍返回暂停菜单，不应在后台恢复倒计时。
+            showSettingsModal(true);
+        });
+        document.getElementById('ingame-menu')?.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal-overlay')) hideIngameMenu();
         });
         document.getElementById('btn-restart')?.addEventListener('click', () => {
             AudioManager.SFX.buttonClick();
