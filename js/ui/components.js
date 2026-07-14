@@ -392,6 +392,7 @@ const UIComponents = (function() {
         const target = document.getElementById(screenId);
         if (target) {
             target.classList.add('active');
+            if (window.App) App.currentScreen = screenId;
         }
     }
 

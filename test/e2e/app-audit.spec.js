@@ -21,6 +21,58 @@ async function startQuickGame(page) {
     await page.waitForTimeout(750);
 }
 
+async function seedReplay(page) {
+    await page.evaluate(() => {
+        const makeTile = (suit, value, suffix) => ({
+            id: `${suit}_${value}_${suffix}`,
+            suit,
+            value,
+            name: `${value}${suit === 'wan' ? '万' : suit === 'tong' ? '筒' : '条'}`,
+            shortName: `${value}${suit === 'wan' ? '万' : suit === 'tong' ? '筒' : '条'}`
+        });
+        const makePlayer = (id, round) => ({
+            id,
+            name: id === 0 ? '玩家' : `电脑${id}`,
+            score: 1000,
+            position: id,
+            hand: Array.from({ length: id === 0 ? 14 : 13 }, (_, index) =>
+                makeTile(['wan', 'tong', 'tiao'][id % 3], index % 9 + 1, `r${round}p${id}t${index}`)),
+            melds: [],
+            discards: []
+        });
+        const rounds = [1, 2].map(round => {
+            const players = Array.from({ length: 4 }, (_, id) => makePlayer(id, round));
+            const discard = players[0].hand[0];
+            const draw = makeTile('tong', 9, `r${round}draw`);
+            return {
+                round,
+                wind: round - 1,
+                players,
+                history: [
+                    { action: 'gameStart', data: { round, players }, timestamp: round * 1000 },
+                    { action: 'discard', data: { playerId: 0, tile: discard.id }, timestamp: round * 1000 + 100 },
+                    { action: 'draw', data: { playerId: 1, tile: draw }, timestamp: round * 1000 + 200 },
+                    { action: 'discard', data: { playerId: 1, tile: draw.id }, timestamp: round * 1000 + 300 },
+                    { action: 'roundEnd', data: { round, players }, timestamp: round * 1000 + 400 }
+                ]
+            };
+        });
+        Replay.clearReplays();
+        Replay.saveReplay({
+            mahjongType: 'guobiao',
+            maxRounds: 2,
+            players: rounds[0].players.map(({ id, name, position }) => ({ id, name, position })),
+            rounds,
+            finalScores: rounds[0].players.map((player, index) => ({
+                name: player.name,
+                score: 1000,
+                isWin: index === 0
+            }))
+        });
+        renderReplays();
+    });
+}
+
 function collectRuntimeFailures(page) {
     const failures = [];
     page.on('pageerror', error => failures.push(`pageerror: ${error.message}`));
@@ -50,7 +102,13 @@ test('main flows load without runtime or resource errors', async ({ page }) => {
     for (const screenName of ['回放', '成就', '战绩']) {
         await page.getByRole('button', { name: screenName }).click();
         await page.locator('.screen.active').getByRole('button', { name: '← 返回', exact: true }).click();
+        expect(await page.evaluate(() => App.currentScreen)).toBe('main-menu');
     }
+
+    const hiddenScreenIssues = await page.evaluate(() => [...document.querySelectorAll('.screen:not(.active)')]
+        .filter(screen => getComputedStyle(screen).visibility !== 'hidden')
+        .map(screen => screen.id));
+    expect(hiddenScreenIssues).toEqual([]);
 
     await page.getByRole('button', { name: '设置' }).click();
     await expect(page.locator('#settings-modal')).not.toHaveClass(/hidden/);
@@ -78,6 +136,33 @@ test('audio and appearance settings update and persist', async ({ page }) => {
     await expect(page.locator('#bgm-volume')).toHaveValue('30');
     await expect(page.locator('#bgm-style')).toHaveValue('calm');
     await expect(page.locator('#table-theme')).toHaveValue('amethyst');
+});
+
+test('background audio pauses while the page is hidden and resumes when visible', async ({ page }) => {
+    await openApp(page);
+    const audioState = await page.evaluate(() => {
+        AudioManager.setBgmVolume(0.3);
+        AudioManager.startBgm('calm');
+        const before = { playing: AudioManager.isPlaying, style: AudioManager.currentBgm };
+
+        Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+        document.dispatchEvent(new Event('visibilitychange'));
+        const hidden = { playing: AudioManager.isPlaying, style: AudioManager.currentBgm };
+
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+        document.dispatchEvent(new Event('visibilitychange'));
+        const visible = { playing: AudioManager.isPlaying, style: AudioManager.currentBgm };
+        delete document.hidden;
+        AudioManager.stopBgm();
+        return { before, hidden, visible };
+    });
+
+    expect(audioState).toEqual({
+        before: { playing: true, style: 'calm' },
+        hidden: { playing: false, style: null },
+        visible: { playing: true, style: 'calm' }
+    });
 });
 
 test('in-game settings preserve the paused menu and Escape closes only the top modal', async ({ page }) => {
@@ -143,6 +228,92 @@ test('network and keyboard-accessible custom game entry points work', async ({ p
     await expect(page.locator('#hand-bottom .mahjong-tile')).toHaveCount(14, { timeout: 10_000 });
     expect(failures).toEqual([]);
 });
+
+for (const viewport of VIEWPORTS.filter(item =>
+    ['desktop', 'phone-portrait', 'phone-landscape', 'small-phone-landscape'].includes(item.name))) {
+    test(`replay player stays accessible and contained at ${viewport.name}`, async ({ page }) => {
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        const failures = collectRuntimeFailures(page);
+        await openApp(page);
+        await seedReplay(page);
+        await page.getByRole('button', { name: '回放' }).click();
+        await page.getByRole('button', { name: '播放' }).click();
+
+        await expect(page.locator('#replay-player')).toHaveClass(/active/);
+        await page.waitForTimeout(350);
+        expect(await page.evaluate(() => App.currentScreen)).toBe('replay-player');
+        await expect(page.locator('.replay-timeline-item')).toHaveCount(5);
+        await expect(page.locator('.replay-timeline-item').first()).toHaveAttribute('aria-current', 'step');
+        await expect(page.locator('#replay-step-back')).toBeDisabled();
+        await expect(page.locator('#replay-round-prev')).toBeDisabled();
+        await expect(page.locator('#replay-play-pause')).toHaveAttribute('aria-label', '播放回放');
+
+        const secondStep = page.locator('.replay-timeline-item').nth(1);
+        await secondStep.focus();
+        await page.keyboard.press('Enter');
+        await expect(secondStep).toHaveAttribute('aria-current', 'step');
+        await expect(page.locator('#replay-step-back')).toBeEnabled();
+
+        if (viewport.name === 'desktop') {
+            await page.locator('#replay-round-next').click();
+            await expect(page.locator('#replay-round-next')).toBeDisabled();
+            await expect(page.locator('#replay-round-prev')).toBeEnabled();
+            await page.locator('.replay-timeline-item').last().click();
+            await expect(page.locator('#replay-step-forward')).toBeDisabled();
+            await expect(page.locator('#replay-play-pause')).toBeDisabled();
+        }
+
+        const layout = await page.evaluate(() => {
+            const rect = selector => {
+                const element = document.querySelector(selector);
+                if (!element) return null;
+                const box = element.getBoundingClientRect();
+                return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+            };
+            const inside = (child, parent, tolerance = 1) => child && parent &&
+                child.left >= parent.left - tolerance && child.right <= parent.right + tolerance &&
+                child.top >= parent.top - tolerance && child.bottom <= parent.bottom + tolerance;
+            const screen = rect('#replay-player');
+            const body = rect('#replay-player .replay-player-body');
+            const table = rect('#replay-table');
+            const controls = rect('#replay-player .replay-controls');
+            const discardPile = rect('#replay-player .replay-discard-pile');
+            const overlaps = (first, second) => first && second &&
+                Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left)) *
+                Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top)) > 1;
+            const overflowingTiles = [...document.querySelectorAll('#replay-table .mahjong-tile')]
+                .filter(tile => {
+                    const box = tile.getBoundingClientRect();
+                    return !inside({ left: box.left, right: box.right, top: box.top, bottom: box.bottom }, table);
+                }).length;
+            const playerTilesInDiscardPile = [...document.querySelectorAll('#replay-table .replay-player-area .mahjong-tile')]
+                .filter(tile => {
+                    const box = tile.getBoundingClientRect();
+                    return overlaps({ left: box.left, right: box.right, top: box.top, bottom: box.bottom }, discardPile);
+                }).length;
+            return {
+                tableInsideBody: inside(table, body),
+                controlsInsideScreen: inside(controls, screen),
+                overflowingTiles,
+                playerTilesInDiscardPile,
+                horizontalScroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                verticalScroll: document.documentElement.scrollHeight - document.documentElement.clientHeight
+            };
+        });
+
+        expect(layout.tableInsideBody).toBe(true);
+        expect(layout.controlsInsideScreen).toBe(true);
+        expect(layout.overflowingTiles).toBe(0);
+        expect(layout.playerTilesInDiscardPile).toBe(0);
+        expect(layout.horizontalScroll).toBe(0);
+        expect(layout.verticalScroll).toBe(0);
+        expect(failures).toEqual([]);
+
+        if (['desktop', 'phone-portrait', 'phone-landscape'].includes(viewport.name)) {
+            await page.screenshot({ path: `test-results/replay-audit-${viewport.name}.png`, fullPage: true });
+        }
+    });
+}
 
 for (const viewport of VIEWPORTS) {
     test(`game table stays usable at ${viewport.name}`, async ({ page }) => {

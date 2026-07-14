@@ -1579,3 +1579,71 @@
         height: min(24vh, 96px);
     }
 }
+
+/* 回放牌张必须覆盖 game.css 中后声明的通用桌面尺寸。 */
+#replay-player .replay-hand .mahjong-tile,
+#replay-player .replay-hand .mahjong-tile.tile-small {
+    min-width: 0;
+    min-height: 0;
+    width: 28px;
+    height: 40px;
+}
+
+#replay-player .replay-melds .mahjong-tile,
+#replay-player .replay-melds .mahjong-tile.tile-small,
+#replay-player .replay-discard-pile .mahjong-tile,
+#replay-player .replay-discard-pile .mahjong-tile.tile-small {
+    min-width: 0;
+    min-height: 0;
+    width: 24px;
+    height: 34px;
+}
+
+#replay-player .replay-hand .mahjong-tile .tile-face,
+#replay-player .replay-melds .mahjong-tile .tile-face,
+#replay-player .replay-discard-pile .mahjong-tile .tile-face {
+    font-size: 1.05rem;
+}
+
+@media (max-width: 768px) and (min-height: 601px) {
+    #replay-player .replay-hand {
+        max-width: none;
+        flex-wrap: nowrap;
+        gap: 1px;
+    }
+
+    #replay-player .replay-hand .mahjong-tile,
+    #replay-player .replay-hand .mahjong-tile.tile-small {
+        width: 17px;
+        height: 24px;
+        border-radius: 3px;
+    }
+
+    #replay-player .replay-hand .mahjong-tile .tile-face {
+        font-size: 0.68rem;
+    }
+}
+
+@media (max-height: 600px) {
+    #replay-player .replay-hand .mahjong-tile,
+    #replay-player .replay-hand .mahjong-tile.tile-small {
+        width: 14px;
+        height: 20px;
+        border-radius: 3px;
+    }
+
+    #replay-player .replay-melds .mahjong-tile,
+    #replay-player .replay-melds .mahjong-tile.tile-small,
+    #replay-player .replay-discard-pile .mahjong-tile,
+    #replay-player .replay-discard-pile .mahjong-tile.tile-small {
+        width: 13px;
+        height: 19px;
+        border-radius: 3px;
+    }
+
+    #replay-player .replay-hand .mahjong-tile .tile-face,
+    #replay-player .replay-melds .mahjong-tile .tile-face,
+    #replay-player .replay-discard-pile .mahjong-tile .tile-face {
+        font-size: 0.65rem;
+    }
+}

@@ -40,6 +40,7 @@
                 this.loadRound(0);
             } else {
                 document.getElementById('replay-action-text').textContent = '无回放数据';
+                this._updateControls();
             }
         }
 
@@ -76,7 +77,10 @@
                 this.speedIdx = (this.speedIdx + 1) % this.speeds.length;
                 this.speed = this.speeds[this.speedIdx];
                 const btn = document.getElementById('replay-speed');
-                if (btn) btn.textContent = this.speed + '×';
+                if (btn) {
+                    btn.textContent = this.speed + '×';
+                    btn.setAttribute('aria-label', `回放速度，当前 ${this.speed} 倍`);
+                }
             };
             this._handlers.progress = (e) => {
                 const max = this._getTotalSteps() - 1;
@@ -124,6 +128,7 @@
             this._buildTimeline();
             this._resetTable();
             this._updateProgress();
+            this._updateControls();
 
             const round = this.rounds[idx];
             if (round?.history?.length > 0) {
@@ -172,7 +177,8 @@
 
             round.history.forEach((item, idx) => {
                 const desc = this._describeAction(item);
-                const el = document.createElement('div');
+                const el = document.createElement('button');
+                el.type = 'button';
                 el.className = 'replay-timeline-item';
                 el.dataset.index = idx;
                 el.innerHTML = `
@@ -374,14 +380,20 @@
             if (this.isPlaying) return;
             this.isPlaying = true;
             const btn = document.getElementById('replay-play-pause');
-            if (btn) btn.textContent = '⏸';
+            if (btn) {
+                btn.textContent = '⏸';
+                btn.setAttribute('aria-label', '暂停回放');
+            }
             this._scheduleNext();
         }
 
         pause() {
             this.isPlaying = false;
             const btn = document.getElementById('replay-play-pause');
-            if (btn) btn.textContent = '▶';
+            if (btn) {
+                btn.textContent = '▶';
+                btn.setAttribute('aria-label', '播放回放');
+            }
             if (this.playTimer) { clearTimeout(this.playTimer); this.playTimer = null; }
         }
 
@@ -397,7 +409,10 @@
                     this.loadRound(this.currentRoundIdx + 1);
                     this.isPlaying = true;
                     const btn = document.getElementById('replay-play-pause');
-                    if (btn) btn.textContent = '⏸';
+                    if (btn) {
+                        btn.textContent = '⏸';
+                        btn.setAttribute('aria-label', '暂停回放');
+                    }
                     this._scheduleNext();
                 } else {
                     this.pause();
@@ -594,7 +609,10 @@
 
         _updateUI(stepIdx) {
             document.querySelectorAll('.replay-timeline-item').forEach(el => {
-                el.classList.toggle('active', parseInt(el.dataset.index) === stepIdx);
+                const active = parseInt(el.dataset.index) === stepIdx;
+                el.classList.toggle('active', active);
+                if (active) el.setAttribute('aria-current', 'step');
+                else el.removeAttribute('aria-current');
             });
             const activeItem = document.querySelector(`.replay-timeline-item[data-index="${stepIdx}"]`);
             if (activeItem) activeItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -612,6 +630,7 @@
             if (counter) counter.textContent = `${stepIdx + 1} / ${this._getTotalSteps()}`;
 
             this._updateProgress();
+            this._updateControls();
         }
 
         _updateProgress() {
@@ -619,5 +638,23 @@
             const val = total > 1 ? Math.round(this.currentStep / (total - 1) * 100) : 0;
             const bar = document.getElementById('replay-progress');
             if (bar) bar.value = val;
+        }
+
+        _updateControls() {
+            const total = this._getTotalSteps();
+            const atStart = this.currentRoundIdx === 0 && this.currentStep <= 0;
+            const atEnd = this.currentRoundIdx >= this.rounds.length - 1 && this.currentStep >= total - 1;
+            const stepBack = document.getElementById('replay-step-back');
+            const stepForward = document.getElementById('replay-step-forward');
+            const roundPrev = document.getElementById('replay-round-prev');
+            const roundNext = document.getElementById('replay-round-next');
+            const playPause = document.getElementById('replay-play-pause');
+            const progress = document.getElementById('replay-progress');
+            if (stepBack) stepBack.disabled = atStart;
+            if (stepForward) stepForward.disabled = atEnd || total === 0;
+            if (roundPrev) roundPrev.disabled = this.currentRoundIdx <= 0;
+            if (roundNext) roundNext.disabled = this.currentRoundIdx >= this.rounds.length - 1;
+            if (playPause) playPause.disabled = total === 0 || atEnd;
+            if (progress) progress.disabled = total <= 1;
         }
     }

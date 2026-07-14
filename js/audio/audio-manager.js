@@ -17,6 +17,7 @@ const AudioManager = (function() {
     let currentBgm = null;
     let bgmTimer = null;
     let sfxEnabled = true;
+    let bgmResumeAfterVisibility = null;
     const activeSfxTimers = new Set();
 
     // 音频缓存（避免重复创建）
@@ -616,9 +617,10 @@ const AudioManager = (function() {
         }
     }
 
-    function stopBgm() {
+    function stopBgm(preserveVisibilityResume = false) {
         bgmPlaying = false;
         currentBgm = null;
+        if (!preserveVisibilityResume) bgmResumeAfterVisibility = null;
         if (bgmTimer) {
             clearTimeout(bgmTimer);
             bgmTimer = null;
@@ -662,6 +664,20 @@ const AudioManager = (function() {
             events.forEach(e => document.removeEventListener(e, handler));
         };
         events.forEach(e => document.addEventListener(e, handler, { once: true }));
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (bgmPlaying) {
+                    bgmResumeAfterVisibility = currentBgm;
+                    stopBgm(true);
+                }
+                clearAllSfxTimers();
+                return;
+            }
+            const style = bgmResumeAfterVisibility;
+            bgmResumeAfterVisibility = null;
+            if (style && bgmVolume > 0.0001) startBgm(style);
+        });
     }
 
     return {

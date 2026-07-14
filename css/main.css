@@ -63,15 +63,25 @@ html, body {
     padding: 16px;
     overflow-y: auto;
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
-    transition: var(--transition);
+    transition: opacity 0.3s ease, transform 0.3s ease;
     transform: translateX(20px);
 }
 
 .screen.active {
     opacity: 1;
+    visibility: visible;
     pointer-events: auto;
     transform: translateX(0);
+    transition-delay: 0s;
+}
+
+/* 所有键盘可操作控件共享清晰焦点环，避免仅有 hover 状态。 */
+:where(button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent-gold-light);
+    outline-offset: 3px;
+    box-shadow: 0 0 0 4px rgba(212, 168, 67, 0.2);
 }
 
 .hidden {
@@ -1069,6 +1079,7 @@ html, body {
     flex-direction: column;
     padding: 0;
     overflow: hidden;
+    background: var(--bg-primary);
 }
 
 .replay-player-header {
@@ -1139,6 +1150,7 @@ html, body {
 .replay-table-area {
     flex: 1;
     min-width: 0;
+    min-height: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1146,8 +1158,10 @@ html, body {
 
 .replay-table {
     position: relative;
-    width: 100%;
-    max-width: 560px;
+    width: auto;
+    height: 100%;
+    max-width: 760px;
+    max-height: 570px;
     aspect-ratio: 4 / 3;
     background: radial-gradient(ellipse at center, var(--bg-secondary) 0%, var(--bg-primary) 100%);
     border-radius: var(--border-radius);
@@ -1233,7 +1247,7 @@ html, body {
     gap: 3px;
     flex-wrap: wrap;
     justify-content: center;
-    max-width: 280px;
+    max-width: 440px;
 }
 
 .replay-melds {
@@ -1245,6 +1259,8 @@ html, body {
 
 /* ===== 回放播放器中的牌尺寸 ===== */
 .replay-hand .mahjong-tile {
+    min-width: 0;
+    min-height: 0;
     width: 28px;
     height: 40px;
 }
@@ -1255,6 +1271,8 @@ html, body {
 
 .replay-melds .mahjong-tile,
 .replay-discard-pile .mahjong-tile {
+    min-width: 0;
+    min-height: 0;
     width: 24px;
     height: 34px;
 }
@@ -1334,7 +1352,10 @@ html, body {
 }
 
 .replay-timeline-item {
+    width: 100%;
     padding: 6px 10px;
+    background: transparent;
+    color: inherit;
     border-radius: var(--border-radius-sm);
     font-size: 0.8rem;
     cursor: pointer;
@@ -1344,6 +1365,11 @@ html, body {
     align-items: center;
     gap: 8px;
     border-left: 3px solid transparent;
+    border-top: 0;
+    border-right: 0;
+    border-bottom: 0;
+    font: inherit;
+    text-align: left;
 }
 
 .replay-timeline-item:hover {
@@ -1462,6 +1488,12 @@ html, body {
     color: var(--text-primary);
 }
 
+.replay-ctrl-btn:disabled,
+.replay-progress:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
 .replay-ctrl-btn.primary {
     background: linear-gradient(135deg, var(--accent-gold-dark), var(--accent-gold));
     color: #1a1a1a;
@@ -1488,7 +1520,14 @@ html, body {
         max-height: 35vh;
     }
     .replay-table {
+        width: 100%;
+        height: auto;
         max-width: 100%;
+        max-height: 100%;
+    }
+    .replay-discard-pile {
+        width: min(22vw, 90px);
+        height: min(12vh, 90px);
     }
     .replay-control-group.center {
         position: static;
@@ -1507,6 +1546,104 @@ html, body {
         transform: none;
         margin-left: auto;
         margin-right: auto;
+    }
+}
+
+@media (max-width: 560px) and (min-height: 601px) {
+    .replay-table {
+        aspect-ratio: 1 / 1;
+    }
+}
+
+@media (max-height: 600px) {
+    .replay-player-header {
+        min-height: 48px;
+        padding: 6px 10px;
+    }
+    .replay-player-body {
+        flex-direction: row;
+        gap: 6px;
+        padding: 6px;
+    }
+    .replay-table {
+        width: auto;
+        height: 100%;
+    }
+    .replay-player-info {
+        gap: 3px;
+        padding: 2px 6px;
+        font-size: 0.62rem;
+    }
+    .replay-p-avatar {
+        display: none;
+    }
+    .replay-hand {
+        gap: 1px;
+        max-width: 220px;
+        flex-wrap: nowrap;
+    }
+    .replay-hand .mahjong-tile {
+        width: 14px;
+        height: 20px;
+        border-radius: 3px;
+    }
+    .replay-hand .mahjong-tile .tile-face {
+        font-size: 0.55rem;
+    }
+    .replay-melds .mahjong-tile,
+    .replay-discard-pile .mahjong-tile {
+        width: 13px;
+        height: 19px;
+        border-radius: 3px;
+    }
+    .replay-center {
+        gap: 4px;
+    }
+    .replay-discard-pile {
+        width: 90px;
+        height: min(16vh, 62px);
+        padding: 3px;
+        gap: 1px;
+    }
+    .replay-timeline-panel {
+        width: 270px;
+    }
+    .replay-controls {
+        padding: 6px 10px;
+    }
+    .replay-progress-wrap {
+        margin-bottom: 4px;
+    }
+    .replay-ctrl-btn {
+        min-width: 44px;
+        padding: 6px 8px;
+    }
+}
+
+@media (max-width: 560px) {
+    .replay-controls {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+    .replay-control-bar {
+        gap: 6px;
+        justify-content: space-between;
+    }
+    .replay-control-group {
+        gap: 4px;
+    }
+    .replay-ctrl-btn {
+        width: 44px;
+        min-width: 44px;
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+    .replay-ctrl-btn.primary {
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+    .replay-round-label {
+        min-width: 34px;
     }
 }
 
