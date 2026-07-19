@@ -115,6 +115,10 @@ test('main flows load without runtime or resource errors', async ({ page }) => {
     await page.keyboard.press('Escape');
     await expect(page.locator('#settings-modal')).toHaveClass(/hidden/);
 
+    await page.evaluate(() => Utils.toast('<b>提示</b>', 500));
+    await expect(page.locator('#toast-container .toast')).toHaveText('<b>提示</b>');
+    await expect(page.locator('#toast-container .toast b')).toHaveCount(0);
+
     expect(failures).toEqual([]);
 });
 
@@ -136,6 +140,30 @@ test('audio and appearance settings update and persist', async ({ page }) => {
     await expect(page.locator('#bgm-volume')).toHaveValue('30');
     await expect(page.locator('#bgm-style')).toHaveValue('calm');
     await expect(page.locator('#table-theme')).toHaveValue('amethyst');
+});
+
+test('mobile settings and replay sliders keep practical touch targets', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openApp(page);
+    await page.getByRole('button', { name: '设置' }).click();
+    const settingsTargets = await page.evaluate(() => ({
+        textHeight: document.getElementById('player-name').getBoundingClientRect().height,
+        selectHeight: document.getElementById('bgm-style').getBoundingClientRect().height,
+        bgmRangeHeight: document.getElementById('bgm-volume').getBoundingClientRect().height,
+        sfxRangeHeight: document.getElementById('sfx-volume').getBoundingClientRect().height
+    }));
+    expect(settingsTargets.textHeight).toBeGreaterThanOrEqual(44);
+    expect(settingsTargets.selectHeight).toBeGreaterThanOrEqual(44);
+    expect(settingsTargets.bgmRangeHeight).toBeGreaterThanOrEqual(44);
+    expect(settingsTargets.sfxRangeHeight).toBeGreaterThanOrEqual(44);
+    await page.getByRole('button', { name: '关闭设置' }).click();
+
+    await seedReplay(page);
+    await page.getByRole('button', { name: '回放' }).click();
+    await page.locator('#replay-container').getByRole('button', { name: '播放', exact: true }).click();
+    const replayRangeHeight = await page.locator('#replay-progress').evaluate(element =>
+        element.getBoundingClientRect().height);
+    expect(replayRangeHeight).toBeGreaterThanOrEqual(32);
 });
 
 test('background audio pauses while the page is hidden and resumes when visible', async ({ page }) => {
@@ -163,6 +191,86 @@ test('background audio pauses while the page is hidden and resumes when visible'
         hidden: { playing: false, style: null },
         visible: { playing: true, style: 'calm' }
     });
+});
+
+test('muted SFX does not initialize or schedule silent audio work', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => {
+        window.__audioContextAttempts = 0;
+        const CountingAudioContext = class {
+            constructor() {
+                window.__audioContextAttempts++;
+                throw new Error('count-only audio context');
+            }
+        };
+        Object.defineProperty(window, 'AudioContext', { configurable: true, value: CountingAudioContext });
+        Object.defineProperty(window, 'webkitAudioContext', { configurable: true, value: CountingAudioContext });
+        AudioManager.setSfxVolume(0);
+        AudioManager.SFX.ziMo();
+    });
+    await page.waitForTimeout(900);
+    expect(await page.evaluate(() => window.__audioContextAttempts)).toBe(0);
+
+    await page.evaluate(() => {
+        AudioManager.setSfxVolume(0.5);
+        AudioManager.SFX.buttonClick();
+    });
+    expect(await page.evaluate(() => window.__audioContextAttempts)).toBe(1);
+});
+
+test('generic result modal is keyboard accessible and restores focus', async ({ page }) => {
+    await openApp(page);
+    const trigger = page.locator('#btn-open-settings');
+    await trigger.focus();
+    await page.evaluate(() => UIComponents.createModal('测试弹窗', '<p>内容</p>', [{ text: '确定' }]));
+
+    const dialog = page.getByRole('dialog', { name: '测试弹窗' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: '确定' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+});
+
+test('tile option selector supports keyboard cancellation and focus restoration', async ({ page }) => {
+    await openApp(page);
+    const trigger = page.locator('#btn-open-settings');
+    await trigger.focus();
+    await page.evaluate(() => {
+        window.__selectorResult = 'pending';
+        const tile = Tiles.createTile('wan', 1, 'selector-test');
+        showTileOptionsSelector([[tile]], '请选择吃的组合', option => option)
+            .then(result => { window.__selectorResult = result; });
+    });
+
+    const dialog = page.getByRole('dialog', { name: '请选择吃的组合' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: '请选择吃的组合，选项 1' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => window.__selectorResult)).toBe(null);
+    await expect(trigger).toBeFocused();
+});
+
+test('failed stats persistence does not break game result handling', async ({ page }) => {
+    await openApp(page);
+    const completed = await page.evaluate(() => {
+        const originalRecordGame = Stats.recordGame;
+        const originalConsoleError = console.error;
+        Stats.recordGame = () => { throw new Error('expected persistence failure'); };
+        console.error = () => {};
+        try {
+            saveGameResult({
+                players: [{ id: 0, position: 0, name: '玩家', score: 1000 }],
+                winner: null
+            });
+            return true;
+        } finally {
+            Stats.recordGame = originalRecordGame;
+            console.error = originalConsoleError;
+        }
+    });
+    expect(completed).toBe(true);
 });
 
 test('in-game settings preserve the paused menu and Escape closes only the top modal', async ({ page }) => {
@@ -195,6 +303,22 @@ test('opponent display mode applies immediately during a game', async ({ page })
 
     await page.locator('#opponent-display').selectOption('small');
     await expect.poll(() => page.locator('#hand-top .mahjong-tile.back').count()).toBeGreaterThanOrEqual(13);
+});
+
+test('player hand supports keyboard selection and discard', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    const tiles = page.locator('#hand-bottom .mahjong-tile[role="button"]');
+    await expect(tiles).toHaveCount(14);
+    const firstTile = tiles.first();
+    await expect(firstTile).toHaveAttribute('tabindex', '0');
+    await expect(firstTile).toHaveAttribute('aria-disabled', 'false');
+    await firstTile.focus();
+    await page.keyboard.press('Enter');
+    await expect(firstTile).toHaveClass(/selected/);
+    await page.keyboard.press('Enter');
+    await expect.poll(() => page.locator('#hand-bottom .mahjong-tile').count()).toBe(13);
+    await expect(page.locator('#hand-bottom .mahjong-tile[tabindex="0"]')).toHaveCount(0);
 });
 
 test('network and keyboard-accessible custom game entry points work', async ({ page }) => {
@@ -237,7 +361,16 @@ for (const viewport of VIEWPORTS.filter(item =>
         await openApp(page);
         await seedReplay(page);
         await page.getByRole('button', { name: '回放' }).click();
-        await page.getByRole('button', { name: '播放' }).click();
+        await page.locator('#replay-container').getByRole('button', { name: '播放', exact: true }).click();
+
+        if (viewport.name === 'desktop') {
+            await page.locator('#replay-speed').click();
+            await page.locator('#replay-speed').click();
+            await expect(page.locator('#replay-speed')).toHaveText('4×');
+            await page.locator('#replay-back-btn').click();
+            await page.locator('#replay-container').getByRole('button', { name: '播放', exact: true }).click();
+            await expect(page.locator('#replay-speed')).toHaveText('1×');
+        }
 
         await expect(page.locator('#replay-player')).toHaveClass(/active/);
         await page.waitForTimeout(350);
@@ -255,10 +388,26 @@ for (const viewport of VIEWPORTS.filter(item =>
         await expect(page.locator('#replay-step-back')).toBeEnabled();
 
         if (viewport.name === 'desktop') {
+            await page.evaluate(() => {
+                _replayPlayer.players[0].name = '<b>玩家</b>';
+                _replayPlayer.goToStep(1);
+            });
+            await expect(page.locator('#replay-action-sub')).toHaveText('玩家: <b>玩家</b>');
+            await page.evaluate(() => {
+                _replayPlayer.players[0].name = '玩家';
+                _replayPlayer.goToStep(1);
+            });
             await page.locator('#replay-round-next').click();
             await expect(page.locator('#replay-round-next')).toBeDisabled();
             await expect(page.locator('#replay-round-prev')).toBeEnabled();
-            await page.locator('.replay-timeline-item').last().click();
+            await page.locator('#replay-speed').click();
+            await page.locator('#replay-speed').click();
+            const timelineItems = page.locator('.replay-timeline-item');
+            await expect(timelineItems).toHaveCount(5);
+            await timelineItems.nth(3).click();
+            await page.locator('#replay-play-pause').click();
+            await expect(timelineItems.last()).toHaveAttribute('aria-current', 'step');
+            expect(await page.locator('#replay-play-pause').getAttribute('aria-label')).toBe('播放回放');
             await expect(page.locator('#replay-step-forward')).toBeDisabled();
             await expect(page.locator('#replay-play-pause')).toBeDisabled();
         }

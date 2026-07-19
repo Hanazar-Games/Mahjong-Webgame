@@ -179,10 +179,10 @@
         }
         
         // 显示升级和成就解锁提示
-        if (result.levelResult?.levelsGained > 0) {
+        if (result?.levelResult?.levelsGained > 0) {
             Utils.toast(`🎉 升级到 Lv.${result.levelResult.newLevel}！`, 3000, 'success');
         }
-        if (result.newlyUnlocked?.length > 0) {
+        if (result?.newlyUnlocked?.length > 0) {
             for (const ach of result.newlyUnlocked) {
                 Utils.toast(`🏆 解锁成就「${ach.name}」：${ach.desc}`, 4000, 'success');
                 UIComponents.flashAchievement?.(ach);

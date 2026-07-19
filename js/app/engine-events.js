@@ -326,7 +326,7 @@
             AppEventBus.emit('engine:queYiMenSelected', data);
             if (!data || !data.player) return;
             const suitNames = { wan: '万', tong: '筒', tiao: '条' };
-            Utils.toast(`${Utils.escapeHtml(data.player.name)} 缺${suitNames[data.suit] || ''}`);
+            Utils.toast(`${data.player.name} 缺${suitNames[data.suit] || ''}`);
         });
         
         engine.on('invalidHu', (data) => {

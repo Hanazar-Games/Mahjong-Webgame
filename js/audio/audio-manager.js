@@ -8,6 +8,7 @@ const AudioManager = (function() {
 
     let audioCtx = null;
     let masterGain = null;
+    let limiter = null;
     let bgmGain = null;
     let sfxGain = null;
     let isMuted = false;
@@ -28,8 +29,19 @@ const AudioManager = (function() {
         try {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             masterGain = audioCtx.createGain();
-            masterGain.connect(audioCtx.destination);
             masterGain.gain.value = 1;
+            if (typeof audioCtx.createDynamicsCompressor === 'function') {
+                limiter = audioCtx.createDynamicsCompressor();
+                limiter.threshold.value = -8;
+                limiter.knee.value = 10;
+                limiter.ratio.value = 8;
+                limiter.attack.value = 0.003;
+                limiter.release.value = 0.18;
+                masterGain.connect(limiter);
+                limiter.connect(audioCtx.destination);
+            } else {
+                masterGain.connect(audioCtx.destination);
+            }
 
             bgmGain = audioCtx.createGain();
             bgmGain.connect(masterGain);
@@ -76,6 +88,7 @@ const AudioManager = (function() {
 
     // SFX timer 管理（防止游戏切换后旧音效仍播放）
     function sfxTimeout(fn, delay) {
+        if (!sfxEnabled || sfxVolume <= 0.0001 || isMuted) return null;
         const id = setTimeout(() => {
             activeSfxTimers.delete(id);
             fn();
@@ -96,7 +109,7 @@ const AudioManager = (function() {
      * FM合成器 - 用于丰富音色
      */
     function playFM(options = {}) {
-        if (!ensureAudio() || !sfxEnabled) return;
+        if (!sfxEnabled || sfxVolume <= 0.0001 || isMuted || !ensureAudio()) return;
         const {
             carrier = 440,
             modulator = 220,
@@ -152,7 +165,7 @@ const AudioManager = (function() {
      * 噪声合成器 - 用于滑动/碰撞声
      */
     function playNoise(options = {}) {
-        if (!ensureAudio() || !sfxEnabled) return;
+        if (!sfxEnabled || sfxVolume <= 0.0001 || isMuted || !ensureAudio()) return;
         const {
             duration = 0.2,
             frequency = 1000,
@@ -205,7 +218,7 @@ const AudioManager = (function() {
      * 打击合成器
      */
     function playPerc(options = {}) {
-        if (!ensureAudio() || !sfxEnabled) return;
+        if (!sfxEnabled || sfxVolume <= 0.0001 || isMuted || !ensureAudio()) return;
         const {
             freq = 200,
             decay = 0.15,
@@ -261,7 +274,7 @@ const AudioManager = (function() {
      * 和弦合成器
      */
     function playChord(freqs, options = {}) {
-        if (!ensureAudio() || !sfxEnabled) return;
+        if (!sfxEnabled || sfxVolume <= 0.0001 || isMuted || !ensureAudio()) return;
         const { duration = 0.5, volume = 0.4, type = 'sine', stagger = 0.04 } = options;
         const amp = Math.max(0, volume || 0);
         if (amp <= 0.0001) return;
@@ -296,7 +309,7 @@ const AudioManager = (function() {
      * 铃铛合成器
      */
     function playBell(freq, options = {}) {
-        if (!ensureAudio() || !sfxEnabled) return;
+        if (!sfxEnabled || sfxVolume <= 0.0001 || isMuted || !ensureAudio()) return;
         const { duration = 1.5, volume = 0.4 } = options;
         const amp = Math.max(0, volume || 0);
         if (amp <= 0.0001) return;
@@ -639,11 +652,13 @@ const AudioManager = (function() {
     function setSfxVolume(vol) {
         sfxVolume = Math.max(0, Math.min(1, vol));
         if (sfxGain) sfxGain.gain.value = sfxVolume;
+        if (sfxVolume <= 0.0001) clearAllSfxTimers();
     }
 
     function setMuted(muted) {
         isMuted = muted;
         if (masterGain) masterGain.gain.value = muted ? 0 : 1;
+        if (isMuted) clearAllSfxTimers();
     }
 
     function setSfxEnabled(enabled) {

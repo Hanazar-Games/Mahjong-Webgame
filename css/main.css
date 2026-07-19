@@ -1436,11 +1436,22 @@ html, body {
 .replay-progress {
     width: 100%;
     -webkit-appearance: none;
+    height: 32px;
+    background: transparent;
+    outline: none;
+    cursor: pointer;
+}
+
+.replay-progress::-webkit-slider-runnable-track {
     height: 5px;
     background: var(--bg-secondary);
     border-radius: 3px;
-    outline: none;
-    cursor: pointer;
+}
+
+.replay-progress::-moz-range-track {
+    height: 5px;
+    background: var(--bg-secondary);
+    border-radius: 3px;
 }
 
 .replay-progress::-webkit-slider-thumb {
@@ -1450,6 +1461,7 @@ html, body {
     background: var(--accent-gold);
     border-radius: 50%;
     cursor: pointer;
+    margin-top: -4.5px;
 }
 
 .replay-control-bar {
@@ -1600,8 +1612,8 @@ html, body {
         gap: 4px;
     }
     .replay-discard-pile {
-        width: 90px;
-        height: min(16vh, 62px);
+        width: 48px;
+        height: min(13vh, 48px);
         padding: 3px;
         gap: 1px;
     }

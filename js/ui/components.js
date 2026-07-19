@@ -43,14 +43,21 @@ const UIComponents = (function() {
             div.appendChild(decoBottom);
         }
         
-        if (options.selectable) {
-            div.addEventListener('click', () => {
-                div.classList.toggle('selected');
+        if (options.selectable || options.onClick) {
+            const activate = () => {
+                if (div.getAttribute('aria-disabled') === 'true') return;
+                if (options.selectable) div.classList.toggle('selected');
+                if (options.onClick) options.onClick(tile);
+            };
+            div.setAttribute('role', 'button');
+            div.setAttribute('tabindex', '0');
+            div.setAttribute('aria-label', tile.name || tile.shortName || '麻将牌');
+            div.addEventListener('click', activate);
+            div.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                activate();
             });
-        }
-        
-        if (options.onClick) {
-            div.addEventListener('click', () => options.onClick(tile));
         }
         
         if (options.small) {
@@ -263,21 +270,36 @@ const UIComponents = (function() {
     function createModal(title, content, buttons = []) {
         const overlay = document.createElement('div');
         overlay.className = 'modal';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        const trigger = document.activeElement;
+        const close = () => {
+            if (!overlay.isConnected) return;
+            overlay.remove();
+            if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
+        };
+        overlay._closeModal = close;
         
         const modal = document.createElement('div');
         modal.className = 'modal-panel';
+        modal.tabIndex = -1;
+        if (!title) overlay.setAttribute('aria-label', '提示');
         
         // 头部
         if (title) {
             const header = document.createElement('div');
             header.className = 'modal-panel-header';
             const h3 = document.createElement('h3');
+            h3.id = `modal-title-${Utils.uuid()}`;
             h3.textContent = title;
+            overlay.setAttribute('aria-labelledby', h3.id);
             header.appendChild(h3);
             const closeBtn = document.createElement('button');
             closeBtn.className = 'modal-close';
+            closeBtn.type = 'button';
             closeBtn.textContent = '✕';
-            closeBtn.addEventListener('click', () => overlay.remove());
+            closeBtn.setAttribute('aria-label', '关闭弹窗');
+            closeBtn.addEventListener('click', close);
             header.appendChild(closeBtn);
             modal.appendChild(header);
         }
@@ -294,11 +316,15 @@ const UIComponents = (function() {
         
         for (const btn of buttons) {
             const button = document.createElement('button');
+            button.type = 'button';
             button.className = 'modal-btn';
             button.textContent = btn.text;
             button.addEventListener('click', () => {
-                if (btn.onClick) btn.onClick();
-                overlay.remove();
+                try {
+                    if (btn.onClick) btn.onClick();
+                } finally {
+                    close();
+                }
             });
             body.appendChild(button);
         }
@@ -310,8 +336,12 @@ const UIComponents = (function() {
         // 点击背景关闭
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) {
-                overlay.remove();
+                close();
             }
+        });
+        requestAnimationFrame(() => {
+            const focusTarget = modal.querySelector('.modal-btn') || modal.querySelector('.modal-close') || modal;
+            focusTarget.focus();
         });
         
         return overlay;

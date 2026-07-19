@@ -35,6 +35,7 @@
 
         init() {
             this._bindEvents();
+            this._updateSpeedControl();
             this._updateHeader();
             if (this.rounds.length > 0) {
                 this.loadRound(0);
@@ -76,11 +77,7 @@
                 AudioManager.SFX.buttonClick();
                 this.speedIdx = (this.speedIdx + 1) % this.speeds.length;
                 this.speed = this.speeds[this.speedIdx];
-                const btn = document.getElementById('replay-speed');
-                if (btn) {
-                    btn.textContent = this.speed + '×';
-                    btn.setAttribute('aria-label', `回放速度，当前 ${this.speed} 倍`);
-                }
+                this._updateSpeedControl();
             };
             this._handlers.progress = (e) => {
                 const max = this._getTotalSteps() - 1;
@@ -99,6 +96,13 @@
             document.getElementById('replay-progress')?.addEventListener('input', this._handlers.progress);
             document.getElementById('replay-round-prev')?.addEventListener('click', this._handlers.roundPrev);
             document.getElementById('replay-round-next')?.addEventListener('click', this._handlers.roundNext);
+        }
+
+        _updateSpeedControl() {
+            const btn = document.getElementById('replay-speed');
+            if (!btn) return;
+            btn.textContent = this.speed + '×';
+            btn.setAttribute('aria-label', `回放速度，当前 ${this.speed} 倍`);
         }
 
         _unbindEvents() {
@@ -378,6 +382,9 @@
 
         play() {
             if (this.isPlaying) return;
+            const total = this._getTotalSteps();
+            const atEnd = this.currentRoundIdx >= this.rounds.length - 1 && this.currentStep >= total - 1;
+            if (total === 0 || atEnd) return;
             this.isPlaying = true;
             const btn = document.getElementById('replay-play-pause');
             if (btn) {
@@ -395,6 +402,7 @@
                 btn.setAttribute('aria-label', '播放回放');
             }
             if (this.playTimer) { clearTimeout(this.playTimer); this.playTimer = null; }
+            this._updateControls();
         }
 
         _scheduleNext() {
@@ -404,7 +412,10 @@
                 if (!this.isPlaying) return;
                 if (this.currentStep < this._getTotalSteps() - 1) {
                     this.stepForward();
-                    this._scheduleNext();
+                    const reachedEnd = this.currentRoundIdx >= this.rounds.length - 1 &&
+                        this.currentStep >= this._getTotalSteps() - 1;
+                    if (reachedEnd) this.pause();
+                    else this._scheduleNext();
                 } else if (this.currentRoundIdx < this.rounds.length - 1) {
                     this.loadRound(this.currentRoundIdx + 1);
                     this.isPlaying = true;
@@ -624,7 +635,7 @@
             if (detailEl) detailEl.innerHTML = `${Utils.escapeHtml(desc.icon)} <strong>${Utils.escapeHtml(desc.text)}</strong>`;
 
             const subEl = document.getElementById('replay-action-sub');
-            if (subEl) subEl.textContent = desc.player ? `玩家: ${Utils.escapeHtml(desc.player)}` : '';
+            if (subEl) subEl.textContent = desc.player ? `玩家: ${desc.player}` : '';
 
             const counter = document.getElementById('replay-step-counter');
             if (counter) counter.textContent = `${stepIdx + 1} / ${this._getTotalSteps()}`;

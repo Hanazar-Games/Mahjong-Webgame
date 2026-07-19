@@ -154,7 +154,7 @@
             if (createBtn) createBtn.disabled = true;
             try {
                 await App.network.createRoom(name, type, playerName);
-                Utils.toast(`房间 ${Utils.escapeHtml(name)} 已创建`, 3000, 'success');
+                Utils.toast(`房间 ${name} 已创建`, 3000, 'success');
             } catch (err) {
                 showNetworkError('创建房间失败: ' + (err?.message || '未知错误'));
             } finally {
@@ -266,7 +266,7 @@
         });
 
         net.on('playerDisconnected', ({ playerId, name }) => {
-            Utils.toast(name ? `${Utils.escapeHtml(name)} 断开连接` : '玩家断开连接', 3000, 'warning');
+            Utils.toast(name ? `${name} 断开连接` : '玩家断开连接', 3000, 'warning');
         });
 
         net.on('gameStart', (config) => {

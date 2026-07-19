@@ -103,15 +103,30 @@
     function showTileOptionsSelector(options, titleText, getTilesFn) {
         return new Promise((resolve) => {
             _pendingSelectorResolves.push(resolve);
+            const trigger = document.activeElement;
             const overlay = document.createElement('div');
             overlay.id = 'tile-selector-overlay';
+            overlay.className = 'modal';
+            overlay.setAttribute('role', 'dialog');
+            overlay.setAttribute('aria-modal', 'true');
             overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:240;display:flex;align-items:center;justify-content:center;';
+            const finishSelector = (value) => {
+                if (!overlay.isConnected) return;
+                overlay.remove();
+                const i = _pendingSelectorResolves.indexOf(resolve);
+                if (i >= 0) _pendingSelectorResolves.splice(i, 1);
+                if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
+                resolve(value);
+            };
+            overlay._closeModal = () => finishSelector(null);
             
             const panel = document.createElement('div');
             panel.style.cssText = 'background:var(--bg-panel);padding:20px;border-radius:var(--border-radius);border:1px solid rgba(212,168,67,0.3);max-width:90%;';
             
             const title = document.createElement('h3');
+            title.id = `tile-selector-title-${Utils.uuid()}`;
             title.textContent = titleText;
+            overlay.setAttribute('aria-labelledby', title.id);
             title.style.cssText = 'color:var(--accent-gold);margin-bottom:16px;text-align:center;';
             panel.appendChild(title);
             
@@ -119,8 +134,10 @@
             optionsContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
             
             options.forEach((opt, idx) => {
-                const row = document.createElement('div');
-                row.style.cssText = 'display:flex;gap:8px;align-items:center;cursor:pointer;padding:8px 12px;border-radius:8px;border:1px solid transparent;transition:all 0.2s;';
+                const row = document.createElement('button');
+                row.type = 'button';
+                row.setAttribute('aria-label', `${titleText}，选项 ${idx + 1}`);
+                row.style.cssText = 'display:flex;width:100%;gap:8px;align-items:center;cursor:pointer;padding:8px 12px;border-radius:8px;border:1px solid transparent;transition:all 0.2s;background:transparent;color:inherit;font:inherit;';
                 row.addEventListener('mouseenter', () => {
                     row.style.background = 'rgba(212,168,67,0.1)';
                     row.style.borderColor = 'rgba(212,168,67,0.3)';
@@ -130,10 +147,7 @@
                     row.style.borderColor = 'transparent';
                 });
                 row.addEventListener('click', () => {
-                    overlay.remove();
-                    const i = _pendingSelectorResolves.indexOf(resolve);
-                    if (i >= 0) _pendingSelectorResolves.splice(i, 1);
-                    resolve(opt);
+                    finishSelector(opt);
                 });
                 
                 const tiles = getTilesFn(opt);
@@ -149,6 +163,7 @@
             panel.appendChild(optionsContainer);
             overlay.appendChild(panel);
             document.body.appendChild(overlay);
+            requestAnimationFrame(() => optionsContainer.querySelector('button')?.focus());
         });
     }
 
@@ -159,24 +174,41 @@
     function showAnGangOptionsSelector(options) {
         return new Promise((resolve) => {
             _pendingSelectorResolves.push(resolve);
+            const trigger = document.activeElement;
             const overlay = document.createElement('div');
             overlay.id = 'tile-selector-overlay';
+            overlay.className = 'modal';
+            overlay.setAttribute('role', 'dialog');
+            overlay.setAttribute('aria-modal', 'true');
             overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:240;display:flex;align-items:center;justify-content:center;';
+            const finishSelector = (value) => {
+                if (!overlay.isConnected) return;
+                overlay.remove();
+                const i = _pendingSelectorResolves.indexOf(resolve);
+                if (i >= 0) _pendingSelectorResolves.splice(i, 1);
+                if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
+                resolve(value);
+            };
+            overlay._closeModal = () => finishSelector(null);
             
             const panel = document.createElement('div');
             panel.style.cssText = 'background:var(--bg-panel);padding:20px;border-radius:var(--border-radius);border:1px solid rgba(212,168,67,0.3);max-width:90%;';
             
             const title = document.createElement('h3');
+            title.id = `tile-selector-title-${Utils.uuid()}`;
             title.textContent = '请选择杠的组合';
+            overlay.setAttribute('aria-labelledby', title.id);
             title.style.cssText = 'color:var(--accent-gold);margin-bottom:16px;text-align:center;';
             panel.appendChild(title);
             
             const optionsContainer = document.createElement('div');
             optionsContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
             
-            options.forEach((opt) => {
-                const row = document.createElement('div');
-                row.style.cssText = 'display:flex;gap:8px;align-items:center;cursor:pointer;padding:8px 12px;border-radius:8px;border:1px solid transparent;transition:all 0.2s;';
+            options.forEach((opt, optionIndex) => {
+                const row = document.createElement('button');
+                row.type = 'button';
+                row.setAttribute('aria-label', `请选择杠的组合，选项 ${optionIndex + 1}`);
+                row.style.cssText = 'display:flex;width:100%;gap:8px;align-items:center;cursor:pointer;padding:8px 12px;border-radius:8px;border:1px solid transparent;transition:all 0.2s;background:transparent;color:inherit;font:inherit;';
                 row.addEventListener('mouseenter', () => {
                     row.style.background = 'rgba(212,168,67,0.1)';
                     row.style.borderColor = 'rgba(212,168,67,0.3)';
@@ -186,10 +218,7 @@
                     row.style.borderColor = 'transparent';
                 });
                 row.addEventListener('click', () => {
-                    overlay.remove();
-                    const i = _pendingSelectorResolves.indexOf(resolve);
-                    if (i >= 0) _pendingSelectorResolves.splice(i, 1);
-                    resolve(opt);
+                    finishSelector(opt);
                 });
                 
                 const tiles = opt.type === 'an_gang' ? opt.tiles : (opt.tile ? [opt.tile] : []);
@@ -212,6 +241,7 @@
             panel.appendChild(optionsContainer);
             overlay.appendChild(panel);
             document.body.appendChild(overlay);
+            requestAnimationFrame(() => optionsContainer.querySelector('button')?.focus());
         });
     }
 
@@ -396,6 +426,8 @@
         
         handEl.querySelectorAll('.mahjong-tile').forEach(tile => {
             tile.classList.toggle('disabled', !enable);
+            tile.setAttribute('aria-disabled', String(!enable));
+            tile.tabIndex = enable ? 0 : -1;
         });
     }
 
@@ -412,6 +444,7 @@
             if (e.key === 'Escape') {
                 if (openModal.id === 'settings-modal') hideSettingsModal();
                 else if (openModal.id === 'ingame-menu') hideIngameMenu();
+                else if (typeof openModal._closeModal === 'function') openModal._closeModal();
                 e.preventDefault();
             } else if (e.key === 'Tab') {
                 const focusable = [...openModal.querySelectorAll(

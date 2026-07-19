@@ -119,6 +119,8 @@
                 const shouldDisable = !engine || engine.currentPlayerIndex !== localIndex || engine.state !== 'playing';
                 handEl.querySelectorAll('.mahjong-tile').forEach(tile => {
                     tile.classList.toggle('disabled', shouldDisable);
+                    tile.setAttribute('aria-disabled', String(shouldDisable));
+                    tile.tabIndex = shouldDisable ? -1 : 0;
                     if (selectedId && tile.dataset.id === selectedId) {
                         tile.classList.add('selected');
                     }

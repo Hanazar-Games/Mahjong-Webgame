@@ -313,6 +313,12 @@
     transition: border-color 0.2s;
 }
 
+input[type="text"],
+input[type="number"],
+select {
+    min-height: 44px;
+}
+
 .setting-row input:focus,
 .setting-row select:focus {
     border-color: var(--accent-gold);
@@ -326,11 +332,23 @@
     flex: 1;
     min-width: 0;
     -webkit-appearance: none;
-    height: 4px;
-    background: rgba(255,255,255,0.08);
+    height: 44px;
+    background: transparent;
     border-radius: 2px;
     border: none;
     padding: 0;
+}
+
+.setting-row.slider-row input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+}
+
+.setting-row.slider-row input[type="range"]::-moz-range-track {
+    height: 4px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
 }
 
 .setting-row.slider-row input[type="range"]::-webkit-slider-thumb {
@@ -340,6 +358,7 @@
     background: var(--accent-gold);
     border-radius: 50%;
     cursor: pointer;
+    margin-top: -6px;
 }
 
 /* ========== 通用弹窗面板 ========== */
