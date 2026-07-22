@@ -197,6 +197,45 @@ Storage.remove('stats');
 const allTypesAch = Stats.getAchievements().find(a => a.id === 'all_types');
 assert(allTypesAch.progress === 0, '初始进度 0%');
 
+// === 测试 10: 损坏设置归一化 ===
+console.log('\n【测试 10】损坏设置归一化');
+Storage.set('settings', {
+    playerName: 123,
+    aiDifficulty: 'invalid',
+    tableTheme: 'invalid',
+    gameRounds: 999,
+    bgmVolume: 'NaN',
+    sfxVolume: 500,
+    sfxEnabled: 'false',
+    mahjongType: 'invalid'
+});
+const normalizedSettings = Stats.getSettings();
+assert(normalizedSettings.playerName === '玩家', '非字符串玩家名恢复默认值');
+assert(normalizedSettings.aiDifficulty === 'normal', '无效 AI 难度恢复默认值');
+assert(normalizedSettings.tableTheme === 'classic-green', '无效主题恢复默认值');
+assert(normalizedSettings.gameRounds === 4, '无效局数恢复默认值');
+assert(normalizedSettings.bgmVolume === 0, '非数字 BGM 音量恢复默认值');
+assert(normalizedSettings.sfxVolume === 100, '超范围 SFX 音量被限制到 100');
+assert(normalizedSettings.sfxEnabled === true, '非布尔音效开关恢复默认值');
+assert(normalizedSettings.mahjongType === 'guangdong', '无效麻将类型恢复默认值');
+
+// === 测试 11: 损坏统计集合归一化 ===
+console.log('\n【测试 11】损坏统计集合归一化');
+Storage.set('stats', {
+    totalGames: 'bad',
+    totalScore: 'bad',
+    playedTypes: {},
+    unlockedAchievements: 'first_win',
+    history: { bad: true }
+});
+const normalizedStats = Stats.getStats();
+assert(normalizedStats.totalGames === 0, '无效总场数恢复默认值');
+assert(normalizedStats.totalScore === 0, '无效累计得分恢复默认值');
+assert(Array.isArray(normalizedStats.playedTypes) && normalizedStats.playedTypes.length === 0, '损坏牌种集合恢复空数组');
+assert(Array.isArray(normalizedStats.unlockedAchievements) && normalizedStats.unlockedAchievements.length === 0, '损坏成就集合恢复空数组');
+assert(Array.isArray(normalizedStats.history) && normalizedStats.history.length === 0, '损坏历史记录恢复空数组');
+assert(Stats.getMatchSummary().bestGame === 0, '零场战绩不暴露内部最低分哨兵值');
+
 // === 总结 ===
 console.log('\n========== 测试结果 ==========');
 console.log(`✅ 通过: ${passed}`);

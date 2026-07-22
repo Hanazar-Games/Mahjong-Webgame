@@ -8,7 +8,11 @@ const Replay = (function() {
     const MAX_REPLAYS = 30;
 
     function getReplays() {
-        return Storage.get('replays', []);
+        const replays = Storage.get('replays', []);
+        if (!Array.isArray(replays)) return [];
+        return replays
+            .filter(replay => replay && typeof replay === 'object' && !Array.isArray(replay))
+            .slice(0, MAX_REPLAYS);
     }
 
     function saveReplay(replay) {

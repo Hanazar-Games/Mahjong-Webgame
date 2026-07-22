@@ -17,9 +17,14 @@
     }
 
     class ReplayPlayer {
-        constructor(replayData) {
-            this.data = replayData;
-            this.rounds = Array.isArray(replayData.rounds) ? replayData.rounds : [];
+        constructor(replayData = {}) {
+            this.data = replayData && typeof replayData === 'object' && !Array.isArray(replayData) ? replayData : {};
+            this.rounds = Array.isArray(this.data.rounds)
+                ? this.data.rounds.filter(round => round && typeof round === 'object').map(round => ({
+                    ...round,
+                    history: Array.isArray(round.history) ? round.history : []
+                }))
+                : [];
             this.currentRoundIdx = 0;
             this.currentStep = -1;
             this.isPlaying = false;
@@ -27,7 +32,7 @@
             this.speed = 1;
             this.speeds = [1, 2, 4];
             this.speedIdx = 0;
-            this.players = replayData.players || [];
+            this.players = Array.isArray(this.data.players) ? this.data.players : [];
             this.playerStates = [];
             this.discardPile = [];
             this._handlers = {};
@@ -40,8 +45,7 @@
             if (this.rounds.length > 0) {
                 this.loadRound(0);
             } else {
-                document.getElementById('replay-action-text').textContent = '无回放数据';
-                this._updateControls();
+                this._showEmptyState('无回放数据');
             }
         }
 
@@ -122,6 +126,24 @@
             return round?.history?.length || 0;
         }
 
+        _showEmptyState(message) {
+            this.pause();
+            this.currentStep = -1;
+            this.playerStates = [];
+            this.discardPile = [];
+            this._resetTable();
+            const timeline = document.getElementById('replay-timeline');
+            if (timeline) timeline.innerHTML = '';
+            const actionText = document.getElementById('replay-action-text');
+            if (actionText) actionText.textContent = message;
+            const actionSub = document.getElementById('replay-action-sub');
+            if (actionSub) actionSub.textContent = '';
+            const counter = document.getElementById('replay-step-counter');
+            if (counter) counter.textContent = '0 / 0';
+            this._updateProgress();
+            this._updateControls();
+        }
+
         loadRound(idx) {
             this.pause();
             this.currentRoundIdx = idx;
@@ -137,6 +159,8 @@
             const round = this.rounds[idx];
             if (round?.history?.length > 0) {
                 this.goToStep(0);
+            } else {
+                this._showEmptyState('本局无动作记录');
             }
         }
 
@@ -151,21 +175,25 @@
             if (titleEl) titleEl.textContent = typeName;
 
             const metaEl = document.getElementById('replay-meta');
-            if (metaEl) metaEl.textContent = `第${this.currentRoundIdx + 1}/${this.rounds.length}局 · ${windName}风圈`;
+            if (metaEl) metaEl.textContent = this.rounds.length > 0
+                ? `第${this.currentRoundIdx + 1}/${this.rounds.length}局 · ${windName}风圈`
+                : '无对局数据';
 
             const roundLabel = document.getElementById('replay-round-label');
-            if (roundLabel) roundLabel.textContent = `局 ${this.currentRoundIdx + 1}`;
+            if (roundLabel) roundLabel.textContent = `局 ${this.rounds.length > 0 ? this.currentRoundIdx + 1 : 0}`;
 
             const scoresEl = document.getElementById('replay-scores');
-            if (scoresEl && this.data.finalScores) {
+            if (scoresEl && Array.isArray(this.data.finalScores)) {
                 scoresEl.innerHTML = this.data.finalScores.map(s => {
                     const score = Number.isFinite(Number(s.score)) ? Number(s.score) : 0;
                     return `<span class="score-tag${s.isWin ? ' win' : ''}">${Utils.escapeHtml(s.name)}: ${score}</span>`;
                 }).join('');
-            }
+            } else if (scoresEl) scoresEl.innerHTML = '';
 
             const roundInfoEl = document.getElementById('replay-round-info');
-            if (roundInfoEl) roundInfoEl.textContent = `${this.currentRoundIdx + 1}/${this.rounds.length}局`;
+            if (roundInfoEl) roundInfoEl.textContent = this.rounds.length > 0
+                ? `${this.currentRoundIdx + 1}/${this.rounds.length}局`
+                : '0/0局';
 
             const windEl = document.getElementById('replay-wind');
             if (windEl) windEl.textContent = windName;

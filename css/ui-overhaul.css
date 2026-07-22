@@ -15,6 +15,27 @@
     --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
+/* game.css 中的旧 flex 头部会与绝对定位返回按钮冲突；统一恢复居中标题。 */
+.lobby-header {
+    display: block;
+    text-align: center;
+}
+
+.mahjong-type-card .type-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 54px;
+    margin: 0 auto 8px;
+    color: #172517;
+    background: linear-gradient(180deg, #f4ecd9, #d8c9a8);
+    border: 2px solid rgba(212, 168, 67, 0.7);
+    border-radius: 7px;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.28);
+    filter: none;
+}
+
 /* ========== Screen 基础调整 ========== */
 #game-screen.screen {
     overflow: hidden;
@@ -1429,6 +1450,32 @@ select {
     }
     #game-screen .player-area.bottom .hand-area {
         justify-content: flex-start;
+        gap: 0;
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+    /*
+     * 竖屏下完整展示本家手牌。普通麻将最多 14 张，台湾麻将最多 17 张；
+     * 采用轻度叠放保留可辨识牌面，避免依赖没有可见提示的横向滚动。
+     */
+    #game-screen .player-area.bottom .hand-area .mahjong-tile {
+        min-width: 0;
+        min-height: 0;
+        width: clamp(24px, 8vw, 30px);
+        height: clamp(48px, 9vh, 60px);
+        border-radius: 5px;
+    }
+    #game-screen .player-area.bottom .hand-area .mahjong-tile .tile-face {
+        font-size: clamp(1.2rem, 5vw, 1.7rem);
+    }
+    #game-screen .player-area.bottom .hand-area .mahjong-tile + .mahjong-tile {
+        margin-left: -6px;
+    }
+    #game-screen .player-area.bottom .hand-area[data-tile-count="15"] .mahjong-tile + .mahjong-tile,
+    #game-screen .player-area.bottom .hand-area[data-tile-count="16"] .mahjong-tile + .mahjong-tile,
+    #game-screen .player-area.bottom .hand-area[data-tile-count="17"] .mahjong-tile + .mahjong-tile,
+    #game-screen .player-area.bottom .hand-area[data-tile-count="18"] .mahjong-tile + .mahjong-tile {
+        margin-left: -10px;
     }
     #game-screen .player-area.left .mahjong-tile,
     #game-screen .player-area.right .mahjong-tile,
@@ -1454,6 +1501,30 @@ select {
     }
     .result-actions {
         flex-direction: column;
+    }
+}
+
+/* 对局提示放到牌桌信息区，避免覆盖本家手牌、向听数和底部触控区。 */
+#game-screen.active ~ #toast-container {
+    top: 45%;
+    bottom: auto;
+}
+
+/* 中等宽度窗口按可用桌宽收紧本家牌，避免 1280×720 等常见笔记本分辨率出现隐性横滚。 */
+@media (min-width: 561px) and (max-width: 1350px) and (min-height: 561px) {
+    #game-screen .player-area.bottom .hand-area .mahjong-tile {
+        min-width: 0;
+        width: clamp(48px, 5vw, 68px);
+        height: clamp(72px, 13.5vh, 92px);
+    }
+}
+
+@media (min-width: 561px) and (max-width: 900px) {
+    #game-screen .game-table {
+        grid-template-areas:
+            ". top ."
+            "left center right"
+            "bottom bottom bottom";
     }
 }
 
@@ -1568,13 +1639,25 @@ select {
 
     #game-screen .player-area.bottom .hand-area {
         padding: 2px 2px 4px;
-        gap: 2px;
+        gap: 0;
     }
 
     #game-screen .player-area.bottom .mahjong-tile {
-        width: 42px;
+        min-width: 0;
+        width: 36px;
         height: 58px;
         border-radius: 6px;
+    }
+
+    #game-screen .player-area.bottom .hand-area .mahjong-tile + .mahjong-tile {
+        margin-left: -4px;
+    }
+
+    #game-screen .player-area.bottom .hand-area[data-tile-count="15"] .mahjong-tile + .mahjong-tile,
+    #game-screen .player-area.bottom .hand-area[data-tile-count="16"] .mahjong-tile + .mahjong-tile,
+    #game-screen .player-area.bottom .hand-area[data-tile-count="17"] .mahjong-tile + .mahjong-tile,
+    #game-screen .player-area.bottom .hand-area[data-tile-count="18"] .mahjong-tile + .mahjong-tile {
+        margin-left: -8px;
     }
 
     #game-screen .player-area.bottom .mahjong-tile .tile-face {

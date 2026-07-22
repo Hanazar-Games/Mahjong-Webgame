@@ -4,6 +4,54 @@
  */
     let _settingsTrigger = null;
     let _settingsReturnToIngameMenu = false;
+    let _sliderSaveTimer = null;
+    let _sliderRollbackSettings = null;
+
+    function syncSettingsControls(settings = App.settings) {
+        if (!settings) return;
+        const settingMap = {
+            'player-name': settings.playerName,
+            'ai-difficulty': settings.aiDifficulty,
+            'table-theme': settings.tableTheme,
+            'game-rounds': String(settings.gameRounds),
+            'game-speed': settings.gameSpeed,
+            'bgm-volume': settings.bgmVolume,
+            'sfx-volume': settings.sfxVolume,
+            'sfx-enabled': settings.sfxEnabled,
+            'bgm-style': settings.bgmStyle,
+            'opponent-display': settings.opponentDisplay,
+            'show-tile-names': settings.showTileNames,
+            'show-shanten': settings.showShanten,
+            'auto-sort': settings.autoSort
+        };
+
+        for (const [id, value] of Object.entries(settingMap)) {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            if (el.type === 'range') {
+                el.value = value;
+                const label = document.getElementById(id + '-value');
+                if (label) label.textContent = value + '%';
+            } else if (el.type === 'checkbox') {
+                el.checked = !!value;
+            } else {
+                el.value = value;
+            }
+        }
+    }
+
+    function restoreSettings(settings) {
+        App.settings = Utils.deepClone(settings);
+        syncSettingsControls(App.settings);
+        AudioManager.setBgmVolume(App.settings.bgmVolume / 100);
+        AudioManager.setSfxVolume(App.settings.sfxVolume / 100);
+        AudioManager.setSfxEnabled(App.settings.sfxEnabled !== false);
+        if (App.settings.bgmStyle === 'none' || App.settings.bgmVolume <= 0) {
+            AudioManager.stopBgm();
+        } else if (!AudioManager.isPlaying || AudioManager.currentBgm !== App.settings.bgmStyle) {
+            AudioManager.startBgm(App.settings.bgmStyle);
+        }
+    }
 
     function showSettingsModal(returnToIngameMenu = false) {
         const modal = document.getElementById('settings-modal');
@@ -36,7 +84,11 @@
      * 保存所有设置
      */
     function saveAllSettings() {
-        const prevSettings = Utils.deepClone(App.settings);
+        const prevSettings = Utils.deepClone(_sliderRollbackSettings || App.settings);
+        if (_sliderSaveTimer) {
+            clearTimeout(_sliderSaveTimer);
+            _sliderSaveTimer = null;
+        }
         const fields = {
             'player-name': 'playerName',
             'ai-difficulty': 'aiDifficulty',
@@ -65,14 +117,18 @@
         try {
             const ok = Stats.saveSettings(App.settings);
             if (!ok) {
-                App.settings = prevSettings;
+                restoreSettings(prevSettings);
+                _sliderRollbackSettings = null;
                 Utils.toast('设置保存失败', 3000, 'error');
                 return false;
             }
             // 保存成功后从 Storage 重新加载，确保内存与持久化一致
             App.settings = Utils.deepClone(Stats.getSettings());
+            syncSettingsControls(App.settings);
+            _sliderRollbackSettings = null;
         } catch (e) {
-            App.settings = prevSettings;
+            restoreSettings(prevSettings);
+            _sliderRollbackSettings = null;
             console.error('保存设置失败:', e);
             Utils.toast('设置保存失败', 3000, 'error');
             return false;
@@ -110,12 +166,10 @@
      */
     function handleSettingChange(e) {
         const el = e.target;
+        // range 由 input 事件统一防抖保存，避免松手时重复写入并破坏回滚基线。
+        if (el.type === 'range') return;
         const key = el.id;
         let value = el.value;
-        
-        if (el.type === 'range') {
-            value = parseInt(value);
-        }
         
         if (el.type === 'number') {
             const n = parseInt(value);
@@ -146,13 +200,22 @@
             if (el.type === 'checkbox') {
                 value = el.checked;
             }
-            const prevValue = App.settings[settingKey];
+            const prevSettings = Utils.deepClone(App.settings);
             App.settings[settingKey] = value;
-            const ok = Stats.saveSettings(App.settings);
+            if (key === 'bgm-style' && value !== 'none' && (App.settings.bgmVolume || 0) <= 0) {
+                App.settings.bgmVolume = 30;
+            }
+            let ok = false;
+            try {
+                ok = Stats.saveSettings(App.settings);
+            } catch (e) {
+                console.error('保存设置失败:', e);
+            }
             if (!ok) {
-                App.settings[settingKey] = prevValue;
+                restoreSettings(prevSettings);
                 Utils.toast('设置保存失败', 3000, 'error');
             } else {
+                syncSettingsControls(App.settings);
                 // 实时应用某些设置
                 if (key === 'player-name') {
                     const selfNameEl = document.getElementById('self-name');
@@ -170,14 +233,6 @@
                     if (value === 'none') {
                         AudioManager.stopBgm();
                     } else {
-                        if ((App.settings.bgmVolume || 0) <= 0) {
-                            App.settings.bgmVolume = 30;
-                            const bgmSlider = document.getElementById('bgm-volume');
-                            const bgmLabel = document.getElementById('bgm-volume-value');
-                            if (bgmSlider) bgmSlider.value = '30';
-                            if (bgmLabel) bgmLabel.textContent = '30%';
-                            Stats.saveSettings(App.settings);
-                        }
                         AudioManager.setBgmVolume(App.settings.bgmVolume / 100);
                         AudioManager.startBgm(value);
                     }
@@ -218,8 +273,6 @@
      * 处理滑块输入
      */
     // 滑块保存防抖（避免每帧写入localStorage）
-    let _sliderSaveTimer = null;
-    
     function handleSliderInput(e) {
         const el = e.target;
         const label = document.getElementById(el.id + '-value');
@@ -233,7 +286,9 @@
             'sfx-volume': 'sfxVolume'
         };
         const settingKey = keyMap[el.id];
-        const prevValue = settingKey ? App.settings[settingKey] : undefined;
+        if (!_sliderRollbackSettings) {
+            _sliderRollbackSettings = Utils.deepClone(App.settings);
+        }
         if (settingKey) {
             App.settings[settingKey] = parseInt(el.value);
         }
@@ -257,13 +312,18 @@
             try {
                 const ok = Stats.saveSettings(App.settings);
                 if (!ok) {
-                    if (settingKey) App.settings[settingKey] = prevValue;
+                    restoreSettings(_sliderRollbackSettings);
                     Utils.toast('设置保存失败', 3000, 'error');
+                } else {
+                    App.settings = Utils.deepClone(Stats.getSettings());
+                    syncSettingsControls(App.settings);
                 }
             } catch (e) {
-                if (settingKey) App.settings[settingKey] = prevValue;
+                restoreSettings(_sliderRollbackSettings);
                 console.error('保存设置失败:', e);
                 Utils.toast('设置保存失败', 3000, 'error');
+            } finally {
+                _sliderRollbackSettings = null;
             }
         }, 300);
     }
@@ -436,37 +496,5 @@
     }
     function loadSettings() {
         App.settings = Utils.deepClone(Stats.getSettings());
-        
-        // 应用设置到UI
-        const settingMap = {
-            'player-name': App.settings.playerName,
-            'ai-difficulty': App.settings.aiDifficulty,
-            'table-theme': App.settings.tableTheme,
-            'game-rounds': String(App.settings.gameRounds),
-            'game-speed': App.settings.gameSpeed,
-            'bgm-volume': App.settings.bgmVolume,
-            'sfx-volume': App.settings.sfxVolume,
-            'sfx-enabled': App.settings.sfxEnabled,
-            'bgm-style': App.settings.bgmStyle,
-
-            'opponent-display': App.settings.opponentDisplay,
-            'show-tile-names': App.settings.showTileNames,
-            'show-shanten': App.settings.showShanten,
-            'auto-sort': App.settings.autoSort
-        };
-        
-        for (const [id, value] of Object.entries(settingMap)) {
-            const el = document.getElementById(id);
-            if (el) {
-                if (el.type === 'range') {
-                    el.value = value;
-                    const label = document.getElementById(id + '-value');
-                    if (label) label.textContent = value + '%';
-                } else if (el.type === 'checkbox') {
-                    el.checked = !!value;
-                } else {
-                    el.value = value;
-                }
-            }
-        }
+        syncSettingsControls(App.settings);
     }

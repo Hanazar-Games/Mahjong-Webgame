@@ -142,6 +142,58 @@ test('audio and appearance settings update and persist', async ({ page }) => {
     await expect(page.locator('#table-theme')).toHaveValue('amethyst');
 });
 
+test('damaged stored settings are normalized before UI and audio initialization', async ({ page }) => {
+    const failures = collectRuntimeFailures(page);
+    await page.addInitScript(() => {
+        localStorage.setItem('mahjong__version', '1');
+        localStorage.setItem('mahjong_settings', JSON.stringify({
+            playerName: 123,
+            aiDifficulty: 'impossible',
+            tableTheme: 'missing-theme',
+            gameRounds: 999,
+            gameSpeed: null,
+            bgmVolume: 'not-a-number',
+            sfxVolume: 500,
+            sfxEnabled: 'false',
+            bgmStyle: 'missing-style',
+            opponentDisplay: 'giant',
+            mahjongType: 'missing-type'
+        }));
+        localStorage.setItem('mahjong_replays', JSON.stringify({ damaged: true }));
+    });
+    await openApp(page);
+    await page.getByRole('button', { name: '设置' }).click();
+
+    await expect(page.locator('#player-name')).toHaveValue('玩家');
+    await expect(page.locator('#ai-difficulty')).toHaveValue('normal');
+    await expect(page.locator('#table-theme')).toHaveValue('classic-green');
+    await expect(page.locator('#game-rounds')).toHaveValue('4');
+    await expect(page.locator('#bgm-volume')).toHaveValue('0');
+    await expect(page.locator('#sfx-volume')).toHaveValue('100');
+    await expect(page.locator('#sfx-enabled')).toBeChecked();
+    expect(await page.evaluate(() => ({
+        bgmVolume: AudioManager.getBgmVolume(),
+        sfxVolume: AudioManager.getSfxVolume(),
+        mahjongType: App.settings.mahjongType,
+        replayCount: Replay.getReplays().length
+    }))).toEqual({ bgmVolume: 0, sfxVolume: 1, mahjongType: 'guangdong', replayCount: 0 });
+    expect(failures).toEqual([]);
+});
+
+test('failed slider persistence restores the control, settings and live audio volume', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: '设置' }).click();
+    await page.evaluate(() => { Stats.saveSettings = () => false; });
+
+    await page.locator('#sfx-volume').fill('80');
+    await expect(page.locator('#sfx-volume')).toHaveValue('50', { timeout: 2_000 });
+    await expect(page.locator('#sfx-volume-value')).toHaveText('50%');
+    expect(await page.evaluate(() => ({
+        setting: App.settings.sfxVolume,
+        live: AudioManager.getSfxVolume()
+    }))).toEqual({ setting: 50, live: 0.5 });
+});
+
 test('mobile settings and replay sliders keep practical touch targets', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openApp(page);
@@ -211,6 +263,11 @@ test('muted SFX does not initialize or schedule silent audio work', async ({ pag
     await page.waitForTimeout(900);
     expect(await page.evaluate(() => window.__audioContextAttempts)).toBe(0);
 
+    expect(await page.evaluate(() => {
+        AudioManager.setSfxVolume(Number.NaN);
+        return AudioManager.getSfxVolume();
+    })).toBe(0);
+
     await page.evaluate(() => {
         AudioManager.setSfxVolume(0.5);
         AudioManager.SFX.buttonClick();
@@ -271,6 +328,94 @@ test('failed stats persistence does not break game result handling', async ({ pa
         }
     });
     expect(completed).toBe(true);
+});
+
+test('empty replay clears the previous replay state and disables playback', async ({ page }) => {
+    await openApp(page);
+    await seedReplay(page);
+    await page.getByRole('button', { name: '回放' }).click();
+    await page.locator('#replay-container').getByRole('button', { name: '播放', exact: true }).click();
+    await expect(page.locator('.replay-timeline-item')).toHaveCount(5);
+
+    await page.evaluate(() => openReplayPlayer({
+        mahjongType: 'guobiao',
+        players: [],
+        rounds: [],
+        finalScores: []
+    }));
+    await expect(page.locator('#replay-action-text')).toHaveText('无回放数据');
+    await expect(page.locator('#replay-action-sub')).toHaveText('');
+    await expect(page.locator('#replay-step-counter')).toHaveText('0 / 0');
+    await expect(page.locator('.replay-timeline-item')).toHaveCount(0);
+    await expect(page.locator('#replay-table .mahjong-tile')).toHaveCount(0);
+    await expect(page.locator('#replay-play-pause')).toBeDisabled();
+    await expect(page.locator('#replay-meta')).toHaveText('无对局数据');
+
+    await page.evaluate(() => openReplayPlayer({
+        mahjongType: 'guobiao',
+        players: { damaged: true },
+        rounds: [{ history: { damaged: true } }],
+        finalScores: { damaged: true }
+    }));
+    await expect(page.locator('#replay-action-text')).toHaveText('本局无动作记录');
+    await expect(page.locator('.replay-timeline-item')).toHaveCount(0);
+    await expect(page.locator('#replay-scores .score-tag')).toHaveCount(0);
+});
+
+test('network guest receives a localized final result from the trusted host', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(() => {
+        App.localPlayerIndex = 2;
+        App.isNetworkGame = true;
+        App.network = {
+            isHost: false,
+            playerId: 'guest',
+            players: [{ id: 'host', isHost: true }, { id: 'guest', isHost: false }]
+        };
+        handleNetworkData('gameResult', {
+            mahjongType: 'guangdong',
+            round: 4,
+            players: [
+                { id: 0, position: 0, name: '房主', score: 900, networkId: 'host' },
+                { id: 1, position: 1, name: '玩家1', score: 950 },
+                { id: 2, position: 2, name: '访客', score: 1300, networkId: 'guest' },
+                { id: 3, position: 3, name: '玩家3', score: 850 }
+            ],
+            winner: { position: 2 }
+        }, 'host');
+    });
+
+    await expect(page.locator('#game-result')).toHaveClass(/active/);
+    await expect(page.locator('#result-title')).toHaveText('胜利');
+    await expect(page.locator('#result-subtitle')).toHaveText('净胜 +300 分');
+    await expect(page.locator('.result-player-row.winner .result-p-name')).toHaveText('访客');
+    await expect(page.locator('#result-rewards')).toContainText('广东麻将');
+    expect(await page.evaluate(() => App.isNetworkGame)).toBe(false);
+});
+
+test('Taiwan 17-tile hand remains fully visible on a small portrait phone', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await openApp(page);
+    await page.getByRole('button', { name: /自定义模式/ }).click();
+    await page.getByRole('button', { name: /台湾麻将/ }).click();
+    await page.getByRole('button', { name: '开始游戏', exact: true }).click();
+    const tiles = page.locator('#hand-bottom .mahjong-tile');
+    await expect(tiles).toHaveCount(17, { timeout: 10_000 });
+    await page.waitForTimeout(750);
+    const containment = await page.evaluate(() => {
+        const hand = document.getElementById('hand-bottom').getBoundingClientRect();
+        const tileRects = [...document.querySelectorAll('#hand-bottom .mahjong-tile')]
+            .map(tile => tile.getBoundingClientRect());
+        return {
+            allVisible: tileRects.every(tile => tile.left >= hand.left - 1 && tile.right <= hand.right + 1),
+            scrollOverflow: document.getElementById('hand-bottom').scrollWidth - document.getElementById('hand-bottom').clientWidth,
+            minWidth: Math.min(...tileRects.map(tile => tile.width))
+        };
+    });
+    expect(containment.allVisible).toBe(true);
+    expect(containment.scrollOverflow).toBeLessThanOrEqual(1);
+    expect(containment.minWidth).toBeGreaterThanOrEqual(24);
 });
 
 test('in-game settings preserve the paused menu and Escape closes only the top modal', async ({ page }) => {
@@ -510,6 +655,12 @@ for (const viewport of VIEWPORTS) {
                     return !inside({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }, player);
                 }).length;
             }, 0);
+            const bottomTilesInsideHand = [...document.querySelectorAll('#hand-bottom .mahjong-tile')].every(el => {
+                const r = el.getBoundingClientRect();
+                return r.left >= bottomHand.left - 1 && r.right <= bottomHand.right + 1;
+            });
+            const bottomHandScrollOverflow = document.getElementById('hand-bottom').scrollWidth -
+                document.getElementById('hand-bottom').clientWidth;
 
             return {
                 screen,
@@ -523,6 +674,8 @@ for (const viewport of VIEWPORTS) {
                 playersInsideTable: playerRects.every(player => inside(player, table)),
                 verticalTileOverflowByPosition,
                 sideTileOverflow,
+                bottomTilesInsideHand,
+                bottomHandScrollOverflow,
                 actionInsideScreen: inside(action, screen),
                 actionBottomHandOverlap: overlap(action, bottomHand),
                 horizontalScroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -534,6 +687,8 @@ for (const viewport of VIEWPORTS) {
         expect(layout.playersInsideTable).toBe(true);
         expect(layout.verticalTileOverflowByPosition).toEqual({ top: 0, left: 0, right: 0, bottom: 0 });
         expect(layout.sideTileOverflow).toBe(0);
+        expect(layout.bottomTilesInsideHand).toBe(true);
+        expect(layout.bottomHandScrollOverflow).toBeLessThanOrEqual(1);
         expect(layout.actionInsideScreen).toBe(true);
         expect(layout.actionBottomHandOverlap).toBe(0);
         expect(layout.horizontalScroll).toBe(0);

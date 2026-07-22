@@ -27,6 +27,7 @@
 
     let _networkLobbyEventsBound = false;
     let _lastBroadcastTime = 0;
+    let _networkGameResultHandled = false;
 
     function canUseSignalServer() {
         return !!(App.network && App.network.serverUrl && (App.networkServerReachable || App.network.connected));
@@ -474,6 +475,7 @@
     async function startNetworkGame(config) {
         hideNetworkError();
         const net = App.network;
+        _networkGameResultHandled = false;
 
         if (net.isHost) {
             // 房主：正常启动引擎，广播状态
@@ -542,6 +544,19 @@
         }
     }
 
+    function broadcastGameResult(data) {
+        if (!App.network?.isHost || !data || !Array.isArray(data.players)) return;
+        App.network.broadcast({
+            type: 'gameResult',
+            data: {
+                players: data.players,
+                winner: data.winner || null,
+                mahjongType: App.engine?.config?.mahjongType || 'guangdong',
+                round: App.engine?.round || 1
+            }
+        });
+    }
+
     function buildNetworkStateFor(targetPlayerId) {
         const engine = App.engine;
         const state = engine.getState();
@@ -591,8 +606,72 @@
                     return;
                 }
                 applyRemoteState(data);
+            } else if (type === 'gameResult') {
+                if (!isTrustedHost(fromPlayerId)) {
+                    console.warn('忽略非房主发来的结算数据');
+                    return;
+                }
+                applyNetworkGameResult(data);
             }
         }
+    }
+
+    function applyNetworkGameResult(data) {
+        if (_networkGameResultHandled || !data || !Array.isArray(data.players)) return;
+        if (data.players.length < 2 || data.players.length > 4) return;
+
+        const positions = new Set();
+        const players = [];
+        for (const raw of data.players) {
+            const position = Number(raw?.position);
+            const score = Number(raw?.score);
+            if (!Number.isInteger(position) || position < 0 || position >= data.players.length || positions.has(position)) return;
+            if (!Number.isFinite(score)) return;
+            positions.add(position);
+            players.push({
+                id: raw?.id,
+                networkId: typeof raw?.networkId === 'string' ? raw.networkId : null,
+                name: typeof raw?.name === 'string' ? raw.name.slice(0, 32) : `玩家${position + 1}`,
+                score,
+                position,
+                isAI: !!raw?.isAI,
+                gangCount: Number.isFinite(Number(raw?.gangCount)) ? Number(raw.gangCount) : 0
+            });
+        }
+
+        const winnerPosition = Number(data.winner?.position);
+        const winner = Number.isInteger(winnerPosition)
+            ? players.find(player => player.position === winnerPosition) || null
+            : null;
+        const mahjongType = typeof data.mahjongType === 'string' && Tiles.getConfig(data.mahjongType)
+            ? data.mahjongType
+            : (App.engine?.config?.mahjongType || 'guangdong');
+
+        if (App.engine) {
+            App.engine.stopTimer();
+            App.engine.state = 'ended';
+            App.engine.round = Number.isInteger(Number(data.round)) ? Math.max(1, Number(data.round)) : App.engine.round;
+            App.engine.config.mahjongType = mahjongType;
+            for (const player of players) {
+                const enginePlayer = App.engine.players?.[player.position];
+                if (enginePlayer) {
+                    enginePlayer.score = player.score;
+                    enginePlayer.gangCount = player.gangCount;
+                }
+            }
+        }
+
+        _networkGameResultHandled = true;
+        closeAllSelectors();
+        disableActionButtons();
+        enablePlayerActions(false);
+        const resultData = { players, winner, mahjongType };
+        const saveResult = saveGameResult(resultData, { saveReplay: false });
+        showGameResult(resultData, saveResult);
+        const localPosition = App.localPlayerIndex ?? 0;
+        AudioManager.SFX.gameEnd(winner?.position === localPosition);
+        AudioManager.stopBgm();
+        App.isNetworkGame = false;
     }
 
     /**

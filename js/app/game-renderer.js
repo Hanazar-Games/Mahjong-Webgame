@@ -51,6 +51,7 @@
         if (isSelf || displayMode === 'full') {
             const hand = isSelf ? player.hand : (displayMode === 'full' ? player.hand : null);
             if (!hand || !Array.isArray(hand)) return;
+            handEl.dataset.tileCount = String(hand.length);
             
             // 防御：如果之前是其他显示模式（如背面牌或文字），先清空（并清理拖拽监听器）
             if (handEl.querySelectorAll('.mahjong-tile.back').length > 0 || handEl.querySelector(':scope > span')) {
@@ -127,6 +128,7 @@
                 });
             }
         } else if (displayMode === 'small') {
+            handEl.dataset.tileCount = String(Math.max(0, Number(handSize) || 0));
             // 防御：如果之前是其他显示模式（如真实牌面或文字），先清空
             if (handEl.querySelectorAll('.mahjong-tile:not(.back)').length > 0 || handEl.querySelector(':scope > span')) {
                 handEl.innerHTML = '';
@@ -154,6 +156,7 @@
             }
         } else if (displayMode === 'hidden') {
             const safeSize = Number(handSize) || 0;
+            handEl.dataset.tileCount = String(safeSize);
             const span = document.createElement('span');
             span.style.cssText = 'color:var(--text-muted);font-size:0.8rem';
             span.textContent = safeSize + '张';

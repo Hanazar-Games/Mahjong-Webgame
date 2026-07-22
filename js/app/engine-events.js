@@ -271,7 +271,11 @@
             // 先保存再显示，确保结算页展示的经验值与实际获得一致
             const saveResult = saveGameResult(data);
             showGameResult(data, saveResult);
-            AudioManager.SFX.gameEnd(data.winner?.position === 0);
+            const localPosition = App.localPlayerIndex ?? 0;
+            AudioManager.SFX.gameEnd(data.winner?.position === localPosition);
+            if (App.isNetworkGame && App.network?.isHost && typeof broadcastGameResult === 'function') {
+                broadcastGameResult(data);
+            }
             AudioManager.stopBgm();
             App.isNetworkGame = false;
         });

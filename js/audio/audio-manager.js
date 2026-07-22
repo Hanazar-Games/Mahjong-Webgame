@@ -643,14 +643,19 @@ const AudioManager = (function() {
 
     // ============ 音量控制 ============
 
+    function normalizeVolume(vol) {
+        const value = Number(vol);
+        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+    }
+
     function setBgmVolume(vol) {
-        bgmVolume = Math.max(0, Math.min(1, vol));
+        bgmVolume = normalizeVolume(vol);
         if (bgmGain) bgmGain.gain.value = bgmVolume;
         if (bgmVolume <= 0.0001 && bgmPlaying) stopBgm();
     }
 
     function setSfxVolume(vol) {
-        sfxVolume = Math.max(0, Math.min(1, vol));
+        sfxVolume = normalizeVolume(vol);
         if (sfxGain) sfxGain.gain.value = sfxVolume;
         if (sfxVolume <= 0.0001) clearAllSfxTimers();
     }

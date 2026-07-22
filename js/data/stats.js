@@ -53,6 +53,45 @@ const Stats = (function() {
         history: []         // 每场比赛的历史记录
     };
 
+    const SETTING_OPTIONS = {
+        aiDifficulty: ['easy', 'normal', 'hard', 'expert'],
+        tableTheme: ['classic-green', 'dark-blue', 'wood', 'red', 'amethyst', 'ink', 'sunset'],
+        gameRounds: [1, 4, 8, 16],
+        gameSpeed: ['slow', 'normal', 'fast', 'instant'],
+        bgmStyle: ['none', 'calm', 'upbeat', 'zen'],
+        opponentDisplay: ['hidden', 'small', 'full']
+    };
+
+    function normalizeSettings(raw) {
+        const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+        const settings = Utils.deepClone(DEFAULT_SETTINGS);
+
+        if (typeof source.playerName === 'string') {
+            settings.playerName = source.playerName.slice(0, 8);
+        }
+        for (const [key, options] of Object.entries(SETTING_OPTIONS)) {
+            const value = key === 'gameRounds' ? Number(source[key]) : source[key];
+            if (options.includes(value)) settings[key] = value;
+        }
+
+        for (const key of ['bgmVolume', 'sfxVolume']) {
+            const value = Number(source[key]);
+            if (Number.isFinite(value)) settings[key] = Math.round(Math.max(0, Math.min(100, value)));
+        }
+
+        for (const key of ['sfxEnabled', 'showTileNames', 'showShanten', 'autoSort']) {
+            if (typeof source[key] === 'boolean') settings[key] = source[key];
+        }
+
+        if (typeof source.mahjongType === 'string') {
+            const validType = typeof Tiles?.getConfig === 'function'
+                ? !!Tiles.getConfig(source.mahjongType)
+                : (Tiles?.getMahjongTypes?.() || []).some(type => type.key === source.mahjongType);
+            if (validType) settings.mahjongType = source.mahjongType;
+        }
+        return settings;
+    }
+
     function getStats() {
         let stats = Storage.get('stats', null);
         // 防御：null 或损坏的数据
@@ -65,6 +104,30 @@ const Stats = (function() {
                 stats[key] = Utils.deepClone(DEFAULT_STATS[key]);
             }
         }
+        const nonNegativeNumericKeys = [
+            'exp', 'maxExp', 'totalGames', 'totalRounds', 'wins', 'losses', 'winRate',
+            'currentStreak', 'maxStreak', 'mostBombs', 'totalGang', 'totalHu', 'totalZiMo'
+        ];
+        for (const key of nonNegativeNumericKeys) {
+            const value = Number(stats[key]);
+            stats[key] = Number.isFinite(value) && value >= 0 ? value : DEFAULT_STATS[key];
+        }
+        const level = Number(stats.level);
+        stats.level = Number.isFinite(level) && level >= 1 ? Math.floor(level) : DEFAULT_STATS.level;
+        for (const key of ['totalScore', 'bestGame']) {
+            const value = Number(stats[key]);
+            stats[key] = Number.isFinite(value) ? value : DEFAULT_STATS[key];
+        }
+        stats.winRate = Math.min(100, stats.winRate);
+        stats.playedTypes = Array.isArray(stats.playedTypes)
+            ? stats.playedTypes.filter(type => typeof type === 'string')
+            : [];
+        stats.unlockedAchievements = Array.isArray(stats.unlockedAchievements)
+            ? stats.unlockedAchievements.filter(id => typeof id === 'string')
+            : [];
+        stats.history = Array.isArray(stats.history)
+            ? stats.history.filter(item => item && typeof item === 'object' && !Array.isArray(item)).slice(0, 50)
+            : [];
         // 防御：Infinity 数据损坏导致无限循环
         if (!isFinite(stats.exp) || stats.exp < 0) stats.exp = 0;
         if (!isFinite(stats.maxExp) || stats.maxExp <= 0) stats.maxExp = 100;
@@ -385,6 +448,7 @@ const Stats = (function() {
             ? Math.round(history.reduce((sum, h) => sum + (h.netScore || 0), 0) / history.length)
             : 0;
         
+        const displayBestGame = stats.bestGame === -999999 ? 0 : stats.bestGame;
         return {
             totalGames: stats.totalGames,
             totalRounds: stats.totalRounds,
@@ -394,7 +458,7 @@ const Stats = (function() {
             currentStreak: stats.currentStreak,
             maxStreak: stats.maxStreak,
             totalScore: stats.totalScore,
-            bestGame: stats.bestGame,
+            bestGame: displayBestGame,
             avgNetScore,
             recentWinRate: recent.length > 0 ? Math.round((recentWins / recent.length) * 100) : 0,
             bestMatch,
@@ -403,16 +467,7 @@ const Stats = (function() {
     }
 
     function getSettings() {
-        let settings = Storage.get('settings', null);
-        if (!settings || typeof settings !== 'object') {
-            settings = Utils.deepClone(DEFAULT_SETTINGS);
-        }
-        for (const key of Object.keys(DEFAULT_SETTINGS)) {
-            if (settings[key] === undefined || settings[key] === null) {
-                settings[key] = DEFAULT_SETTINGS[key];
-            }
-        }
-        return settings;
+        return normalizeSettings(Storage.get('settings', null));
     }
 
     function saveSettings(settings) {
@@ -430,6 +485,7 @@ const Stats = (function() {
         getLevelProgress,
         getMatchSummary,
         getSettings,
+        normalizeSettings,
         saveSettings,
         ACHIEVEMENTS
     };

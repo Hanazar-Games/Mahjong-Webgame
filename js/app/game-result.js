@@ -25,9 +25,10 @@
         if (!data.players || data.players.length === 0) return;
         const sorted = [...data.players].sort((a, b) => b.score - a.score);
         const targetScore = App.engine?.config?.targetScore ?? 1000;
-        const selfPlayer = sorted.find(p => p.position === 0);
+        const localPosition = App.localPlayerIndex ?? 0;
+        const selfPlayer = sorted.find(p => p.position === localPosition);
         // 优先使用 saveResult 中记录的本局数据，避免与累计统计混淆
-        const isWin = saveResult?.matchIsWin ?? (sorted[0]?.position === 0);
+        const isWin = saveResult?.matchIsWin ?? (sorted[0]?.position === localPosition);
         const netScore = (selfPlayer?.score || 0) - targetScore;
         
         // 渲染结算页
@@ -60,7 +61,7 @@
                 const scoreSign = pNet >= 0 ? '+' : '';
                 const avatar = p.isAI ? '🤖' : '👤';
                 return `
-                    <div class="result-player-row ${p.position === 0 ? 'winner' : ''}">
+                    <div class="result-player-row ${p.position === localPosition ? 'winner' : ''}">
                         <div class="result-rank ${rankClass}">${rankText}</div>
                         <div class="result-p-avatar">${avatar}</div>
                         <div class="result-p-name">${Utils.escapeHtml(p.name)}</div>
@@ -74,8 +75,9 @@
         const rewardsEl = document.getElementById('result-rewards');
         if (rewardsEl) {
             const expGain = saveResult?.expGain ?? (isWin ? 20 + (data.fan || 0) * 2 : 5);
-            const typeName = Tiles.getConfig(data.mahjongType)?.name || data.mahjongType || '';
-            const selfRank = sorted.findIndex(p => p.position === 0) + 1;
+            const mahjongType = data.mahjongType || App.engine?.config?.mahjongType || '';
+            const typeName = Tiles.getConfig(mahjongType)?.name || mahjongType;
+            const selfRank = sorted.findIndex(p => p.position === localPosition) + 1;
             const rankLabel = selfRank === 1 ? '🥇 第1名' : selfRank === 2 ? '🥈 第2名' : selfRank === 3 ? '🥉 第3名' : `第${selfRank}名`;
             // 使用本局统计数据（match* 字段），避免与累计统计混淆
             const mHu = saveResult?.matchHuCount || 0;
@@ -108,10 +110,11 @@
      * - netScore: 净胜分 = finalScore - targetScore（如 +200）
      * - wonRounds: 玩家在这场比赛中赢的局数
      */
-    function saveGameResult(data) {
+    function saveGameResult(data, options = {}) {
         if (!data.players || data.players.length === 0) return;
-        const player = data.players.find(p => p.position === 0);
-        const isWin = data.winner?.position === 0;
+        const localPosition = App.localPlayerIndex ?? 0;
+        const player = data.players.find(p => p.position === localPosition);
+        const isWin = data.winner?.position === localPosition;
         
         const targetScore = App.engine?.config?.targetScore || 1000;
         const finalScore = player?.score || 0;
@@ -190,7 +193,7 @@
         }
         
         // 保存回放
-        if (App.engine) {
+        if (App.engine && options.saveReplay !== false) {
             try {
                 const replayData = Replay.createReplayData(App.engine);
                 Replay.saveReplay(replayData);
