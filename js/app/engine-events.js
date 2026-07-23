@@ -69,6 +69,8 @@
         engine.on('gameStart', (data) => {
             AppEventBus.emit('engine:gameStart', data);
             renderGameState();
+            disableActionButtons();
+            updateTurnGuidance('准备开局…');
             const typeName = Tiles.getConfig(engine.config.mahjongType)?.name || engine.config.mahjongType;
             Utils.toast(`${typeName} · 第${data.round}局`);
             AudioManager.SFX.gameStart();
@@ -91,6 +93,7 @@
             
             const localIndex = App.localPlayerIndex ?? 0;
             if (data.index === localIndex) {
+                updateTurnGuidance('正在摸牌…');
                 updateShantenDisplay(localIndex);
                 // 本地玩家回合：摸牌
                 engine.playerDraw().then((result) => {
@@ -100,6 +103,7 @@
                     }
                     if (!result || !result.ziMo) {
                         enablePlayerActions(true);
+                        updateTurnGuidance('选择一张手牌，再次点击打出', 'active');
                         engine.startTimer();
                         startTurnTimerUI();
                     }
@@ -109,6 +113,7 @@
                     console.warn('playerDraw error:', err);
                 });
             } else if (App.isNetworkGame && App.network?.isHost) {
+                updateTurnGuidance(`等待 ${data.player?.name || '其他玩家'} 出牌`);
                 // 房主权威模式：远程玩家的摸牌也由房主引擎执行，再同步给对应访客。
                 engine.playerDraw().then(() => {
                     if (!App.engine || App.engine !== engine || engine.state !== 'playing') {
@@ -120,8 +125,11 @@
                     console.warn('remote playerDraw error:', err);
                 });
             } else if (App.isNetworkGame) {
+                updateTurnGuidance(`等待 ${data.player?.name || '其他玩家'} 出牌`);
                 // 联机模式下远程AI回合：广播状态让远程玩家可以观看
                 broadcastGameState();
+            } else {
+                updateTurnGuidance(`等待 ${data.player?.name || '电脑玩家'} 出牌`);
             }
         });
         
@@ -135,7 +143,7 @@
             updateShantenDisplay(App.localPlayerIndex ?? 0);
             updateDeckCount(data.deckCount);
             if (_isHumanPlayer(data.player.position)) {
-                AudioManager.SFX.draw();
+                AudioManager.SFX.draw(data.tile);
             }
             if (App.isNetworkGame) broadcastGameState();
         });
@@ -144,12 +152,13 @@
             AppEventBus.emit('engine:discard', data);
             stopTurnTimerUI();
             if (!data || !data.player) return;
+            updateTurnGuidance('等待其他玩家响应…');
             requestAnimationFrame(() => {
                 renderDiscardPile(true);
                 renderPlayerHand(data.player.position, data.player.handSize);
             });
             if (_isHumanPlayer(data.player.position)) {
-                AudioManager.SFX.discard();
+                AudioManager.SFX.discard(data.tile);
             }
             if (App.isNetworkGame) broadcastGameState();
         });
@@ -161,6 +170,7 @@
             if (!data || !data.player) return;
             if (data.player.position === (App.localPlayerIndex ?? 0)) {
                 enableActionButtons(data.action);
+                updateTurnGuidance('请选择可用操作，或点击“过”继续', 'action');
                 const now = Date.now();
                 if (now - _lastTickTime > 400) {
                     _lastTickTime = now;
@@ -294,6 +304,7 @@
             if (!data || !data.player) return;
             if (data.player.position === (App.localPlayerIndex ?? 0)) {
                 enableActionButtons({ type: 'hu' });
+                updateTurnGuidance('可以胡牌，也可以点击“过”继续', 'action');
             }
         });
         
@@ -303,6 +314,7 @@
             if (data.player.position === (App.localPlayerIndex ?? 0)) {
                 App.anGangOptions = data.options;
                 enableActionButtons({ type: 'gang' });
+                updateTurnGuidance('可以杠牌，也可以点击“过”继续', 'action');
             }
         });
         
@@ -314,8 +326,10 @@
                     return;
                 }
                 enablePlayerActions(true);
+                updateTurnGuidance('选择一张手牌，再次点击打出', 'active');
                 Utils.toast('请打出一张牌', 3000, 'warning');
                 engine.startTimer();
+                startTurnTimerUI();
             }
         });
         

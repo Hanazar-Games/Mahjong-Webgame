@@ -301,21 +301,24 @@
                         <div class="player-avatar">👤</div>
                         <div class="player-name" id="self-name">玩家</div>
                         <div class="player-score" id="self-score">1000</div>
+                        <div id="shanten-display" class="shanten-hud hidden">向听: <span id="shanten-value">-</span></div>
                         <div class="turn-indicator active" id="turn-bottom"></div>
                     </div>
                     <div class="melds-area" id="melds-bottom"></div>
                     <div class="hand-area" id="hand-bottom"></div>
-                    <div id="shanten-display" class="shanten-hud hidden">向听: <span id="shanten-value">-</span></div>
                 </div>
 
                 <!-- 牌桌中心 -->
                 <div class="table-center">
+                    <div class="turn-guidance" id="turn-guidance" role="status" aria-live="polite">
+                        准备开局…
+                    </div>
                     <div class="discard-pile" id="discard-pile"></div>
                 </div>
             </div>
 
             <!-- 操作按钮 -->
-            <div class="action-bar" id="action-bar">
+            <div class="action-bar" id="action-bar" aria-hidden="true">
                 <button class="action-btn" id="btn-chi" disabled>
                     <span class="action-label">吃</span>
                 </button>

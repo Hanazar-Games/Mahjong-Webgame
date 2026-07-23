@@ -122,6 +122,21 @@ test('main flows load without runtime or resource errors', async ({ page }) => {
     expect(failures).toEqual([]);
 });
 
+test('release metadata and announcement history stay aligned', async ({ request }) => {
+    const packageJson = await (await request.get('/package.json')).json();
+    const packageLock = await (await request.get('/package-lock.json')).json();
+    const serviceWorker = await (await request.get('/sw.js')).text();
+    const changelog = await (await request.get('/CHANGELOG.md')).text();
+    const historyIndex = changelog.indexOf('## 历史公告');
+
+    expect(packageJson.version).toBe('1.0.10');
+    expect(packageLock.version).toBe('1.0.10');
+    expect(packageLock.packages[''].version).toBe('1.0.10');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v11'");
+    expect(changelog.indexOf('## [1.0.10] - 2026-07-23')).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.9] - 2026-07-22')).toBeGreaterThan(historyIndex);
+});
+
 test('audio and appearance settings update and persist', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: '设置' }).click();
@@ -275,6 +290,66 @@ test('muted SFX does not initialize or schedule silent audio work', async ({ pag
     expect(await page.evaluate(() => window.__audioContextAttempts)).toBe(1);
 });
 
+test('draw and discard SFX receive the concrete tile', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => {
+        window.__tileSfx = { draw: null, discard: null };
+        AudioManager.SFX.draw = tile => {
+            window.__tileSfx.draw = tile ? { id: tile.id, suit: tile.suit } : null;
+        };
+        AudioManager.SFX.discard = tile => {
+            window.__tileSfx.discard = tile ? { id: tile.id, suit: tile.suit } : null;
+        };
+    });
+    await startQuickGame(page);
+
+    const drawn = await page.evaluate(() => window.__tileSfx.draw);
+    expect(drawn?.id).toBeTruthy();
+    expect(drawn?.suit).toMatch(/^(wan|tong|tiao|feng|jian|hua)$/);
+
+    const tile = page.locator('#hand-bottom .mahjong-tile').first();
+    const discarded = {
+        id: await tile.getAttribute('data-id'),
+        suit: await tile.getAttribute('data-suit')
+    };
+    await tile.click();
+    await tile.click();
+    await expect.poll(() => page.evaluate(() => window.__tileSfx.discard)).toEqual(discarded);
+});
+
+test('all synthesized SFX and BGM styles run and stop without runtime errors', async ({ page }) => {
+    const failures = collectRuntimeFailures(page);
+    await openApp(page);
+    const audioState = await page.evaluate(() => {
+        const tile = { id: 'audio-test', suit: 'wan', value: 1 };
+        AudioManager.setSfxEnabled(true);
+        AudioManager.setSfxVolume(0.2);
+        Object.values(AudioManager.SFX).forEach(play => play(tile));
+
+        AudioManager.setBgmVolume(0.2);
+        const styles = ['calm', 'upbeat', 'zen'].map(style => {
+            AudioManager.startBgm(style);
+            return { style: AudioManager.currentBgm, playing: AudioManager.isPlaying };
+        });
+        AudioManager.startBgm('unknown-style');
+        const unknown = { style: AudioManager.currentBgm, playing: AudioManager.isPlaying };
+        return { styles, unknown };
+    });
+    await page.waitForTimeout(1_000);
+    await page.evaluate(() => {
+        AudioManager.stopBgm();
+        AudioManager.stopAllSfx();
+    });
+
+    expect(audioState.styles).toEqual([
+        { style: 'calm', playing: true },
+        { style: 'upbeat', playing: true },
+        { style: 'zen', playing: true }
+    ]);
+    expect(audioState.unknown).toEqual({ style: null, playing: false });
+    expect(failures).toEqual([]);
+});
+
 test('generic result modal is keyboard accessible and restores focus', async ({ page }) => {
     await openApp(page);
     const trigger = page.locator('#btn-open-settings');
@@ -402,7 +477,9 @@ test('Taiwan 17-tile hand remains fully visible on a small portrait phone', asyn
     await page.getByRole('button', { name: '开始游戏', exact: true }).click();
     const tiles = page.locator('#hand-bottom .mahjong-tile');
     await expect(tiles).toHaveCount(17, { timeout: 10_000 });
-    await page.waitForTimeout(750);
+    await expect.poll(() => page.locator('#hand-bottom .tile-drawn').count()).toBe(0);
+    await tiles.last().click();
+    await expect(tiles.last()).toHaveClass(/selected/);
     const containment = await page.evaluate(() => {
         const hand = document.getElementById('hand-bottom').getBoundingClientRect();
         const tileRects = [...document.querySelectorAll('#hand-bottom .mahjong-tile')]
@@ -410,12 +487,176 @@ test('Taiwan 17-tile hand remains fully visible on a small portrait phone', asyn
         return {
             allVisible: tileRects.every(tile => tile.left >= hand.left - 1 && tile.right <= hand.right + 1),
             scrollOverflow: document.getElementById('hand-bottom').scrollWidth - document.getElementById('hand-bottom').clientWidth,
-            minWidth: Math.min(...tileRects.map(tile => tile.width))
+            minWidth: Math.min(...tileRects.map(tile => tile.width)),
+            edgeReserve: Math.min(tileRects[0].left - hand.left, hand.right - tileRects.at(-1).right)
         };
     });
     expect(containment.allVisible).toBe(true);
     expect(containment.scrollOverflow).toBeLessThanOrEqual(1);
     expect(containment.minWidth).toBeGreaterThanOrEqual(24);
+    expect(containment.edgeReserve).toBeGreaterThanOrEqual(8);
+});
+
+test('game table explains the next action and hides unavailable action buttons', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+
+    const guidance = page.locator('#turn-guidance');
+    await expect(guidance).toHaveAttribute('role', 'status');
+    await expect(guidance).toHaveAttribute('aria-live', 'polite');
+    await expect(guidance).toContainText('选择一张手牌，再次点击打出');
+    await expect(page.locator('#player-bottom .player-info > #shanten-display')).toHaveCount(1);
+    await expect(page.locator('#action-bar')).toBeHidden();
+
+    const firstTile = page.locator('#hand-bottom .mahjong-tile').first();
+    const tileName = await firstTile.getAttribute('aria-label');
+    await firstTile.click();
+    await expect(guidance).toContainText(`已选择 ${tileName}`);
+    await expect(guidance).toContainText('再次点击打出');
+
+    await page.evaluate(() => enableActionButtons({ type: 'peng' }));
+    await page.evaluate(() => updateTurnGuidance('可以碰牌，也可以点击“过”继续', 'action'));
+    await expect(page.locator('#action-bar')).toBeVisible();
+    await expect(page.locator('#action-bar')).toHaveAttribute('aria-hidden', 'false');
+    await expect(page.locator('#btn-peng')).toBeEnabled();
+    await expect(page.locator('#btn-peng')).toBeVisible();
+    await expect(page.locator('#btn-skip')).toBeVisible();
+    await expect(page.locator('#btn-chi')).toBeHidden();
+    await expect(page.locator('#btn-gang')).toBeHidden();
+    await expect(page.locator('#btn-hu')).toBeHidden();
+    await page.screenshot({ path: 'test-results/ui-audit-action-state.png', fullPage: true });
+});
+
+test('drag discard replaces stale selection guidance immediately', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    const tile = page.locator('#hand-bottom .mahjong-tile').first();
+    const tileId = await tile.getAttribute('data-id');
+    await tile.click();
+    await expect(page.locator('#turn-guidance')).toContainText('已选择');
+
+    await page.evaluate(id => {
+        App.engine.playerDiscard = () => new Promise(() => {});
+        const draggedTile = App.engine.players[App.localPlayerIndex ?? 0].hand.find(tile => tile.id === id);
+        AppEventBus.emit('tile:dragend', draggedTile);
+    }, tileId);
+
+    await expect(page.locator('#turn-guidance')).toHaveText('已打出，等待其他玩家响应…');
+    await expect(tile).toHaveAttribute('aria-disabled', 'true');
+});
+
+test('skipping a self action restores discard guidance and its visible timer', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(() => {
+        const tile = App.engine.players[App.localPlayerIndex ?? 0].hand[0];
+        App.anGangOptions = [{ type: 'an_gang', tiles: [tile, tile, tile, tile] }];
+        enableActionButtons({ type: 'gang' });
+        updateTurnGuidance('可以杠牌，也可以点击“过”继续', 'action');
+        document.getElementById('turn-timer-display').classList.add('hidden');
+    });
+
+    await page.evaluate(() => handleAction('skip'));
+    await expect(page.locator('#turn-guidance')).toHaveText('选择一张手牌，再次点击打出');
+    await expect(page.locator('#turn-timer-display')).toBeVisible();
+    await expect(page.locator('#action-bar')).toBeHidden();
+    await expect(page.locator('#hand-bottom .mahjong-tile').first()).toHaveAttribute('aria-disabled', 'false');
+});
+
+test('cancelling an kong choice keeps the action available', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(() => {
+        const [first, second] = App.engine.players[App.localPlayerIndex ?? 0].hand;
+        App.anGangOptions = [first, second].map(tile => ({
+            type: 'an_gang',
+            tiles: [tile, tile, tile, tile]
+        }));
+        enableActionButtons({ type: 'gang' });
+        window.__gangAction = handleAction('gang');
+    });
+
+    await expect(page.getByRole('dialog', { name: '请选择杠的组合' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => window.__gangAction);
+    await expect(page.locator('#btn-gang')).toBeEnabled();
+    await expect(page.locator('#action-bar')).toBeVisible();
+    expect(await page.evaluate(() => App.anGangOptions.length)).toBe(2);
+});
+
+test('network state sync updates turn guidance, highlight, and authoritative input lock', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(() => {
+        const networkIds = ['host', 'guest', 'peer-2', 'peer-3'];
+        App.isNetworkGame = true;
+        App.network = {
+            isHost: false,
+            playerId: 'guest',
+            players: networkIds.map((id, index) => ({ id, isHost: index === 0 })),
+            sendTo: () => window.__networkSendSucceeds
+        };
+        window.__networkSendSucceeds = false;
+        const state = App.engine.getState();
+        state.state = 'playing';
+        state.currentPlayer = 2;
+        state.players = App.engine.players.map((player, index) => ({
+            ...player.toJSON(index === 1),
+            networkId: networkIds[index]
+        }));
+        window.__remoteState = state;
+        window.__remoteConfig = { ...App.engine.config, playerCount: 4 };
+        handleNetworkData('stateSync', { state, config: window.__remoteConfig }, 'host');
+    });
+
+    await expect(page.locator('#player-right')).toHaveClass(/current-turn/);
+    await expect(page.locator('#turn-guidance')).toContainText('等待');
+    await expect(page.locator('#turn-guidance')).toContainText('出牌');
+
+    await page.evaluate(() => {
+        const state = structuredClone(window.__remoteState);
+        const tile = state.players[1].hand[0];
+        state.currentPlayer = 1;
+        state.selfActions = {
+            anGangOptions: [{ type: 'an_gang', tiles: [tile, tile, tile, tile] }]
+        };
+        handleNetworkData('stateSync', { state, config: window.__remoteConfig }, 'host');
+    });
+    await expect(page.locator('#player-bottom')).toHaveClass(/current-turn/);
+    await expect(page.locator('#turn-guidance')).toContainText('可以杠牌');
+    await expect(page.locator('#action-bar')).toBeVisible();
+
+    await page.locator('#btn-skip').click();
+    await expect(page.locator('#btn-gang')).toBeEnabled();
+    await expect(page.locator('#action-bar')).toBeVisible();
+    await expect(page.locator('#hand-bottom .mahjong-tile').first()).toHaveAttribute('aria-disabled', 'false');
+
+    await page.evaluate(() => { window.__networkSendSucceeds = true; });
+    await page.locator('#btn-skip').click();
+    await expect(page.locator('#turn-guidance')).toHaveText('操作已发送，等待房主确认…');
+    await expect(page.locator('#hand-bottom .mahjong-tile').first()).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.locator('#action-bar')).toBeHidden();
+});
+
+test('failed network discard restores hand input for retry', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(() => {
+        App.isNetworkGame = true;
+        App.network = {
+            isHost: false,
+            playerId: 'guest',
+            players: [{ id: 'host', isHost: true }, { id: 'guest', isHost: false }],
+            sendTo: () => false
+        };
+    });
+
+    const tile = page.locator('#hand-bottom .mahjong-tile').first();
+    await tile.click();
+    await tile.click();
+    await expect(page.locator('#turn-guidance')).toHaveText('出牌发送失败，请重新选择手牌');
+    await expect(tile).toHaveAttribute('aria-disabled', 'false');
+    await expect(page.locator('#hand-bottom .mahjong-tile')).toHaveCount(14);
 });
 
 test('in-game settings preserve the paused menu and Escape closes only the top modal', async ({ page }) => {
@@ -615,6 +856,7 @@ for (const viewport of VIEWPORTS) {
         const failures = collectRuntimeFailures(page);
         await openApp(page);
         await startQuickGame(page);
+        await page.evaluate(() => enableActionButtons({ type: 'peng' }));
 
         const layout = await page.evaluate(() => {
             const rect = selector => {
@@ -634,6 +876,8 @@ for (const viewport of VIEWPORTS) {
             const center = rect('#game-screen .table-center');
             const action = rect('#action-bar');
             const bottomHand = rect('#hand-bottom');
+            const bottomInfo = rect('#player-bottom .player-info');
+            const shanten = rect('#shanten-display:not(.hidden)');
             const positions = ['top', 'left', 'right', 'bottom'];
             const playerRects = positions.map(position => rect(`#player-${position}`));
             const tiles = [...document.querySelectorAll('#game-screen .player-area .mahjong-tile')].map(el => {
@@ -668,6 +912,8 @@ for (const viewport of VIEWPORTS) {
                 center,
                 action,
                 bottomHand,
+                bottomInfo,
+                shanten,
                 playerRects,
                 tiles,
                 tableInsideScreen: inside(table, screen),
@@ -678,6 +924,8 @@ for (const viewport of VIEWPORTS) {
                 bottomHandScrollOverflow,
                 actionInsideScreen: inside(action, screen),
                 actionBottomHandOverlap: overlap(action, bottomHand),
+                actionBottomInfoOverlap: overlap(action, bottomInfo),
+                actionShantenOverlap: overlap(action, shanten),
                 horizontalScroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
                 verticalScroll: document.documentElement.scrollHeight - document.documentElement.clientHeight
             };
@@ -691,6 +939,8 @@ for (const viewport of VIEWPORTS) {
         expect(layout.bottomHandScrollOverflow).toBeLessThanOrEqual(1);
         expect(layout.actionInsideScreen).toBe(true);
         expect(layout.actionBottomHandOverlap).toBe(0);
+        expect(layout.actionBottomInfoOverlap).toBe(0);
+        expect(layout.actionShantenOverlap).toBe(0);
         expect(layout.horizontalScroll).toBe(0);
         expect(layout.verticalScroll).toBe(0);
         expect(layout.tiles.every(tile => tile.width >= 20 && tile.height >= 26)).toBe(true);

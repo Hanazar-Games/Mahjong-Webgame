@@ -33,11 +33,25 @@
         if (windEl) windEl.textContent = winds[state.currentWind];
         const roundEl = document.getElementById('round-info');
         if (roundEl) roundEl.textContent = `${state.round ?? 1}/${App.engine.config?.maxRounds ?? 1}局`;
+        updatePlayerHighlight(App.engine.currentPlayerIndex);
     }
 
     /**
      * 渲染玩家手牌（增量更新，避免全量DOM重建）
      */
+    function playTileDrawAnimation(tileEl) {
+        tileEl.classList.add('tile-drawn');
+        requestAnimationFrame(() => {
+            const animations = tileEl.getAnimations();
+            if (!animations.length) {
+                tileEl.classList.remove('tile-drawn');
+                return;
+            }
+            Promise.allSettled(animations.map(animation => animation.finished))
+                .then(() => tileEl.classList.remove('tile-drawn'));
+        });
+    }
+
     function renderPlayerHand(playerIndex, handSize, animateLast = false, drawnTileId = null) {
         const handEl = document.getElementById(`hand-${getPositionName(playerIndex)}`);
         if (!handEl || !App.engine) return;
@@ -99,7 +113,7 @@
                 
                 // 摸牌动画：优先匹配drawnTileId
                 if (animateLast && (drawnTileId ? tile.id === drawnTileId : index === hand.length - 1)) {
-                    tileEl.classList.add('tile-drawn');
+                    playTileDrawAnimation(tileEl);
                 }
                 
                 fragment.appendChild(tileEl);
@@ -144,7 +158,7 @@
                     const tileEl = document.createElement('div');
                     tileEl.className = 'mahjong-tile back';
                     if (animateLast && i === handSize - 1) {
-                        tileEl.classList.add('tile-drawn');
+                        playTileDrawAnimation(tileEl);
                     }
                     fragment.appendChild(tileEl);
                 }

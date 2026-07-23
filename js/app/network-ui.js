@@ -851,4 +851,25 @@
         } else {
             enablePlayerActions(false);
         }
+
+        const hasPendingAction = state.pendingAction?.action &&
+            state.pendingAction.playerIndex === (App.localPlayerIndex ?? 0);
+        const canHu = !!state.selfActions?.canHu;
+        const canGang = !!App.anGangOptions?.length;
+        if (hasPendingAction) {
+            updateTurnGuidance('请选择可用操作，或点击“过”继续', 'action');
+        } else if (canHu && canGang) {
+            updateTurnGuidance('可以胡牌或杠牌，也可以点击“过”继续', 'action');
+        } else if (canHu) {
+            updateTurnGuidance('可以胡牌，也可以点击“过”继续', 'action');
+        } else if (canGang) {
+            updateTurnGuidance('可以杠牌，也可以点击“过”继续', 'action');
+        } else if (engine.currentPlayerIndex === (App.localPlayerIndex ?? 0) && engine.state === 'playing') {
+            updateTurnGuidance('选择一张手牌，再次点击打出', 'active');
+        } else if (engine.state === 'waiting') {
+            updateTurnGuidance('等待其他玩家响应…');
+        } else {
+            const currentPlayer = engine.players[engine.currentPlayerIndex];
+            updateTurnGuidance(`等待 ${currentPlayer?.name || '其他玩家'} 出牌`);
+        }
     }
