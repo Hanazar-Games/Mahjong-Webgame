@@ -166,8 +166,11 @@
      */
     function handleSettingChange(e) {
         const el = e.target;
-        // range 由 input 事件统一防抖保存，避免松手时重复写入并破坏回滚基线。
-        if (el.type === 'range') return;
+        // range 由 input 事件统一防抖保存；松手时只试听当前音效音量。
+        if (el.type === 'range') {
+            if (el.id === 'sfx-volume') AudioManager.SFX.buttonClick();
+            return;
+        }
         const key = el.id;
         let value = el.value;
         

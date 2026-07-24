@@ -1793,6 +1793,62 @@ select {
     }
 }
 
+@media (max-width: 560px) and (min-height: 601px) {
+    #replay-player .replay-player-area.left,
+    #replay-player .replay-player-area.right {
+        top: 50%;
+        transform: translateY(-50%);
+        gap: 3px;
+    }
+
+    #replay-player .replay-player-area.left {
+        left: 6px;
+    }
+
+    #replay-player .replay-player-area.right {
+        right: 6px;
+    }
+
+    #replay-player .replay-player-area.left .replay-player-info,
+    #replay-player .replay-player-area.right .replay-player-info {
+        max-width: 72px;
+        gap: 3px;
+        padding: 3px 5px;
+        overflow: hidden;
+    }
+
+    #replay-player .replay-player-area.left .replay-p-avatar,
+    #replay-player .replay-player-area.right .replay-p-avatar {
+        display: none;
+    }
+
+    #replay-player .replay-player-area.left .replay-p-name,
+    #replay-player .replay-player-area.right .replay-p-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    #replay-player .replay-player-area.left .replay-hand,
+    #replay-player .replay-player-area.right .replay-hand,
+    #replay-player .replay-player-area.left .replay-melds,
+    #replay-player .replay-player-area.right .replay-melds {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        gap: 0;
+    }
+
+    #replay-player .replay-player-area.left .replay-hand .mahjong-tile,
+    #replay-player .replay-player-area.right .replay-hand .mahjong-tile {
+        width: 17px;
+        height: 21px;
+    }
+
+    #replay-player .replay-player-area.left .replay-hand .mahjong-tile .tile-face,
+    #replay-player .replay-player-area.right .replay-hand .mahjong-tile .tile-face {
+        font-size: 0.62rem;
+    }
+}
+
 @media (max-height: 600px) {
     #replay-player .replay-hand .mahjong-tile,
     #replay-player .replay-hand .mahjong-tile.tile-small {

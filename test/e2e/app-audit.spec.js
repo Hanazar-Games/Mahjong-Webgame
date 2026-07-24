@@ -14,6 +14,16 @@ async function openApp(page) {
     await page.locator('#loading-screen').waitFor({ state: 'detached' });
 }
 
+test('startup overlay is accessible and clears without a forced wait', async ({ page }) => {
+    await page.goto('/');
+
+    const loading = page.locator('#loading-screen');
+    await expect(loading).toHaveAttribute('role', 'status');
+    await expect(loading).toHaveAttribute('aria-live', 'polite');
+    await expect(loading).toHaveClass(/hidden/, { timeout: 1_000 });
+    await loading.waitFor({ state: 'detached' });
+});
+
 async function startQuickGame(page) {
     await page.getByRole('button', { name: /快速开始/ }).click();
     await expect(page.locator('#game-screen')).toHaveClass(/active/);
@@ -129,12 +139,12 @@ test('release metadata and announcement history stay aligned', async ({ request 
     const changelog = await (await request.get('/CHANGELOG.md')).text();
     const historyIndex = changelog.indexOf('## 历史公告');
 
-    expect(packageJson.version).toBe('1.0.10');
-    expect(packageLock.version).toBe('1.0.10');
-    expect(packageLock.packages[''].version).toBe('1.0.10');
-    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v11'");
-    expect(changelog.indexOf('## [1.0.10] - 2026-07-23')).toBeLessThan(historyIndex);
-    expect(changelog.indexOf('### [1.0.9] - 2026-07-22')).toBeGreaterThan(historyIndex);
+    expect(packageJson.version).toBe('1.0.11');
+    expect(packageLock.version).toBe('1.0.11');
+    expect(packageLock.packages[''].version).toBe('1.0.11');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v12'");
+    expect(changelog.indexOf('## [1.0.11] - 2026-07-24')).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.10] - 2026-07-23')).toBeGreaterThan(historyIndex);
 });
 
 test('audio and appearance settings update and persist', async ({ page }) => {
@@ -155,6 +165,19 @@ test('audio and appearance settings update and persist', async ({ page }) => {
     await expect(page.locator('#bgm-volume')).toHaveValue('30');
     await expect(page.locator('#bgm-style')).toHaveValue('calm');
     await expect(page.locator('#table-theme')).toHaveValue('amethyst');
+});
+
+test('SFX volume control previews the selected level', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: '设置' }).click();
+    await page.evaluate(() => {
+        window.__sfxPreviewCount = 0;
+        AudioManager.SFX.buttonClick = () => { window.__sfxPreviewCount++; };
+    });
+
+    await page.locator('#sfx-volume').fill('70');
+
+    await expect.poll(() => page.evaluate(() => window.__sfxPreviewCount)).toBe(1);
 });
 
 test('damaged stored settings are normalized before UI and audio initialization', async ({ page }) => {
@@ -231,6 +254,32 @@ test('mobile settings and replay sliders keep practical touch targets', async ({
     const replayRangeHeight = await page.locator('#replay-progress').evaluate(element =>
         element.getBoundingClientRect().height);
     expect(replayRangeHeight).toBeGreaterThanOrEqual(32);
+});
+
+test('portrait replay keeps side players readable without rotating labels', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openApp(page);
+    await seedReplay(page);
+    await page.getByRole('button', { name: '回放' }).click();
+    await page.locator('#replay-container').getByRole('button', { name: '播放', exact: true }).click();
+
+    const sideLayout = await page.evaluate(() => ['left', 'right'].map(position => {
+        const area = document.getElementById(`replay-p-${position}`);
+        const info = area.querySelector('.replay-player-info').getBoundingClientRect();
+        const name = area.querySelector('.replay-p-name');
+        const matrix = new DOMMatrix(getComputedStyle(area).transform);
+        return {
+            rotationB: Math.abs(matrix.b),
+            rotationC: Math.abs(matrix.c),
+            infoIsHorizontal: info.width > info.height,
+            nameFits: name.scrollWidth <= name.clientWidth
+        };
+    }));
+
+    expect(sideLayout).toEqual([
+        { rotationB: 0, rotationC: 0, infoIsHorizontal: true, nameFits: true },
+        { rotationB: 0, rotationC: 0, infoIsHorizontal: true, nameFits: true }
+    ]);
 });
 
 test('background audio pauses while the page is hidden and resumes when visible', async ({ page }) => {

@@ -21,12 +21,12 @@
 <body>
     <div id="app">
         <!-- 开场加载 -->
-        <div id="loading-screen" class="loading-screen">
+        <div id="loading-screen" class="loading-screen" role="status" aria-live="polite" aria-label="游戏加载中">
             <div class="loading-content">
                 <div class="loading-mahjong">🀄</div>
                 <div class="loading-title">万能麻将</div>
                 <div class="loading-subtitle">中国境内所有麻将种类</div>
-                <div class="loading-bar">
+                <div class="loading-bar" role="progressbar" aria-label="加载进度">
                     <div class="loading-fill"></div>
                 </div>
             </div>
@@ -180,12 +180,12 @@
                     <div class="settings-group">
                         <h4>声音</h4>
                         <div class="setting-row slider-row">
-                            <label for="bgm-volume">BGM</label>
+                            <label for="bgm-volume">背景音乐</label>
                             <input type="range" id="bgm-volume" min="0" max="100" value="50">
                             <span class="slider-value" id="bgm-volume-value">50%</span>
                         </div>
                         <div class="setting-row slider-row">
-                            <label for="sfx-volume">音效</label>
+                            <label for="sfx-volume">游戏音效</label>
                             <input type="range" id="sfx-volume" min="0" max="100" value="50">
                             <span class="slider-value" id="sfx-volume-value">50%</span>
                         </div>
@@ -197,7 +197,7 @@
                             </label>
                         </div>
                         <div class="setting-row">
-                            <label for="bgm-style">BGM 风格</label>
+                            <label for="bgm-style">音乐风格</label>
                             <select id="bgm-style">
                                 <option value="none" selected>关闭</option>
                                 <option value="calm">悠然</option>

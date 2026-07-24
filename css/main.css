@@ -97,7 +97,7 @@ html, body {
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    transition: opacity 0.6s ease;
+    transition: opacity 0.24s ease;
 }
 
 .loading-screen.hidden {
@@ -142,7 +142,7 @@ html, body {
     width: 0%;
     background: linear-gradient(90deg, var(--accent-gold-dark), var(--accent-gold), var(--accent-gold-light));
     border-radius: 2px;
-    animation: loadingProgress 1.5s ease forwards;
+    animation: loadingProgress 0.45s ease forwards;
     box-shadow: 0 0 10px rgba(212, 168, 67, 0.3);
 }
 

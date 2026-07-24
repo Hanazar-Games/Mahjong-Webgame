@@ -38,14 +38,14 @@
         AudioManager.setSfxEnabled(App.settings.sfxEnabled !== false);
         startConfiguredBgm();
         
-        // 隐藏加载画面
+        // 初始化已完成后快速收起加载画面，避免每次启动都强制等待。
         setTimeout(() => {
             const loading = document.getElementById('loading-screen');
             if (loading) {
                 loading.classList.add('hidden');
-                setTimeout(() => loading.remove(), 600);
+                setTimeout(() => loading.remove(), 250);
             }
-        }, 1800);
+        }, 350);
         
         // 显示主菜单
         UIComponents.switchScreen('main-menu');
