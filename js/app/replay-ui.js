@@ -109,6 +109,14 @@
             btn.setAttribute('aria-label', `回放速度，当前 ${this.speed} 倍`);
         }
 
+        _updatePlayControl(isPlaying) {
+            const btn = document.getElementById('replay-play-pause');
+            if (!btn) return;
+            const icon = isPlaying ? 'pause' : 'play';
+            btn.innerHTML = `<svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#${icon}"></use></svg>`;
+            btn.setAttribute('aria-label', isPlaying ? '暂停回放' : '播放回放');
+        }
+
         _unbindEvents() {
             document.getElementById('replay-back-btn')?.removeEventListener('click', this._handlers.back);
             document.getElementById('replay-play-pause')?.removeEventListener('click', this._handlers.playPause);
@@ -414,21 +422,13 @@
             const atEnd = this.currentRoundIdx >= this.rounds.length - 1 && this.currentStep >= total - 1;
             if (total === 0 || atEnd) return;
             this.isPlaying = true;
-            const btn = document.getElementById('replay-play-pause');
-            if (btn) {
-                btn.textContent = '⏸';
-                btn.setAttribute('aria-label', '暂停回放');
-            }
+            this._updatePlayControl(true);
             this._scheduleNext();
         }
 
         pause() {
             this.isPlaying = false;
-            const btn = document.getElementById('replay-play-pause');
-            if (btn) {
-                btn.textContent = '▶';
-                btn.setAttribute('aria-label', '播放回放');
-            }
+            this._updatePlayControl(false);
             if (this.playTimer) { clearTimeout(this.playTimer); this.playTimer = null; }
             this._updateControls();
         }
@@ -447,11 +447,7 @@
                 } else if (this.currentRoundIdx < this.rounds.length - 1) {
                     this.loadRound(this.currentRoundIdx + 1);
                     this.isPlaying = true;
-                    const btn = document.getElementById('replay-play-pause');
-                    if (btn) {
-                        btn.textContent = '⏸';
-                        btn.setAttribute('aria-label', '暂停回放');
-                    }
+                    this._updatePlayControl(true);
                     this._scheduleNext();
                 } else {
                     this.pause();

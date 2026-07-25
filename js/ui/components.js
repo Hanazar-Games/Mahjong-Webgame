@@ -281,7 +281,7 @@ const UIComponents = (function() {
         overlay._closeModal = close;
         
         const modal = document.createElement('div');
-        modal.className = 'modal-panel';
+        modal.className = 'modal-panel compact-panel';
         modal.tabIndex = -1;
         if (!title) overlay.setAttribute('aria-label', '提示');
         
@@ -297,7 +297,7 @@ const UIComponents = (function() {
             const closeBtn = document.createElement('button');
             closeBtn.className = 'modal-close';
             closeBtn.type = 'button';
-            closeBtn.textContent = '✕';
+            closeBtn.innerHTML = '<svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#close"></use></svg>';
             closeBtn.setAttribute('aria-label', '关闭弹窗');
             closeBtn.addEventListener('click', close);
             header.appendChild(closeBtn);
@@ -317,7 +317,7 @@ const UIComponents = (function() {
         for (const btn of buttons) {
             const button = document.createElement('button');
             button.type = 'button';
-            button.className = 'modal-btn';
+            button.className = `modal-btn${btn.variant ? ` ${btn.variant}` : ''}`;
             button.textContent = btn.text;
             button.addEventListener('click', () => {
                 try {

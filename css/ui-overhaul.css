@@ -15,6 +15,28 @@
     --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
+.ui-icon {
+    width: 1.25em;
+    height: 1.25em;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.icon-btn,
+.icon-label,
+.lobby-header h2,
+.modal-panel-header h3,
+.stats-card > h3 {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
 /* game.css 中的旧 flex 头部会与绝对定位返回按钮冲突；统一恢复居中标题。 */
 .lobby-header {
     display: block;
@@ -48,6 +70,10 @@
     padding: 0;
     padding-top: env(safe-area-inset-top);
     overflow: hidden;
+    background:
+        radial-gradient(circle at 50% 10%, rgba(212, 168, 67, 0.08), transparent 30%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 45%),
+        var(--bg-primary);
 }
 
 /* ========== 主菜单 ========== */
@@ -62,10 +88,14 @@
 }
 
 .menu-logo {
-    font-size: 3.5rem;
-    line-height: 1;
     margin-bottom: 8px;
-    filter: drop-shadow(0 4px 12px rgba(212, 168, 67, 0.25));
+}
+
+.menu-logo img,
+.loading-mahjong img {
+    display: block;
+    margin: 0 auto;
+    filter: drop-shadow(0 5px 14px rgba(212, 168, 67, 0.25));
 }
 
 .menu-title {
@@ -125,9 +155,9 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 16px;
-    padding: 0 20px;
+    padding: clamp(24px, 4vh, 48px) 20px 0;
     overflow-y: auto;
     min-height: 0;
 }
@@ -168,10 +198,21 @@
 }
 
 .menu-btn.primary .btn-icon {
-    font-size: 1.8rem;
-    width: 44px;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    color: var(--accent-gold-light);
+    background: rgba(212, 168, 67, 0.1);
+    border: 1px solid rgba(212, 168, 67, 0.16);
+    border-radius: 10px;
     flex-shrink: 0;
+}
+
+.menu-btn.primary .btn-icon .ui-icon {
+    width: 24px;
+    height: 24px;
 }
 
 .menu-btn.primary .btn-text-group {
@@ -237,7 +278,19 @@
 }
 
 .menu-btn.compact .btn-icon {
-    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    color: var(--accent-gold);
+    background: rgba(212, 168, 67, 0.07);
+    border-radius: 9px;
+}
+
+.menu-btn.compact .btn-icon .ui-icon {
+    width: 20px;
+    height: 20px;
 }
 
 .menu-btn.compact .btn-text {
@@ -274,6 +327,26 @@
     border-color: rgba(212, 168, 67, 0.25);
     color: var(--text-secondary);
     background: rgba(212, 168, 67, 0.05);
+}
+
+.menu-tool-btn .ui-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.back-btn .ui-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.replay-ctrl-btn .ui-icon {
+    width: 18px;
+    height: 18px;
+}
+
+.replay-ctrl-btn.primary .ui-icon {
+    width: 20px;
+    height: 20px;
 }
 
 /* ========== 设置弹窗 ========== */
@@ -393,6 +466,15 @@ select {
     max-width: 90vw;
 }
 
+.modal-panel.settings-panel {
+    width: min(480px, calc(100vw - 40px));
+    max-width: 480px;
+}
+
+.modal-panel.compact-panel {
+    width: min(360px, calc(100vw - 40px));
+}
+
 .modal-panel-header {
     display: flex;
     align-items: center;
@@ -405,6 +487,11 @@ select {
     margin: 0;
     font-size: 1.1rem;
     color: var(--text-primary);
+}
+
+.modal-panel-header h3 .ui-icon,
+.lobby-header h2 .ui-icon {
+    color: var(--accent-gold);
 }
 
 .modal-close {
@@ -486,6 +573,12 @@ select {
     font-size: 1.3rem;
     width: 28px;
     text-align: center;
+}
+
+.pause-action-btn > .ui-icon {
+    width: 24px;
+    height: 24px;
+    margin: 0 2px;
 }
 
 /* ========== 对局 HUD ========== */
@@ -1099,10 +1192,28 @@ select {
 }
 
 .result-icon {
-    font-size: 4rem;
-    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-gold);
     margin-bottom: 8px;
     filter: drop-shadow(0 4px 16px rgba(212, 168, 67, 0.3));
+}
+
+.result-icon .ui-icon {
+    width: 64px;
+    height: 64px;
+    stroke-width: 1.5;
+}
+
+.result-p-avatar .ui-icon {
+    width: 22px;
+    height: 22px;
+    color: var(--text-secondary);
+}
+
+.stats-card > h3 .ui-icon {
+    color: var(--accent-gold);
 }
 
 .result-title {
@@ -1362,23 +1473,20 @@ select {
     .menu-hero {
         padding: 16px 16px 10px;
     }
-    .menu-logo {
-        font-size: 2.5rem;
-    }
     .menu-title {
         font-size: 1.4rem;
         letter-spacing: 2px;
     }
     .menu-body {
-        padding: 0 14px;
+        padding: 24px 14px 0;
         gap: 12px;
     }
     .menu-btn.primary {
         padding: 14px 16px;
     }
     .menu-btn.primary .btn-icon {
-        font-size: 1.4rem;
-        width: 36px;
+        width: 38px;
+        height: 38px;
     }
     .menu-btn.primary .btn-text {
         font-size: 1rem;
@@ -1557,8 +1665,9 @@ select {
     }
 
     /* 结算页移动端 */
-    .result-icon {
-        font-size: 3rem;
+    .result-icon .ui-icon {
+        width: 48px;
+        height: 48px;
     }
     .result-title {
         font-size: 1.4rem;
@@ -1568,6 +1677,12 @@ select {
     }
     .result-actions {
         flex-direction: column;
+    }
+}
+
+@media (max-width: 560px) and (min-height: 780px) {
+    .menu-footer {
+        margin-bottom: clamp(32px, 6vh, 52px);
     }
 }
 
@@ -1596,27 +1711,66 @@ select {
 }
 
 @media (max-height: 640px) {
-    .menu-hero {
-        padding: 12px 16px 8px;
+    #main-menu.screen {
+        display: grid;
+        grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.3fr);
+        grid-template-rows: minmax(0, 1fr) auto;
+        align-items: center;
     }
-    .menu-logo {
-        font-size: 2.2rem;
+
+    .menu-hero {
+        grid-column: 1;
+        grid-row: 1;
+        padding: 12px 16px;
+    }
+
+    .menu-logo img {
+        width: 40px;
+        height: auto;
         margin-bottom: 4px;
     }
+
+    .menu-brand {
+        margin-bottom: 0;
+    }
+
     .menu-title {
         font-size: 1.3rem;
     }
+
+    .menu-tagline {
+        margin-top: 2px;
+        font-size: 0.68rem;
+    }
+
     .menu-player-badge {
         display: none;
     }
+
     .menu-body {
+        grid-column: 2;
+        grid-row: 1;
         gap: 8px;
-        justify-content: flex-start;
-        padding-top: 4px;
-        padding-bottom: 4px;
+        justify-content: center;
+        padding: 8px 16px;
     }
+
     .menu-btn.primary {
-        padding: 12px 16px;
+        padding: 9px 14px;
+    }
+
+    .menu-secondary-actions {
+        max-width: 400px;
+    }
+
+    .menu-btn.compact {
+        padding: 6px 4px;
+    }
+
+    .menu-footer {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        padding: 4px 16px max(6px, env(safe-area-inset-bottom));
     }
 }
 

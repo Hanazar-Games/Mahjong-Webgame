@@ -111,7 +111,7 @@ test('main flows load without runtime or resource errors', async ({ page }) => {
 
     for (const screenName of ['回放', '成就', '战绩']) {
         await page.getByRole('button', { name: screenName }).click();
-        await page.locator('.screen.active').getByRole('button', { name: '← 返回', exact: true }).click();
+        await page.locator('.screen.active').getByRole('button', { name: '返回', exact: true }).click();
         expect(await page.evaluate(() => App.currentScreen)).toBe('main-menu');
     }
 
@@ -132,6 +132,106 @@ test('main flows load without runtime or resource errors', async ({ page }) => {
     expect(failures).toEqual([]);
 });
 
+test('main menu uses a consistent SVG icon system and compact mobile rhythm', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openApp(page);
+
+    await expect(page.locator('#main-menu .btn-icon .ui-icon')).toHaveCount(6);
+    await expect(page.locator('#main-menu .menu-tool-btn .ui-icon')).toHaveCount(2);
+    await expect(page.locator('.menu-logo img')).toHaveAttribute('src', 'assets/tiles/red-dragon.svg');
+
+    const rhythm = await page.evaluate(() => {
+        const badge = document.querySelector('.menu-player-badge').getBoundingClientRect();
+        const primary = document.querySelector('.menu-primary-actions').getBoundingClientRect();
+        return { actionGap: primary.top - badge.bottom };
+    });
+    expect(rhythm.actionGap).toBeLessThan(80);
+});
+
+test('secondary flows keep the shared SVG icon system', async ({ page }) => {
+    await openApp(page);
+
+    await expect(page.locator('.back-btn .ui-icon')).toHaveCount(6);
+    await expect(page.locator('#btn-start-network .ui-icon')).toHaveCount(1);
+    await expect(page.locator('#btn-leave-room .ui-icon')).toHaveCount(1);
+    await expect(page.locator('#result-icon .ui-icon')).toHaveCount(1);
+
+    await page.evaluate(() => UIComponents.createModal('图标检查', '<p>内容</p>', [{ text: '确定' }]));
+    const dialog = page.getByRole('dialog', { name: '图标检查' });
+    await expect(dialog.locator('.modal-close use')).toHaveAttribute('href', 'assets/ui/icons.svg#close');
+    await dialog.getByRole('button', { name: '关闭弹窗' }).click();
+
+    await page.getByRole('button', { name: '战绩' }).click();
+    await expect(page.locator('#stats-page-content .stats-card > h3 .ui-icon')).toHaveCount(3);
+});
+
+test('tall portrait menu keeps utility controls visually connected', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openApp(page);
+
+    const spacing = await page.evaluate(() => {
+        const secondary = document.querySelector('.menu-secondary-actions').getBoundingClientRect();
+        const footer = document.querySelector('.menu-footer').getBoundingClientRect();
+        return { utilityGap: footer.top - secondary.bottom };
+    });
+    expect(spacing.utilityGap).toBeLessThan(190);
+});
+
+test('landscape main menu keeps every entry point inside the viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 667, height: 375 });
+    await openApp(page);
+
+    const layout = await page.evaluate(() => {
+        const buttons = [...document.querySelectorAll('#main-menu button')];
+        const outside = buttons
+            .filter(button => {
+                const rect = button.getBoundingClientRect();
+                return rect.top < 0 || rect.left < 0 || rect.right > innerWidth || rect.bottom > innerHeight;
+            })
+            .map(button => button.textContent.trim());
+        return { outside, visibleButtons: buttons.length };
+    });
+
+    expect(layout.visibleButtons).toBe(8);
+    expect(layout.outside).toEqual([]);
+});
+
+test('reset statistics uses an in-app confirmation dialog', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => {
+        window.__nativeConfirmCalls = 0;
+        window.__resetStatsCalls = 0;
+        window.confirm = () => { window.__nativeConfirmCalls++; return true; };
+        Stats.resetStats = () => { window.__resetStatsCalls++; };
+    });
+
+    await page.getByRole('button', { name: '重置' }).click();
+    const dialog = page.getByRole('dialog', { name: '重置统计数据' });
+    await expect(dialog).toBeVisible();
+    expect(await page.evaluate(() => window.__nativeConfirmCalls)).toBe(0);
+    expect(await page.evaluate(() => window.__resetStatsCalls)).toBe(0);
+
+    await dialog.getByRole('button', { name: '确认重置' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(await page.evaluate(() => window.__resetStatsCalls)).toBe(1);
+});
+
+test('desktop settings and confirmation dialogs keep readable widths', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await page.getByRole('button', { name: '设置' }).click();
+
+    const settingsWidth = await page.locator('.settings-panel').evaluate(element =>
+        element.getBoundingClientRect().width);
+    expect(settingsWidth).toBeLessThanOrEqual(520);
+    await page.getByRole('button', { name: '关闭设置' }).click();
+
+    await page.getByRole('button', { name: '重置' }).click();
+    const confirmWidth = await page.getByRole('dialog', { name: '重置统计数据' })
+        .locator('.modal-panel').evaluate(element => element.getBoundingClientRect().width);
+    expect(confirmWidth).toBeGreaterThanOrEqual(320);
+});
+
 test('release metadata and announcement history stay aligned', async ({ request }) => {
     const packageJson = await (await request.get('/package.json')).json();
     const packageLock = await (await request.get('/package-lock.json')).json();
@@ -139,12 +239,14 @@ test('release metadata and announcement history stay aligned', async ({ request 
     const changelog = await (await request.get('/CHANGELOG.md')).text();
     const historyIndex = changelog.indexOf('## 历史公告');
 
-    expect(packageJson.version).toBe('1.0.11');
-    expect(packageLock.version).toBe('1.0.11');
-    expect(packageLock.packages[''].version).toBe('1.0.11');
-    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v12'");
-    expect(changelog.indexOf('## [1.0.11] - 2026-07-24')).toBeLessThan(historyIndex);
-    expect(changelog.indexOf('### [1.0.10] - 2026-07-23')).toBeGreaterThan(historyIndex);
+    expect(packageJson.version).toBe('1.0.12');
+    expect(packageLock.version).toBe('1.0.12');
+    expect(packageLock.packages[''].version).toBe('1.0.12');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v13'");
+    expect(serviceWorker).toContain("'./assets/ui/icons.svg'");
+    expect(serviceWorker).toContain("'./manifest.json'");
+    expect(changelog.indexOf('## [1.0.12] - 2026-07-25')).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.11] - 2026-07-24')).toBeGreaterThan(historyIndex);
 });
 
 test('audio and appearance settings update and persist', async ({ page }) => {
@@ -280,6 +382,22 @@ test('portrait replay keeps side players readable without rotating labels', asyn
         { rotationB: 0, rotationC: 0, infoIsHorizontal: true, nameFits: true },
         { rotationB: 0, rotationC: 0, infoIsHorizontal: true, nameFits: true }
     ]);
+});
+
+test('replay controls keep SVG icons while toggling play and pause', async ({ page }) => {
+    await openApp(page);
+    await seedReplay(page);
+    await page.getByRole('button', { name: '回放' }).click();
+    await page.locator('#replay-container').getByRole('button', { name: '播放', exact: true }).click();
+
+    await expect(page.locator('.replay-control-bar .ui-icon')).toHaveCount(5);
+    const playButton = page.locator('#replay-play-pause');
+    await expect(playButton.locator('use')).toHaveAttribute('href', 'assets/ui/icons.svg#play');
+    await playButton.click();
+    await expect(playButton).toHaveAttribute('aria-label', '暂停回放');
+    await expect(playButton.locator('use')).toHaveAttribute('href', 'assets/ui/icons.svg#pause');
+    await playButton.click();
+    await expect(playButton.locator('use')).toHaveAttribute('href', 'assets/ui/icons.svg#play');
 });
 
 test('background audio pauses while the page is hidden and resumes when visible', async ({ page }) => {
@@ -774,7 +892,7 @@ test('network and keyboard-accessible custom game entry points work', async ({ p
     }]));
     await expect(page.locator('#room-list img, #room-list svg')).toHaveCount(0);
     await expect(page.locator('#room-list .room-item-meta')).toContainText('0/4人');
-    await page.locator('#network-lobby').getByRole('button', { name: '← 返回', exact: true }).click();
+    await page.locator('#network-lobby').getByRole('button', { name: '返回', exact: true }).click();
 
     await page.getByRole('button', { name: /自定义模式/ }).click();
     const threePlayerType = page.getByRole('button', { name: /四川三人麻将/ });

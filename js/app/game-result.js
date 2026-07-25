@@ -40,7 +40,10 @@
         const titleEl = document.getElementById('result-title');
         const subtitleEl = document.getElementById('result-subtitle');
         
-        if (iconEl) iconEl.textContent = isWin ? '🏆' : '🎭';
+        if (iconEl) {
+            const icon = isWin ? 'trophy' : 'mask';
+            iconEl.innerHTML = `<svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#${icon}"></use></svg>`;
+        }
         if (titleEl) {
             titleEl.textContent = isWin ? '胜利' : '对局结束';
             titleEl.className = 'result-title ' + (isWin ? 'win' : 'lose');
@@ -59,11 +62,11 @@
                 const pNet = (p.score || 0) - targetScore;
                 const scoreClass = pNet >= 0 ? 'positive' : 'negative';
                 const scoreSign = pNet >= 0 ? '+' : '';
-                const avatar = p.isAI ? '🤖' : '👤';
+                const avatar = p.isAI ? 'bot' : 'user';
                 return `
                     <div class="result-player-row ${p.position === localPosition ? 'winner' : ''}">
                         <div class="result-rank ${rankClass}">${rankText}</div>
-                        <div class="result-p-avatar">${avatar}</div>
+                        <div class="result-p-avatar"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#${avatar}"></use></svg></div>
                         <div class="result-p-name">${Utils.escapeHtml(p.name)}</div>
                         <div class="result-p-score ${scoreClass}">${scoreSign}${pNet}</div>
                     </div>

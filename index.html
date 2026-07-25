@@ -23,7 +23,7 @@
         <!-- 开场加载 -->
         <div id="loading-screen" class="loading-screen" role="status" aria-live="polite" aria-label="游戏加载中">
             <div class="loading-content">
-                <div class="loading-mahjong">🀄</div>
+                <div class="loading-mahjong"><img src="assets/tiles/red-dragon.svg" alt="" width="64" height="76"></div>
                 <div class="loading-title">万能麻将</div>
                 <div class="loading-subtitle">中国境内所有麻将种类</div>
                 <div class="loading-bar" role="progressbar" aria-label="加载进度">
@@ -36,7 +36,7 @@
         <div id="main-menu" class="screen active">
             <div class="menu-hero">
                 <div class="menu-brand">
-                    <div class="menu-logo">🀄</div>
+                    <div class="menu-logo"><img src="assets/tiles/red-dragon.svg" alt="" width="54" height="64"></div>
                     <h1 class="menu-title">万能麻将</h1>
                     <p class="menu-tagline">中国境内所有麻将种类</p>
                 </div>
@@ -53,7 +53,7 @@
                 <!-- 主操作区 -->
                 <div class="menu-primary-actions">
                     <button class="menu-btn primary" data-screen="game" data-mode="ai">
-                        <span class="btn-icon">🚀</span>
+                        <span class="btn-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#play"></use></svg></span>
                         <div class="btn-text-group">
                             <span class="btn-text">快速开始</span>
                             <span class="btn-desc">与 AI 练习牌技</span>
@@ -61,7 +61,7 @@
                         <span class="btn-arrow">›</span>
                     </button>
                     <button class="menu-btn primary" data-screen="network-lobby" data-mode="lan">
-                        <span class="btn-icon">🌐</span>
+                        <span class="btn-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#network"></use></svg></span>
                         <div class="btn-text-group">
                             <span class="btn-text">局域网联机</span>
                             <span class="btn-desc">同 WiFi 多人对战</span>
@@ -69,7 +69,7 @@
                         <span class="btn-arrow">›</span>
                     </button>
                     <button class="menu-btn primary" data-screen="custom-mode" data-mode="custom">
-                        <span class="btn-icon">⚙️</span>
+                        <span class="btn-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#tune"></use></svg></span>
                         <div class="btn-text-group">
                             <span class="btn-text">自定义模式</span>
                             <span class="btn-desc">选择规则与牌种</span>
@@ -81,15 +81,15 @@
                 <!-- 次要操作区 -->
                 <div class="menu-secondary-actions">
                     <button class="menu-btn compact" data-screen="replay-list" data-mode="replay">
-                        <span class="btn-icon">📹</span>
+                        <span class="btn-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#film"></use></svg></span>
                         <span class="btn-text">回放</span>
                     </button>
                     <button class="menu-btn compact" data-screen="achievements" data-mode="achievements">
-                        <span class="btn-icon">🏆</span>
+                        <span class="btn-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#trophy"></use></svg></span>
                         <span class="btn-text">成就</span>
                     </button>
                     <button class="menu-btn compact" data-screen="stats-page" data-mode="stats">
-                        <span class="btn-icon">📊</span>
+                        <span class="btn-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#chart"></use></svg></span>
                         <span class="btn-text">战绩</span>
                     </button>
                 </div>
@@ -98,11 +98,11 @@
             <!-- 底部工具栏 -->
             <div class="menu-footer">
                 <button class="menu-tool-btn" id="btn-open-settings" title="设置">
-                    <span>⚙️</span>
+                    <svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#settings"></use></svg>
                     <span>设置</span>
                 </button>
                 <button class="menu-tool-btn" id="reset-stats" title="重置记录">
-                    <span>🗑️</span>
+                    <svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#trash"></use></svg>
                     <span>重置</span>
                 </button>
             </div>
@@ -113,8 +113,8 @@
             <div class="modal-overlay"></div>
             <div class="modal-panel settings-panel">
                 <div class="modal-panel-header">
-                    <h3 id="settings-title">⚙️ 游戏设置</h3>
-                    <button class="modal-close" id="settings-close" title="关闭设置" aria-label="关闭设置">✕</button>
+                    <h3 id="settings-title"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#settings"></use></svg>游戏设置</h3>
+                    <button class="modal-close" id="settings-close" title="关闭设置" aria-label="关闭设置"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#close"></use></svg></button>
                 </div>
                 <div class="modal-panel-body">
                     <div class="settings-group">
@@ -239,7 +239,7 @@
             <!-- 顶部状态栏 -->
             <div class="hud-topbar">
                 <button class="hud-menu-btn" id="btn-menu" title="菜单" aria-label="打开游戏菜单">
-                    <span>☰</span>
+                    <svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#menu"></use></svg>
                 </button>
                 <div class="hud-match-info">
                     <span class="hud-wind" id="wind-indicator">东</span>
@@ -250,7 +250,7 @@
                     <span class="hud-deck-label">张</span>
                 </div>
                 <div class="turn-timer-display hidden" id="turn-timer-display">
-                    <span class="turn-timer-icon">⏱</span>
+                    <svg class="ui-icon turn-timer-icon" aria-hidden="true"><use href="assets/ui/icons.svg#clock"></use></svg>
                     <span class="turn-timer-value" id="turn-timer-value">30</span>
                 </div>
             </div>
@@ -342,24 +342,24 @@
             <div class="modal-overlay"></div>
             <div class="modal-panel pause-panel">
                 <div class="modal-panel-header">
-                    <h3 id="ingame-title">☰ 暂停</h3>
-                    <button class="modal-close" id="btn-resume" title="关闭菜单" aria-label="关闭菜单">✕</button>
+                    <h3 id="ingame-title"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#menu"></use></svg>暂停</h3>
+                    <button class="modal-close" id="btn-resume" title="关闭菜单" aria-label="关闭菜单"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#close"></use></svg></button>
                 </div>
                 <div class="modal-panel-body pause-actions">
                     <button class="pause-action-btn primary" id="btn-resume-main">
-                        <span>▶</span>
+                        <svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#play"></use></svg>
                         <span>继续游戏</span>
                     </button>
                     <button class="pause-action-btn" id="btn-restart">
-                        <span>↻</span>
+                        <svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#rotate"></use></svg>
                         <span>重新开始</span>
                     </button>
                     <button class="pause-action-btn" id="btn-ingame-settings">
-                        <span>⚙️</span>
+                        <svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#settings"></use></svg>
                         <span>游戏设置</span>
                     </button>
                     <button class="pause-action-btn danger" id="btn-exit-game">
-                        <span>🏠</span>
+                        <svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#home"></use></svg>
                         <span>退出到主菜单</span>
                     </button>
                 </div>
@@ -371,7 +371,7 @@
             <div class="result-bg"></div>
             <div class="result-content">
                 <div class="result-header">
-                    <div class="result-icon" id="result-icon">🏆</div>
+                    <div class="result-icon" id="result-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#trophy"></use></svg></div>
                     <h2 class="result-title" id="result-title">胜利</h2>
                     <p class="result-subtitle" id="result-subtitle">净胜 +200 分</p>
                 </div>
@@ -387,8 +387,8 @@
         <!-- 局域网联机大厅 -->
         <div id="network-lobby" class="screen">
             <div class="lobby-header">
-                <h2>🌐 局域网联机</h2>
-                <button class="back-btn" id="network-lobby-back" data-screen="main-menu">← 返回</button>
+                <h2><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#network"></use></svg>局域网联机</h2>
+                <button class="back-btn icon-btn" id="network-lobby-back" data-screen="main-menu"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#back"></use></svg><span>返回</span></button>
             </div>
 
             <!-- 连接配置 -->
@@ -418,7 +418,7 @@
                             <option value="beijing">北京麻将</option>
                             <option value="taiwan">台湾麻将</option>
                         </select>
-                        <button class="primary-btn" id="create-room">🚪 创建房间</button>
+                        <button class="primary-btn icon-btn" id="create-room"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#door"></use></svg>创建房间</button>
                     </div>
                 </div>
                 <div class="room-section" id="join-room-section">
@@ -426,7 +426,7 @@
                     <div class="room-list" id="room-list" role="status" aria-live="polite">
                         <div class="empty-state">点击「刷新」搜索局域网房间</div>
                     </div>
-                    <button class="secondary-btn" id="refresh-rooms">🔄 刷新房间列表</button>
+                    <button class="secondary-btn icon-btn" id="refresh-rooms"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#refresh"></use></svg>刷新房间列表</button>
                 </div>
             </div>
 
@@ -446,8 +446,8 @@
                 </div>
 
                 <div class="room-actions" id="room-actions">
-                    <button class="primary-btn hidden" id="btn-start-network">🎮 开始游戏</button>
-                    <button class="secondary-btn" id="btn-leave-room">🚪 离开房间</button>
+                    <button class="primary-btn icon-btn hidden" id="btn-start-network"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#gamepad"></use></svg>开始游戏</button>
+                    <button class="secondary-btn icon-btn" id="btn-leave-room"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#door"></use></svg>离开房间</button>
                 </div>
             </div>
 
@@ -458,8 +458,8 @@
         <!-- 自定义模式 -->
         <div id="custom-mode" class="screen">
             <div class="lobby-header">
-                <h2>⚙️ 自定义模式</h2>
-                <button class="back-btn" data-screen="main-menu">← 返回</button>
+                <h2><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#tune"></use></svg>自定义模式</h2>
+                <button class="back-btn icon-btn" data-screen="main-menu"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#back"></use></svg><span>返回</span></button>
             </div>
             <div class="custom-content">
                 <div class="rule-section">
@@ -477,8 +477,8 @@
         <!-- 回放列表 -->
         <div id="replay-list" class="screen">
             <div class="lobby-header">
-                <h2>📹 牌局回放</h2>
-                <button class="back-btn" data-screen="main-menu">← 返回</button>
+                <h2><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#film"></use></svg>牌局回放</h2>
+                <button class="back-btn icon-btn" data-screen="main-menu"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#back"></use></svg><span>返回</span></button>
             </div>
             <div class="replay-list" id="replay-container">
                 <div class="empty-state">暂无历史对局</div>
@@ -488,7 +488,7 @@
         <!-- 回放播放器 -->
         <div id="replay-player" class="screen">
             <div class="replay-player-header">
-                <button class="back-btn" id="replay-back-btn">← 返回列表</button>
+                <button class="back-btn icon-btn" id="replay-back-btn"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#back"></use></svg><span>返回列表</span></button>
                 <div class="replay-player-title">
                     <span id="replay-type-name">国标麻将</span>
                     <span class="replay-player-sub" id="replay-meta">第1/4局 · 东风圈</span>
@@ -551,7 +551,7 @@
                 <!-- 棋谱时间轴 -->
                 <div class="replay-timeline-panel">
                     <div class="replay-timeline-header">
-                        <span>📜 棋谱</span>
+                        <span class="icon-label"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#scroll"></use></svg>棋谱</span>
                         <span class="replay-step-counter" id="replay-step-counter">0 / 0</span>
                     </div>
                     <div class="replay-timeline" id="replay-timeline"></div>
@@ -572,14 +572,14 @@
                         <button class="replay-ctrl-btn" id="replay-speed" title="速度" aria-label="回放速度，当前 1 倍">1×</button>
                     </div>
                     <div class="replay-control-group center">
-                        <button class="replay-ctrl-btn" id="replay-step-back" title="上一步" aria-label="上一步">⏮</button>
-                        <button class="replay-ctrl-btn primary" id="replay-play-pause" title="播放/暂停" aria-label="播放回放">▶</button>
-                        <button class="replay-ctrl-btn" id="replay-step-forward" title="下一步" aria-label="下一步">⏭</button>
+                        <button class="replay-ctrl-btn" id="replay-step-back" title="上一步" aria-label="上一步"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#step-back"></use></svg></button>
+                        <button class="replay-ctrl-btn primary" id="replay-play-pause" title="播放/暂停" aria-label="播放回放"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#play"></use></svg></button>
+                        <button class="replay-ctrl-btn" id="replay-step-forward" title="下一步" aria-label="下一步"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#step-forward"></use></svg></button>
                     </div>
                     <div class="replay-control-group">
-                        <button class="replay-ctrl-btn" id="replay-round-prev" title="上一局" aria-label="上一局">⏪</button>
+                        <button class="replay-ctrl-btn" id="replay-round-prev" title="上一局" aria-label="上一局"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#round-back"></use></svg></button>
                         <span class="replay-round-label" id="replay-round-label">局 1</span>
-                        <button class="replay-ctrl-btn" id="replay-round-next" title="下一局" aria-label="下一局">⏩</button>
+                        <button class="replay-ctrl-btn" id="replay-round-next" title="下一局" aria-label="下一局"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#round-forward"></use></svg></button>
                     </div>
                 </div>
             </div>
@@ -588,8 +588,8 @@
         <!-- 成就界面 -->
         <div id="achievements" class="screen">
             <div class="lobby-header">
-                <h2>🏆 成就</h2>
-                <button class="back-btn" data-screen="main-menu">← 返回</button>
+                <h2><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#trophy"></use></svg>成就</h2>
+                <button class="back-btn icon-btn" data-screen="main-menu"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#back"></use></svg><span>返回</span></button>
             </div>
             <div class="achievements-grid" id="achievements-grid"></div>
         </div>
@@ -597,8 +597,8 @@
         <!-- 战绩页 -->
         <div id="stats-page" class="screen">
             <div class="lobby-header">
-                <h2>📊 战绩中心</h2>
-                <button class="back-btn" data-screen="main-menu">← 返回</button>
+                <h2><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#chart"></use></svg>战绩中心</h2>
+                <button class="back-btn icon-btn" data-screen="main-menu"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#back"></use></svg><span>返回</span></button>
             </div>
             <div class="stats-page-content" id="stats-page-content"></div>
         </div>

@@ -486,16 +486,27 @@
      * 重置统计
      */
     function handleResetStats() {
-        if (confirm('确定要重置所有统计数据吗？此操作不可恢复。')) {
-            try {
-                Stats.resetStats();
-                loadStats();
-                Utils.toast('统计数据已重置', 3000, 'success');
-            } catch (e) {
-                console.error('重置统计失败:', e);
-                Utils.toast('重置统计失败', 3000, 'error');
-            }
-        }
+        UIComponents.createModal(
+            '重置统计数据',
+            '<p>所有战绩、经验与成就进度都将清空。</p><p class="modal-warning">此操作不可恢复。</p>',
+            [
+                { text: '取消' },
+                {
+                    text: '确认重置',
+                    variant: 'danger',
+                    onClick: () => {
+                        try {
+                            Stats.resetStats();
+                            loadStats();
+                            Utils.toast('统计数据已重置', 3000, 'success');
+                        } catch (e) {
+                            console.error('重置统计失败:', e);
+                            Utils.toast('重置统计失败', 3000, 'error');
+                        }
+                    }
+                }
+            ]
+        );
     }
     function loadSettings() {
         App.settings = Utils.deepClone(Stats.getSettings());

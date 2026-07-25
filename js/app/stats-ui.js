@@ -46,7 +46,7 @@
         // 概览卡片
         const overviewCard = `
             <div class="stats-card overview-card">
-                <h3>📊 战绩概览</h3>
+                <h3><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#chart"></use></svg>战绩概览</h3>
                 <div class="overview-grid">
                     <div class="overview-item">
                         <div class="overview-value ${summary.wins > summary.losses ? 'win' : ''}">${summary.totalGames}</div>
@@ -97,7 +97,7 @@
         // 成就进度
         const achievementCard = `
             <div class="stats-card achievement-card">
-                <h3>🏆 成就进度 (${unlockedCount}/${achievements.length})</h3>
+                <h3><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#trophy"></use></svg>成就进度 (${unlockedCount}/${achievements.length})</h3>
                 <div class="achievement-mini-list">
                     ${achievements.map(ach => `
                         <div class="achievement-mini ${ach.unlocked ? 'unlocked' : 'locked'}">
@@ -122,7 +122,7 @@
         if (summary.history.length > 0) {
             historyTable = `
                 <div class="stats-card history-card">
-                    <h3>📜 近期战绩</h3>
+                    <h3><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#scroll"></use></svg>近期战绩</h3>
                     <div class="history-table-wrap">
                         <table class="history-table">
                             <thead>
@@ -158,7 +158,7 @@
         } else {
             historyTable = `
                 <div class="stats-card history-card empty">
-                    <h3>📜 近期战绩</h3>
+                    <h3><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#scroll"></use></svg>近期战绩</h3>
                     <div class="empty-state">暂无对局记录，快去开一局吧！</div>
                 </div>
             `;
