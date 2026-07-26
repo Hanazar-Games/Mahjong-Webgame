@@ -129,7 +129,7 @@
                 // 联机模式下远程AI回合：广播状态让远程玩家可以观看
                 broadcastGameState();
             } else {
-                updateTurnGuidance(`等待 ${data.player?.name || '电脑玩家'} 出牌`);
+                updateTurnGuidance(`${data.player?.name || '电脑玩家'} 正在思考…`, 'thinking');
             }
         });
         

@@ -735,18 +735,9 @@ class MahjongEngine extends Utils.EventEmitter {
             
             if (player.isAI) {
                 try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
-                const ctx = this.buildAIContext(player);
-                let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
-                if (!tileToDiscard) {
-                    tileToDiscard = player.hand[0];
-                    if (!tileToDiscard) {
-                        console.error('AI has no tile to discard after chi');
-                        this.state = 'playing';
-                        await this.nextTurn();
-                        return;
-                    }
-                }
-                await this.playerDiscard(tileToDiscard.id);
+                const tileToDiscard = this.chooseSafeAIDiscard(player);
+                if (tileToDiscard) await this.playerDiscard(tileToDiscard.id);
+                else await this.nextTurn();
             }
         } catch (e) {
             if (e?.message === 'CANCELLED') {
@@ -802,18 +793,9 @@ class MahjongEngine extends Utils.EventEmitter {
             
             if (player.isAI) {
                 try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
-                const ctx = this.buildAIContext(player);
-                let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
-                if (!tileToDiscard) {
-                    tileToDiscard = player.hand[0];
-                    if (!tileToDiscard) {
-                        console.error('AI has no tile to discard after peng');
-                        this.state = 'playing';
-                        await this.nextTurn();
-                        return;
-                    }
-                }
-                await this.playerDiscard(tileToDiscard.id);
+                const tileToDiscard = this.chooseSafeAIDiscard(player);
+                if (tileToDiscard) await this.playerDiscard(tileToDiscard.id);
+                else await this.nextTurn();
             }
         } catch (e) {
             if (e?.message === 'CANCELLED') {
@@ -906,18 +888,9 @@ class MahjongEngine extends Utils.EventEmitter {
             
             if (player.isAI) {
                 try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
-                const ctx = this.buildAIContext(player);
-                let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
-                if (!tileToDiscard) {
-                    tileToDiscard = player.hand[0];
-                    if (!tileToDiscard) {
-                        console.error('AI has no tile to discard after gang');
-                        this.state = 'playing';
-                        await this.nextTurn();
-                        return;
-                    }
-                }
-                await this.playerDiscard(tileToDiscard.id);
+                const tileToDiscard = this.chooseSafeAIDiscard(player);
+                if (tileToDiscard) await this.playerDiscard(tileToDiscard.id);
+                else await this.nextTurn();
             }
         } catch (e) {
             if (e?.message === 'CANCELLED') {
@@ -1018,18 +991,9 @@ class MahjongEngine extends Utils.EventEmitter {
             
             if (player.isAI) {
                 try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
-                const ctx = this.buildAIContext(player);
-                let tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
-                if (!tileToDiscard) {
-                    tileToDiscard = player.hand[0];
-                    if (!tileToDiscard) {
-                        console.error('AI has no tile to discard after anGang');
-                        this.state = 'playing';
-                        await this.nextTurn();
-                        return;
-                    }
-                }
-                await this.playerDiscard(tileToDiscard.id);
+                const tileToDiscard = this.chooseSafeAIDiscard(player);
+                if (tileToDiscard) await this.playerDiscard(tileToDiscard.id);
+                else await this.nextTurn();
             }
             
             return { gangShangKaiHua: false };
@@ -1073,6 +1037,26 @@ class MahjongEngine extends Utils.EventEmitter {
             })),
             selfIndex: forPlayer.position,
         };
+    }
+
+    chooseSafeAIDiscard(player) {
+        let choice = null;
+        try {
+            choice = AIPlayer.chooseDiscard(
+                player,
+                this.config.aiDifficulty,
+                this.buildAIContext(player)
+            );
+        } catch (error) {
+            console.error('AI discard strategy error:', error);
+        }
+
+        const legalChoice = choice && player.hand.find(tile => tile.id === choice.id);
+        if (legalChoice) return legalChoice;
+
+        const fallback = player.hand.find(tile => !tile.isFlower) || player.hand[0] || null;
+        if (!fallback) console.error('AI has no legal tile to discard');
+        return fallback;
     }
 
     /**
@@ -1432,13 +1416,9 @@ class MahjongEngine extends Utils.EventEmitter {
             }
             
             // 打牌
-            const ctx = this.buildAIContext(player);
-            const tileToDiscard = AIPlayer.chooseDiscard(player, this.config.aiDifficulty, ctx);
-            if (!tileToDiscard) {
-                console.error('AI has no tile to discard');
-                return;
-            }
-            await this.playerDiscard(tileToDiscard.id);
+            const tileToDiscard = this.chooseSafeAIDiscard(player);
+            if (tileToDiscard) await this.playerDiscard(tileToDiscard.id);
+            else await this.nextTurn();
         } catch (e) {
             if (e?.message === 'CANCELLED') return;
             console.error('aiTurn error:', e);

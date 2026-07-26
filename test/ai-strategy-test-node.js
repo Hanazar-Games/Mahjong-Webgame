@@ -110,6 +110,25 @@ for (const difficulty of ['hard', 'expert']) {
         seenRules.length > 0 && seenRules.every(type => type === 'taiwan'), seenRules.join(','));
 }
 
+const expertWaitHand = [T('wan', 1), T('wan', 2), T('wan', 4), T('tong', 5)];
+const expertWaitPlayer = { id: 0, position: 0, hand: expertWaitHand, melds: [], queYiMen: null };
+const originalCalculateShanten = AIUtils.calculateShanten;
+const originalAnalyzeTingPai = Rules.analyzeTingPai;
+let waitAnalysisCalls = 0;
+AIUtils.calculateShanten = () => 0;
+Rules.analyzeTingPai = () => {
+    waitAnalysisCalls++;
+    return [];
+};
+AIPlayer.chooseDiscard(expertWaitPlayer, 'expert', normalContext);
+AIUtils.calculateShanten = originalCalculateShanten;
+Rules.analyzeTingPai = originalAnalyzeTingPai;
+assert(
+    '专家 AI 每个候选弃牌只分析一次听牌结果',
+    waitAnalysisCalls === expertWaitHand.length,
+    `候选 ${expertWaitHand.length}，实际分析 ${waitAnalysisCalls} 次`
+);
+
 console.log(`\n========== AI 策略测试 ==========`);
 console.log('✅ 通过:', passed);
 console.log('❌ 失败:', failed);

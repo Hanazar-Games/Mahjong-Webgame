@@ -993,6 +993,11 @@ select {
     color: #a9e9bb;
 }
 
+.turn-guidance[data-state="thinking"] {
+    border-color: rgba(105, 178, 255, 0.38);
+    color: #b9dbff;
+}
+
 #game-screen .game-table.three-player {
     grid-template-areas:
         ". . ."

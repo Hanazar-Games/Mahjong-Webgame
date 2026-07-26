@@ -211,6 +211,8 @@ const AIUtils = (function() {
      */
     function calculateShanten(hand, melds = [], config = {}) {
         const standard = calculateStandardShanten(hand, melds);
+        if (melds.length > 0) return standard;
+
         const sevenPairs = calculateSevenPairsShanten(hand);
 
         // 十三幺只在支持时才计算（广东/国标）

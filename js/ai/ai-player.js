@@ -686,11 +686,14 @@ const AIPlayer = (function() {
 
                 // 2. 听牌质量（好弃牌加分）
                 if (newShanten === 0) {
-                    const winningTiles = AIUtils.countWinningTiles(newHand, melds, ctx.ruleConfig || {}, ctx);
+                    const tingPai = Rules.analyzeTingPai(newHand, ctx.ruleConfig || {});
+                    const winningTiles = tingPai.reduce(
+                        (total, wait) => total + AIUtils.getTileRemaining(wait.tile, newHand, melds, ctx),
+                        0
+                    );
                     score += winningTiles * 2;
 
                     // 好型听牌奖励
-                    const tingPai = Rules.analyzeTingPai(newHand, ctx.ruleConfig || {});
                     let goodWaits = 0;
                     for (const tp of tingPai) {
                         if (AIUtils.isGoodWaitTile(tp.tile, newHand)) goodWaits++;

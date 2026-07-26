@@ -272,6 +272,73 @@ async function finish() {
     await engine7.nextTurn();
     assertEqual('nextTurn restores playing before the next player draws', stateAtTurnStart, 'playing');
 
+    // Test 18: AI 策略异常时必须使用合法手牌回退，不能跳过整回合
+    const engine8 = new MahjongEngine({ playerCount: 4, speed: 'instant' });
+    engine8.initPlayers([
+        { name: 'AI0', isAI: true },
+        { name: 'AI1', isAI: true },
+        { name: 'AI2', isAI: true },
+        { name: 'AI3', isAI: true }
+    ]);
+    const fallbackTile = Tiles.createTile('tong', 3, 'ai-fallback');
+    engine8.players[0].hand = [fallbackTile];
+    engine8.state = 'playing';
+    engine8.currentPlayerIndex = 0;
+    engine8.playerDraw = async () => ({ ziMo: false, anGangOptions: [] });
+    let fallbackDiscardId = null;
+    let skippedTurns = 0;
+    engine8.playerDiscard = async tileId => { fallbackDiscardId = tileId; };
+    engine8.nextTurn = async () => { skippedTurns++; };
+    const originalChooseDiscard = AIPlayer.chooseDiscard;
+    const originalConsoleError = console.error;
+    AIPlayer.chooseDiscard = () => { throw new Error('expected strategy failure'); };
+    console.error = () => {};
+    await engine8.aiTurn(engine8.players[0]);
+    console.error = originalConsoleError;
+    AIPlayer.chooseDiscard = originalChooseDiscard;
+    assertEqual('aiTurn falls back to a legal discard after strategy failure', fallbackDiscardId, fallbackTile.id);
+    assertEqual('aiTurn does not skip the failed AI turn', skippedTurns, 0);
+    AIPlayer.chooseDiscard = () => ({ id: 'not-in-hand' });
+    const invalidChoiceFallback = engine8.chooseSafeAIDiscard(engine8.players[0]);
+    AIPlayer.chooseDiscard = originalChooseDiscard;
+    assertEqual('invalid AI discard choice falls back to a legal tile', invalidChoiceFallback.id, fallbackTile.id);
+
+    // Test 19: 固定牌墙下专家 AI 必须完成整局
+    const engine9 = new MahjongEngine({
+        mahjongType: 'guangdong',
+        playerCount: 4,
+        aiDifficulty: 'expert',
+        speed: 'instant',
+        maxRounds: 1
+    });
+    engine9.initPlayers([
+        { name: 'AI0', isAI: true },
+        { name: 'AI1', isAI: true },
+        { name: 'AI2', isAI: true },
+        { name: 'AI3', isAI: true }
+    ]);
+    const originalShuffle = Utils.shuffle;
+    let seed = 20260726;
+    Utils.shuffle = array => {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            seed = (seed * 1664525 + 1013904223) >>> 0;
+            const j = seed % (i + 1);
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+    };
+    try {
+        await engine9.start();
+    } finally {
+        Utils.shuffle = originalShuffle;
+    }
+    const completedHistory = engine9.matchHistory[0]?.history || [];
+    assertEqual('expert AI full round reaches ended state', engine9.state, 'ended');
+    assertEqual('expert AI full round is archived once', engine9.matchHistory.length, 1);
+    assert('expert AI full round contains legal discards', completedHistory.some(item => item.action === 'discard'));
+    assert('expert AI full round records its ending', completedHistory.some(item => item.action === 'roundEnd'));
+
     // ===== 结果汇总 =====
     console.log('\n========== 引擎基础测试 ==========');
     console.log('✅ 通过:', passCount);

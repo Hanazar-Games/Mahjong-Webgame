@@ -143,6 +143,17 @@ for (let i = 1; i <= 5; i++) {
 }
 assertEq('七对5对(10张): shanten=1', AIUtils.calculateSevenPairsShanten(sevenPairs5), 1);
 
+// 副露后不再具备七对/十三幺资格，综合向听必须以标准牌型为准
+const openHand = [
+    T('tiao', 3), T('tiao', 1), T('wan', 1), T('tong', 3), T('jian', 1),
+    T('tiao', 5), T('wan', 7), T('tong', 1), T('feng', 2), T('tong', 6)
+];
+assertEq(
+    '存在副露时综合向听忽略七对',
+    AIUtils.calculateShanten(openHand, meld1, { mahjongType: 'guangdong' }),
+    AIUtils.calculateStandardShanten(openHand, meld1)
+);
+
 console.log('\n========== AI 向听数测试 ==========');
 console.log('✅ 通过:', passCount);
 console.log('❌ 失败:', failCount);

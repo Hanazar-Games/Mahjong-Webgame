@@ -267,14 +267,14 @@ test('release metadata and announcement history stay aligned', async ({ request 
     const changelog = await (await request.get('/CHANGELOG.md')).text();
     const historyIndex = changelog.indexOf('## 历史公告');
 
-    expect(packageJson.version).toBe('1.0.14');
-    expect(packageLock.version).toBe('1.0.14');
-    expect(packageLock.packages[''].version).toBe('1.0.14');
-    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v15'");
+    expect(packageJson.version).toBe('1.0.15');
+    expect(packageLock.version).toBe('1.0.15');
+    expect(packageLock.packages[''].version).toBe('1.0.15');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v16'");
     expect(serviceWorker).toContain("'./assets/ui/icons.svg'");
     expect(serviceWorker).toContain("'./manifest.json'");
-    expect(changelog.indexOf('## [1.0.14] - 2026-07-26')).toBeLessThan(historyIndex);
-    expect(changelog.indexOf('### [1.0.13] - 2026-07-26')).toBeGreaterThan(historyIndex);
+    expect(changelog.indexOf('## [1.0.15] - 2026-07-26')).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.14] - 2026-07-26')).toBeGreaterThan(historyIndex);
 });
 
 test('audio and appearance settings update and persist', async ({ page }) => {
@@ -643,6 +643,19 @@ test('expert AI advances after the human discard at instant speed', async ({ pag
         entry.action === 'discard' && entry.data.playerId !== (App.localPlayerIndex ?? 0)
     ))).toBe(true);
     expect(await page.evaluate(() => App.engine.state)).not.toBe('waiting');
+});
+
+test('AI turns expose an explicit thinking state', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+
+    await page.evaluate(() => {
+        const player = App.engine.players[1];
+        App.engine.emit('turnStart', { player: player.toJSON(), index: player.position });
+    });
+
+    await expect(page.locator('#turn-guidance')).toContainText('正在思考');
+    await expect(page.locator('#turn-guidance')).toHaveAttribute('data-state', 'thinking');
 });
 
 test('audio settings expose a live BGM and SFX summary', async ({ page }) => {
