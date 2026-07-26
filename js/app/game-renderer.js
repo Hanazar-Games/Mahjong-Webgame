@@ -271,7 +271,10 @@
         const nameEl = area.querySelector('.player-name');
         const avatarEl = area.querySelector('.player-avatar');
         if (nameEl) nameEl.textContent = player.name || `玩家${index + 1}`;
-        if (avatarEl) avatarEl.textContent = player.isAI ? '🤖' : '👤';
+        if (avatarEl) {
+            const icon = player.isAI ? 'bot' : 'user';
+            avatarEl.innerHTML = `<svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#${icon}"></use></svg>`;
+        }
     }
 
     /**

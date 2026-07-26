@@ -87,14 +87,14 @@
         ];
         
         for (let i = 1; i < config.playerCount; i++) {
-            const difficulties = ['简单AI', '普通AI', '困难AI', '专家AI'];
+            const difficulties = ['简', '普', '难', '专'];
             const diffIndex = ['easy', 'normal', 'hard', 'expert'].indexOf(config.aiDifficulty);
-            const diffName = difficulties[diffIndex] || 'AI';
+            const diffName = difficulties[diffIndex] || '电脑';
             const name = config.playerCount === 3 
-                ? ['下家', '上家'][i - 1]
-                : ['下家', '对家', '上家'][i - 1];
+                ? ['下', '上'][i - 1]
+                : ['下', '对', '上'][i - 1];
             playerConfigs.push({ 
-                name: `${diffName}-${name || '对手'}`, 
+                name: `${diffName}${name || '家'}`,
                 isAI: true 
             });
         }

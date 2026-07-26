@@ -125,13 +125,14 @@
                         </div>
                         <div class="setting-row">
                             <label for="ai-difficulty">AI 难度</label>
-                            <select id="ai-difficulty">
+                            <select id="ai-difficulty" aria-describedby="ai-difficulty-hint">
                                 <option value="easy">简单</option>
                                 <option value="normal" selected>普通</option>
                                 <option value="hard">困难</option>
                                 <option value="expert">专家</option>
                             </select>
                         </div>
+                        <p class="setting-hint" id="ai-difficulty-hint">均衡牌效，会优先保留有效进张。</p>
                     </div>
                     <div class="settings-group">
                         <h4>牌局</h4>
@@ -205,6 +206,7 @@
                                 <option value="zen">禅意</option>
                             </select>
                         </div>
+                        <p class="setting-hint" id="audio-settings-status" role="status" aria-live="polite">背景音乐：关闭 · 游戏音效：50%</p>
                     </div>
                     <div class="settings-group">
                         <h4>辅助</h4>
@@ -262,8 +264,8 @@
                 <!-- 顶部玩家（对家）-- 3人模式时隐藏 -->
                 <div class="player-area top" id="player-top">
                     <div class="player-info">
-                        <div class="player-avatar">🤖</div>
-                        <div class="player-name">AI-对家</div>
+                        <div class="player-avatar"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#bot"></use></svg></div>
+                        <div class="player-name">电对</div>
                         <div class="player-score">1000</div>
                         <div class="turn-indicator" id="turn-top"></div>
                     </div>
@@ -274,8 +276,8 @@
                 <!-- 左侧玩家（上家） -->
                 <div class="player-area left" id="player-left">
                     <div class="player-info">
-                        <div class="player-avatar">🤖</div>
-                        <div class="player-name">AI-上家</div>
+                        <div class="player-avatar"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#bot"></use></svg></div>
+                        <div class="player-name">电上</div>
                         <div class="player-score">1000</div>
                         <div class="turn-indicator" id="turn-left"></div>
                     </div>
@@ -286,8 +288,8 @@
                 <!-- 右侧玩家（下家） -->
                 <div class="player-area right" id="player-right">
                     <div class="player-info">
-                        <div class="player-avatar">🤖</div>
-                        <div class="player-name">AI-下家</div>
+                        <div class="player-avatar"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#bot"></use></svg></div>
+                        <div class="player-name">电下</div>
                         <div class="player-score">1000</div>
                         <div class="turn-indicator" id="turn-right"></div>
                     </div>
@@ -298,7 +300,7 @@
                 <!-- 底部玩家（自己） -->
                 <div class="player-area bottom" id="player-bottom">
                     <div class="player-info">
-                        <div class="player-avatar">👤</div>
+                        <div class="player-avatar"><svg class="ui-icon" aria-hidden="true"><use href="assets/ui/icons.svg#user"></use></svg></div>
                         <div class="player-name" id="self-name">玩家</div>
                         <div class="player-score" id="self-score">1000</div>
                         <div id="shanten-display" class="shanten-hud hidden">向听: <span id="shanten-value">-</span></div>

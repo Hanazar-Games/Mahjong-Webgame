@@ -6,6 +6,30 @@
     let _settingsReturnToIngameMenu = false;
     let _sliderSaveTimer = null;
     let _sliderRollbackSettings = null;
+    const AI_DIFFICULTY_HINTS = {
+        easy: '休闲出牌，偶尔会保留次优牌型。',
+        normal: '均衡牌效，会优先保留有效进张。',
+        hard: '结合向听数、进张与残局安全度。',
+        expert: '综合对手建模、听牌质量与攻守收益。'
+    };
+    const BGM_STYLE_LABELS = { none: '关闭', calm: '悠然', upbeat: '轻快', zen: '禅意' };
+
+    function updateSettingsHelp(settings) {
+        const aiHint = document.getElementById('ai-difficulty-hint');
+        if (aiHint) aiHint.textContent = AI_DIFFICULTY_HINTS[settings.aiDifficulty] || AI_DIFFICULTY_HINTS.normal;
+
+        const audioStatus = document.getElementById('audio-settings-status');
+        if (audioStatus) {
+            const bgmLabel = BGM_STYLE_LABELS[settings.bgmStyle] || BGM_STYLE_LABELS.none;
+            const bgmText = settings.bgmStyle === 'none' || settings.bgmVolume <= 0
+                ? '背景音乐：关闭'
+                : `背景音乐：${bgmLabel} · ${settings.bgmVolume}%`;
+            const sfxText = settings.sfxEnabled === false || settings.sfxVolume <= 0
+                ? '游戏音效：关闭'
+                : `游戏音效：${settings.sfxVolume}%`;
+            audioStatus.textContent = `${bgmText} · ${sfxText}`;
+        }
+    }
 
     function syncSettingsControls(settings = App.settings) {
         if (!settings) return;
@@ -38,6 +62,7 @@
                 el.value = value;
             }
         }
+        updateSettingsHelp(settings);
     }
 
     function restoreSettings(settings) {
@@ -294,6 +319,7 @@
         }
         if (settingKey) {
             App.settings[settingKey] = parseInt(el.value);
+            updateSettingsHelp(App.settings);
         }
         
         // 同步音频系统（即时）

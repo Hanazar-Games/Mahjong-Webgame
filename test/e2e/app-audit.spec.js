@@ -239,14 +239,14 @@ test('release metadata and announcement history stay aligned', async ({ request 
     const changelog = await (await request.get('/CHANGELOG.md')).text();
     const historyIndex = changelog.indexOf('## 历史公告');
 
-    expect(packageJson.version).toBe('1.0.12');
-    expect(packageLock.version).toBe('1.0.12');
-    expect(packageLock.packages[''].version).toBe('1.0.12');
-    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v13'");
+    expect(packageJson.version).toBe('1.0.13');
+    expect(packageLock.version).toBe('1.0.13');
+    expect(packageLock.packages[''].version).toBe('1.0.13');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v14'");
     expect(serviceWorker).toContain("'./assets/ui/icons.svg'");
     expect(serviceWorker).toContain("'./manifest.json'");
-    expect(changelog.indexOf('## [1.0.12] - 2026-07-25')).toBeLessThan(historyIndex);
-    expect(changelog.indexOf('### [1.0.11] - 2026-07-24')).toBeGreaterThan(historyIndex);
+    expect(changelog.indexOf('## [1.0.13] - 2026-07-26')).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.12] - 2026-07-25')).toBeGreaterThan(historyIndex);
 });
 
 test('audio and appearance settings update and persist', async ({ page }) => {
@@ -332,6 +332,21 @@ test('failed slider persistence restores the control, settings and live audio vo
         setting: App.settings.sfxVolume,
         live: AudioManager.getSfxVolume()
     }))).toEqual({ setting: 50, live: 0.5 });
+});
+
+test('failed settings save restores BGM state only once', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: '设置' }).click();
+    await page.evaluate(() => {
+        App.settings.bgmStyle = 'calm';
+        App.settings.bgmVolume = 30;
+        window.__bgmRestoreCalls = 0;
+        AudioManager.startBgm = () => { window.__bgmRestoreCalls++; };
+        Stats.saveSettings = () => { throw new Error('expected save failure'); };
+    });
+
+    await page.getByRole('button', { name: '关闭设置' }).click();
+    expect(await page.evaluate(() => window.__bgmRestoreCalls)).toBe(1);
 });
 
 test('mobile settings and replay sliders keep practical touch targets', async ({ page }) => {
@@ -460,12 +475,15 @@ test('muted SFX does not initialize or schedule silent audio work', async ({ pag
 test('draw and discard SFX receive the concrete tile', async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => {
-        window.__tileSfx = { draw: null, discard: null };
+        window.__tileSfx = { draw: null, discard: null, opponentDiscard: null };
         AudioManager.SFX.draw = tile => {
             window.__tileSfx.draw = tile ? { id: tile.id, suit: tile.suit } : null;
         };
         AudioManager.SFX.discard = tile => {
             window.__tileSfx.discard = tile ? { id: tile.id, suit: tile.suit } : null;
+        };
+        AudioManager.SFX.opponentDiscard = tile => {
+            window.__tileSfx.opponentDiscard = tile ? { id: tile.id, suit: tile.suit } : null;
         };
     });
     await startQuickGame(page);
@@ -482,6 +500,73 @@ test('draw and discard SFX receive the concrete tile', async ({ page }) => {
     await tile.click();
     await tile.click();
     await expect.poll(() => page.evaluate(() => window.__tileSfx.discard)).toEqual(discarded);
+
+    const opponentDiscard = await page.evaluate(() => {
+        const tile = Tiles.createTile('tong', 5, 'opponent-sfx');
+        App.engine.emit('discard', {
+            player: { ...App.engine.players[1].toJSON(), position: 1 },
+            tile
+        });
+        return { id: tile.id, suit: tile.suit };
+    });
+    await expect.poll(() => page.evaluate(() => window.__tileSfx.opponentDiscard)).toEqual(opponentDiscard);
+});
+
+test('AI difficulty explains its strategy accessibly', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: '设置' }).click();
+
+    const difficulty = page.locator('#ai-difficulty');
+    await expect(difficulty).toHaveAttribute('aria-describedby', 'ai-difficulty-hint');
+    await expect(page.locator('#ai-difficulty-hint')).toContainText('牌效');
+    await difficulty.selectOption('expert');
+    await expect(page.locator('#ai-difficulty-hint')).toContainText('对手建模');
+});
+
+test('game HUD uses SVG player identities and compact AI names', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openApp(page);
+    await page.getByRole('button', { name: '设置' }).click();
+    await page.locator('#ai-difficulty').selectOption('expert');
+    await page.getByRole('button', { name: '关闭设置' }).click();
+    await startQuickGame(page);
+
+    await expect(page.locator('#game-screen .player-avatar .ui-icon')).toHaveCount(4);
+    for (const name of ['玩家', '专下', '专对', '专上']) {
+        await expect(page.locator('#game-screen').getByText(name, { exact: true })).toHaveCount(1);
+    }
+    const overflowingNames = await page.locator('#game-screen .player-name').evaluateAll(elements =>
+        elements
+            .map(element => {
+                const range = document.createRange();
+                range.selectNodeContents(element);
+                return {
+                    element,
+                    textWidth: range.getBoundingClientRect().width,
+                    clientWidth: element.getBoundingClientRect().width
+                };
+            })
+            .filter(({ textWidth, clientWidth }) => textWidth > clientWidth)
+            .map(element => ({
+                name: element.element.textContent,
+                textWidth: element.textWidth,
+                clientWidth: element.clientWidth
+            }))
+    );
+    expect(overflowingNames).toEqual([]);
+});
+
+test('audio settings expose a live BGM and SFX summary', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: '设置' }).click();
+
+    const status = page.locator('#audio-settings-status');
+    await expect(status).toHaveAttribute('role', 'status');
+    await expect(status).toContainText('背景音乐：关闭');
+    await page.locator('#bgm-style').selectOption('zen');
+    await expect(status).toContainText('背景音乐：禅意 · 30%');
+    await page.locator('#sfx-volume').fill('65');
+    await expect(status).toContainText('游戏音效：65%');
 });
 
 test('all synthesized SFX and BGM styles run and stop without runtime errors', async ({ page }) => {

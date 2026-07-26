@@ -133,7 +133,7 @@
             }
         });
         
-        // draw/discard SFX 节流：AI 操作不播放，避免声音重叠
+        // 摸牌只提示本家；电脑落牌使用更轻的独立反馈，保持回合节奏。
         const _isHumanPlayer = (pos) => pos === 0 || App.isNetworkGame;
         
         engine.on('draw', (data) => {
@@ -159,6 +159,8 @@
             });
             if (_isHumanPlayer(data.player.position)) {
                 AudioManager.SFX.discard(data.tile);
+            } else {
+                AudioManager.SFX.opponentDiscard(data.tile);
             }
             if (App.isNetworkGame) broadcastGameState();
         });

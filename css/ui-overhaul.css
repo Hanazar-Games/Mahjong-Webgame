@@ -339,6 +339,12 @@
     height: 16px;
 }
 
+.player-avatar .ui-icon {
+    width: 1em;
+    height: 1em;
+    color: var(--text-secondary);
+}
+
 .replay-ctrl-btn .ui-icon {
     width: 18px;
     height: 18px;
@@ -378,6 +384,13 @@
     color: var(--accent-gold);
     text-transform: uppercase;
     letter-spacing: 1px;
+}
+
+.setting-hint {
+    margin: -2px 0 4px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.45;
 }
 
 .setting-row {
@@ -908,6 +921,7 @@ select {
 #game-screen .player-area.left .player-name,
 #game-screen .player-area.right .player-name {
     max-width: clamp(42px, 4vw, 64px);
+    font-size: 0.64rem;
 }
 
 #game-screen .player-area.left .player-score,

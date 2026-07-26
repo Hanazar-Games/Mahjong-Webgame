@@ -1047,6 +1047,7 @@ const AIUtils = (function() {
         isDoraNeighbor,
         getSujiReduction,
         isWallComplete,
+        estimateLikelySuit,
         estimateTenpaiProbability,
 
         // 四川麻将

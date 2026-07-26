@@ -62,8 +62,15 @@ const AIPlayer = (function() {
         /**
          * 获取候选弃牌（排除花牌）
          */
-        _getCandidates(hand) {
-            return hand.filter(t => !t.isFlower);
+        _getCandidates(hand, player = null, context = null) {
+            const candidates = hand.filter(t => !t.isFlower);
+            const isSichuan = context?.config?.mahjongType === 'sichuan'
+                || context?.ruleConfig?.queYiMen === true;
+            if (isSichuan && player?.queYiMen) {
+                const queTiles = candidates.filter(tile => tile.suit === player.queYiMen);
+                if (queTiles.length > 0) return queTiles;
+            }
+            return candidates;
         }
 
         /**
@@ -228,7 +235,7 @@ const AIPlayer = (function() {
 
         chooseDiscard(player, context) {
             const hand = player.hand;
-            const candidates = this._getCandidates(hand);
+            const candidates = this._getCandidates(hand, player, context);
             if (candidates.length === 0) return hand[0] || null;
 
             // 50% 概率随机打（犯错）
@@ -276,16 +283,16 @@ const AIPlayer = (function() {
         chooseDiscard(player, context) {
             const hand = player.hand;
             const melds = player.melds;
-            const candidates = this._getCandidates(hand);
+            const candidates = this._getCandidates(hand, player, context);
             if (candidates.length === 0) return hand[0] || null;
 
             const ctx = context || {};
-            const shanten = this._shanten(player, ctx);
             const isSichuan = ctx.config?.mahjongType === 'sichuan';
 
             // 基础评分
             const scored = candidates.map(tile => {
                 let score = this._baseTileScore(tile, hand, melds);
+                const newShanten = this._shantenAfterRemove(player, tile, ctx);
 
                 // 四川缺门：优先打完缺门花色（加分=更该打）
                 if (isSichuan && player.queYiMen && tile.suit === player.queYiMen) {
@@ -300,11 +307,13 @@ const AIPlayer = (function() {
                 // 随机波动 20%
                 score = this._randomize(score, 3);
 
-                return { tile, score };
+                return { tile, score, newShanten };
             });
 
-            scored.sort((a, b) => b.score - a.score);
-            return scored[0].tile;
+            const bestShanten = Math.min(...scored.map(item => item.newShanten));
+            const efficient = scored.filter(item => item.newShanten === bestShanten);
+            efficient.sort((a, b) => b.score - a.score);
+            return efficient[0].tile;
         }
 
         shouldAnGang(player, options, context) {
@@ -417,7 +426,7 @@ const AIPlayer = (function() {
         chooseDiscard(player, context) {
             const hand = player.hand;
             const melds = player.melds;
-            const candidates = this._getCandidates(hand);
+            const candidates = this._getCandidates(hand, player, context);
             if (candidates.length === 0) return hand[0] || null;
 
             const ctx = context || {};
@@ -625,7 +634,7 @@ const AIPlayer = (function() {
             let bestScore = -Infinity;
 
             for (const opt of options) {
-                const newShanten = this._shantenAfterChi(player, opt);
+                const newShanten = this._shantenAfterChi(player, opt, context);
                 let score = -newShanten * 50;
 
                 // 偏好中张吃（如 4-5 吃 3 或 6，比 1-2 吃 3 好）
@@ -658,7 +667,7 @@ const AIPlayer = (function() {
         chooseDiscard(player, context) {
             const hand = player.hand;
             const melds = player.melds;
-            const candidates = this._getCandidates(hand);
+            const candidates = this._getCandidates(hand, player, context);
             if (candidates.length === 0) return hand[0] || null;
 
             const ctx = context || {};
@@ -923,7 +932,7 @@ const AIPlayer = (function() {
             const ctx = context || {};
 
             for (const opt of options) {
-                const newShanten = this._shantenAfterChi(player, opt);
+                const newShanten = this._shantenAfterChi(player, opt, context);
                 let score = -newShanten * 60;
 
                 // 模拟吃后的手牌

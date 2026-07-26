@@ -386,6 +386,18 @@ const AudioManager = (function() {
             }, 30);
         },
 
+        // 电脑落牌：保留回合节奏，但比本家落牌更轻，避免连续操作轰鸣。
+        opponentDiscard(tile) {
+            const suitFreqs = { wan: 180, tong: 220, tiao: 270, feng: 160, jian: 200, hua: 300 };
+            playPerc({
+                freq: suitFreqs[tile?.suit] || 210,
+                decay: 0.07,
+                type: 'triangle',
+                pitchDrop: 45,
+                volume: 0.16
+            });
+        },
+
         // 选中牌
         selectTile() {
             playFM({ carrier: 1200, modulator: 600, modulationIndex: 50, attack: 0.005, decay: 0.03, sustain: 0, release: 0.05, volume: 0.2 });
