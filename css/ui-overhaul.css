@@ -108,7 +108,7 @@
 
 .menu-tagline {
     font-size: 0.8rem;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     margin-top: 4px;
     letter-spacing: 1px;
 }
@@ -145,7 +145,7 @@
 }
 
 .menu-exp-text {
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 0.7rem;
     font-variant-numeric: tabular-nums;
 }
@@ -230,7 +230,7 @@
 
 .menu-btn.primary .btn-desc {
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     margin: 0;
 }
 
@@ -317,7 +317,7 @@
     background: transparent;
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: var(--radius-sm);
-    color: var(--text-muted);
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 0.8rem;
     transition: all 0.2s ease;
@@ -921,7 +921,7 @@ select {
 #game-screen .player-area.left .player-name,
 #game-screen .player-area.right .player-name {
     max-width: clamp(42px, 4vw, 64px);
-    font-size: 0.64rem;
+    font-size: clamp(0.64rem, 1vw, 0.8rem);
 }
 
 #game-screen .player-area.left .player-score,

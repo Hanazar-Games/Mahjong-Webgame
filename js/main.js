@@ -151,9 +151,15 @@
     }
 
     function startConfiguredBgm() {
-        if (App.settings?.bgmStyle && App.settings.bgmStyle !== 'none' && (App.settings.bgmVolume || 0) > 0) {
-            AudioManager.setBgmVolume(App.settings.bgmVolume / 100);
-            AudioManager.startBgm(App.settings.bgmStyle);
+        const style = App.settings?.bgmStyle;
+        const volume = App.settings?.bgmVolume || 0;
+        if (!style || style === 'none' || volume <= 0) {
+            AudioManager.stopBgm();
+            return;
+        }
+        AudioManager.setBgmVolume(volume / 100);
+        if (!AudioManager.isPlaying || AudioManager.currentBgm !== style) {
+            AudioManager.startBgm(style);
         }
     }
     window.updateAnimSpeed = updateAnimSpeed;

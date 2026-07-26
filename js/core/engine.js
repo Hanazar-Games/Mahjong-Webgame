@@ -1373,6 +1373,7 @@ class MahjongEngine extends Utils.EventEmitter {
             if (this.isRoundOver()) {
                 await this.endRound();
             } else {
+                this.state = 'playing';
                 await this.startTurn();
             }
         } catch (e) {

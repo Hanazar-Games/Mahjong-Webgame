@@ -148,6 +148,34 @@ test('main menu uses a consistent SVG icon system and compact mobile rhythm', as
     expect(rhythm.actionGap).toBeLessThan(80);
 });
 
+test('supporting menu text stays readable across themes', async ({ page }) => {
+    await openApp(page);
+
+    const ratios = await page.evaluate(() => {
+        const luminance = color => {
+            const channels = color.match(/[\d.]+/g).slice(0, 3).map(value => Number(value) / 255);
+            const linear = channels.map(value => value <= 0.03928
+                ? value / 12.92
+                : ((value + 0.055) / 1.055) ** 2.4);
+            return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+        };
+        const contrast = (foreground, background) => {
+            const lighter = Math.max(luminance(foreground), luminance(background));
+            const darker = Math.min(luminance(foreground), luminance(background));
+            return (lighter + 0.05) / (darker + 0.05);
+        };
+        const themes = ['classic-green', 'dark-blue', 'wood', 'red', 'amethyst', 'ink', 'sunset'];
+        const selectors = ['.menu-tagline', '.menu-exp-text', '.menu-btn.primary .btn-desc', '.menu-tool-btn'];
+        return themes.flatMap(theme => {
+            applyTheme(theme);
+            const background = getComputedStyle(document.body).backgroundColor;
+            return selectors.map(selector => contrast(getComputedStyle(document.querySelector(selector)).color, background));
+        });
+    });
+
+    expect(Math.min(...ratios)).toBeGreaterThanOrEqual(4.5);
+});
+
 test('secondary flows keep the shared SVG icon system', async ({ page }) => {
     await openApp(page);
 
@@ -239,14 +267,14 @@ test('release metadata and announcement history stay aligned', async ({ request 
     const changelog = await (await request.get('/CHANGELOG.md')).text();
     const historyIndex = changelog.indexOf('## 历史公告');
 
-    expect(packageJson.version).toBe('1.0.13');
-    expect(packageLock.version).toBe('1.0.13');
-    expect(packageLock.packages[''].version).toBe('1.0.13');
-    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v14'");
+    expect(packageJson.version).toBe('1.0.14');
+    expect(packageLock.version).toBe('1.0.14');
+    expect(packageLock.packages[''].version).toBe('1.0.14');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v15'");
     expect(serviceWorker).toContain("'./assets/ui/icons.svg'");
     expect(serviceWorker).toContain("'./manifest.json'");
-    expect(changelog.indexOf('## [1.0.13] - 2026-07-26')).toBeLessThan(historyIndex);
-    expect(changelog.indexOf('### [1.0.12] - 2026-07-25')).toBeGreaterThan(historyIndex);
+    expect(changelog.indexOf('## [1.0.14] - 2026-07-26')).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.13] - 2026-07-26')).toBeGreaterThan(historyIndex);
 });
 
 test('audio and appearance settings update and persist', async ({ page }) => {
@@ -442,6 +470,43 @@ test('background audio pauses while the page is hidden and resumes when visible'
     });
 });
 
+test('configured BGM startup is idempotent and stops stale playback when disabled', async ({ page }) => {
+    await openApp(page);
+    const state = await page.evaluate(() => {
+        const originalStartBgm = AudioManager.startBgm;
+        let startCalls = 0;
+        AudioManager.startBgm = style => {
+            startCalls++;
+            return originalStartBgm(style);
+        };
+        try {
+            AudioManager.stopBgm();
+            App.settings.bgmStyle = 'calm';
+            App.settings.bgmVolume = 30;
+            startConfiguredBgm();
+            startConfiguredBgm();
+            const active = { playing: AudioManager.isPlaying, style: AudioManager.currentBgm };
+
+            App.settings.bgmStyle = 'none';
+            startConfiguredBgm();
+            return {
+                startCalls,
+                active,
+                disabled: { playing: AudioManager.isPlaying, style: AudioManager.currentBgm }
+            };
+        } finally {
+            AudioManager.startBgm = originalStartBgm;
+            AudioManager.stopBgm();
+        }
+    });
+
+    expect(state).toEqual({
+        startCalls: 1,
+        active: { playing: true, style: 'calm' },
+        disabled: { playing: false, style: null }
+    });
+});
+
 test('muted SFX does not initialize or schedule silent audio work', async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => {
@@ -554,6 +619,30 @@ test('game HUD uses SVG player identities and compact AI names', async ({ page }
             }))
     );
     expect(overflowingNames).toEqual([]);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const desktopSideNameSizes = await page.locator(
+        '#game-screen .player-area.left .player-name, #game-screen .player-area.right .player-name'
+    ).evaluateAll(elements => elements.map(element => parseFloat(getComputedStyle(element).fontSize)));
+    expect(Math.min(...desktopSideNameSizes)).toBeGreaterThanOrEqual(12);
+});
+
+test('expert AI advances after the human discard at instant speed', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: '设置' }).click();
+    await page.locator('#ai-difficulty').selectOption('expert');
+    await page.locator('#game-speed').selectOption('instant');
+    await page.getByRole('button', { name: '关闭设置' }).click();
+    await startQuickGame(page);
+
+    const tile = page.locator('#hand-bottom .mahjong-tile').first();
+    await tile.click();
+    await tile.click();
+
+    await expect.poll(() => page.evaluate(() => App.engine.gameHistory.some(entry =>
+        entry.action === 'discard' && entry.data.playerId !== (App.localPlayerIndex ?? 0)
+    ))).toBe(true);
+    expect(await page.evaluate(() => App.engine.state)).not.toBe('waiting');
 });
 
 test('audio settings expose a live BGM and SFX summary', async ({ page }) => {

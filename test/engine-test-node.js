@@ -254,12 +254,36 @@ engine6.initPlayers([
 const emptyActions = engine6.checkActions(engine6.players[0], undefined, true);
 assertEqual('checkActions with undefined tile returns empty array', Array.isArray(emptyActions) && emptyActions.length, 0);
 
-// ===== 结果汇总 =====
-console.log('\n========== 引擎基础测试 ==========');
-console.log('✅ 通过:', passCount);
-console.log('❌ 失败:', failCount);
-results.forEach(r => {
-    console.log((r.ok ? '✅' : '❌') + ' ' + r.name + (r.detail ? ' | ' + r.detail : ''));
+async function finish() {
+    // Test 17: waiting 状态进入下一家前必须恢复 playing，否则摸牌会被拒绝
+    const engine7 = new MahjongEngine({ playerCount: 4, speed: 'instant' });
+    engine7.initPlayers([
+        { name: 'P0', isAI: false },
+        { name: 'P1', isAI: true },
+        { name: 'P2', isAI: true },
+        { name: 'P3', isAI: true }
+    ]);
+    engine7.state = 'waiting';
+    engine7.deck = [Tiles.createTile('wan', 1, 'next-turn-deck')];
+    let stateAtTurnStart = null;
+    engine7.startTurn = async function() {
+        stateAtTurnStart = this.state;
+    };
+    await engine7.nextTurn();
+    assertEqual('nextTurn restores playing before the next player draws', stateAtTurnStart, 'playing');
+
+    // ===== 结果汇总 =====
+    console.log('\n========== 引擎基础测试 ==========');
+    console.log('✅ 通过:', passCount);
+    console.log('❌ 失败:', failCount);
+    results.forEach(r => {
+        console.log((r.ok ? '✅' : '❌') + ' ' + r.name + (r.detail ? ' | ' + r.detail : ''));
+    });
+    if (failCount > 0) process.exit(1);
+    console.log('\n全部通过！');
+}
+
+finish().catch(error => {
+    console.error(error);
+    process.exit(1);
 });
-if (failCount > 0) process.exit(1);
-console.log('\n全部通过！');
