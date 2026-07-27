@@ -31,8 +31,13 @@
         const winds = ['东', '南', '西', '北'];
         const windEl = document.getElementById('wind-indicator');
         if (windEl) windEl.textContent = winds[state.currentWind];
+        const tableWindEl = document.getElementById('table-wind-indicator');
+        if (tableWindEl) tableWindEl.textContent = winds[state.currentWind];
         const roundEl = document.getElementById('round-info');
-        if (roundEl) roundEl.textContent = `${state.round ?? 1}/${App.engine.config?.maxRounds ?? 1}局`;
+        const roundText = `${state.round ?? 1}/${App.engine.config?.maxRounds ?? 1}局`;
+        if (roundEl) roundEl.textContent = roundText;
+        const tableRoundEl = document.getElementById('table-round-info');
+        if (tableRoundEl) tableRoundEl.textContent = roundText;
         updatePlayerHighlight(App.engine.currentPlayerIndex);
     }
 

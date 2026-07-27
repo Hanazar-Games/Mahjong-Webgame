@@ -267,14 +267,14 @@ test('release metadata and announcement history stay aligned', async ({ request 
     const changelog = await (await request.get('/CHANGELOG.md')).text();
     const historyIndex = changelog.indexOf('## 历史公告');
 
-    expect(packageJson.version).toBe('1.0.15');
-    expect(packageLock.version).toBe('1.0.15');
-    expect(packageLock.packages[''].version).toBe('1.0.15');
-    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v16'");
+    expect(packageJson.version).toBe('1.0.16');
+    expect(packageLock.version).toBe('1.0.16');
+    expect(packageLock.packages[''].version).toBe('1.0.16');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v17'");
     expect(serviceWorker).toContain("'./assets/ui/icons.svg'");
     expect(serviceWorker).toContain("'./manifest.json'");
-    expect(changelog.indexOf('## [1.0.15] - 2026-07-26')).toBeLessThan(historyIndex);
-    expect(changelog.indexOf('### [1.0.14] - 2026-07-26')).toBeGreaterThan(historyIndex);
+    expect(changelog.indexOf('## [1.0.16] - 2026-07-27')).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.15] - 2026-07-26')).toBeGreaterThan(historyIndex);
 });
 
 test('audio and appearance settings update and persist', async ({ page }) => {
@@ -656,6 +656,41 @@ test('AI turns expose an explicit thinking state', async ({ page }) => {
 
     await expect(page.locator('#turn-guidance')).toContainText('正在思考');
     await expect(page.locator('#turn-guidance')).toHaveAttribute('data-state', 'thinking');
+});
+
+test('game table uses tactile tiles and a focused match hierarchy', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(() => enableActionButtons({ type: 'peng' }));
+
+    await expect(page.locator('#table-status-core')).toBeVisible();
+    await expect(page.locator('#table-wind-indicator')).toHaveText('东');
+    await expect(page.locator('#table-round-info')).toContainText('1/4');
+
+    const visual = await page.evaluate(() => {
+        const tile = document.querySelector('#hand-bottom .mahjong-tile:not(.back)');
+        const sideAvatar = document.querySelector('#player-left .player-avatar');
+        const action = document.querySelector('#btn-peng');
+        const table = document.getElementById('game-table');
+        const tileStyle = getComputedStyle(tile);
+        const actionStyle = getComputedStyle(action);
+        return {
+            tileBackground: tileStyle.backgroundImage,
+            tileLightness: tileStyle.color,
+            sideAvatarVisible: getComputedStyle(sideAvatar).display !== 'none',
+            actionRadius: Number.parseFloat(actionStyle.borderRadius),
+            actionHeight: action.getBoundingClientRect().height,
+            tableFrame: getComputedStyle(table, '::before').content
+        };
+    });
+
+    expect(visual.tileBackground).toContain('rgb(255, 253, 245)');
+    expect(visual.tileLightness).not.toBe('rgb(255, 255, 255)');
+    expect(visual.sideAvatarVisible).toBe(true);
+    expect(visual.actionRadius).toBeGreaterThanOrEqual(24);
+    expect(visual.actionHeight).toBeGreaterThanOrEqual(48);
+    expect(visual.tableFrame).not.toBe('none');
 });
 
 test('audio settings expose a live BGM and SFX summary', async ({ page }) => {
@@ -1229,6 +1264,7 @@ for (const viewport of VIEWPORTS) {
             const table = rect('#game-table');
             const center = rect('#game-screen .table-center');
             const action = rect('#action-bar');
+            const guidance = rect('#turn-guidance');
             const bottomHand = rect('#hand-bottom');
             const bottomInfo = rect('#player-bottom .player-info');
             const shanten = rect('#shanten-display:not(.hidden)');
@@ -1265,6 +1301,7 @@ for (const viewport of VIEWPORTS) {
                 table,
                 center,
                 action,
+                guidance,
                 bottomHand,
                 bottomInfo,
                 shanten,
@@ -1280,6 +1317,7 @@ for (const viewport of VIEWPORTS) {
                 actionBottomHandOverlap: overlap(action, bottomHand),
                 actionBottomInfoOverlap: overlap(action, bottomInfo),
                 actionShantenOverlap: overlap(action, shanten),
+                actionGuidanceOverlap: overlap(action, guidance),
                 horizontalScroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
                 verticalScroll: document.documentElement.scrollHeight - document.documentElement.clientHeight
             };
@@ -1295,6 +1333,7 @@ for (const viewport of VIEWPORTS) {
         expect(layout.actionBottomHandOverlap).toBe(0);
         expect(layout.actionBottomInfoOverlap).toBe(0);
         expect(layout.actionShantenOverlap).toBe(0);
+        expect(layout.actionGuidanceOverlap).toBe(0);
         expect(layout.horizontalScroll).toBe(0);
         expect(layout.verticalScroll).toBe(0);
         expect(layout.tiles.every(tile => tile.width >= 20 && tile.height >= 26)).toBe(true);

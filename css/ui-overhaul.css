@@ -13,6 +13,9 @@
     --radius-md: 12px;
     --radius-lg: 16px;
     --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --tile-face-top: #fffdf5;
+    --tile-face-bottom: #e8dcc1;
+    --tile-edge: #b9a77f;
 }
 
 .ui-icon {
@@ -61,7 +64,9 @@
 /* ========== Screen 基础调整 ========== */
 #game-screen.screen {
     overflow: hidden;
-    background: var(--bg-primary);
+    background:
+        radial-gradient(circle at 50% 44%, rgba(255, 255, 255, 0.08), transparent 42%),
+        radial-gradient(circle at 50% 50%, var(--bg-secondary), var(--bg-primary) 72%);
 }
 
 #main-menu.screen {
@@ -614,6 +619,10 @@ select {
     pointer-events: auto;
 }
 
+#game-screen .hud-match-info {
+    display: none;
+}
+
 .hud-menu-btn {
     width: 38px;
     height: 38px;
@@ -774,6 +783,26 @@ select {
     padding: max(56px, env(safe-area-inset-top)) 14px max(18px, env(safe-area-inset-bottom)) 14px;
     box-sizing: border-box;
     overflow: hidden;
+    isolation: isolate;
+    background:
+        radial-gradient(ellipse at center, rgba(255, 255, 255, 0.045), transparent 58%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.025), rgba(0, 0, 0, 0.08));
+}
+
+#game-screen .game-table::before {
+    content: '';
+    position: absolute;
+    inset: max(52px, env(safe-area-inset-top)) 6px 8px;
+    z-index: 0;
+    border: 1px solid rgba(232, 200, 112, 0.18);
+    border-radius: 34px;
+    background:
+        linear-gradient(90deg, transparent 49.8%, rgba(255, 255, 255, 0.025) 50%, transparent 50.2%),
+        linear-gradient(0deg, transparent 49.8%, rgba(255, 255, 255, 0.025) 50%, transparent 50.2%);
+    box-shadow:
+        inset 0 0 60px rgba(0, 0, 0, 0.16),
+        0 12px 40px rgba(0, 0, 0, 0.16);
+    pointer-events: none;
 }
 
 /* 玩家区域 */
@@ -831,12 +860,32 @@ select {
 
 .player-info {
     position: relative;
-    padding: 6px 14px;
-    background: var(--hud-bg);
-    border: 1px solid var(--hud-border);
-    border-radius: 20px;
-    backdrop-filter: blur(8px);
-    gap: 10px;
+    padding: 6px 12px 6px 7px;
+    background: linear-gradient(135deg, rgba(10, 24, 18, 0.94), rgba(18, 18, 24, 0.9));
+    border: 1px solid rgba(232, 200, 112, 0.18);
+    border-radius: 999px;
+    backdrop-filter: blur(10px);
+    gap: 8px;
+    box-shadow: 0 5px 16px rgba(0, 0, 0, 0.22);
+}
+
+#game-screen .player-avatar {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 50%;
+    background: linear-gradient(145deg, rgba(232, 200, 112, 0.28), rgba(212, 168, 67, 0.08));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+#game-screen .player-avatar .ui-icon {
+    width: 17px;
+    height: 17px;
+    color: #f4d783;
 }
 
 #game-screen #player-bottom .player-info .shanten-hud {
@@ -850,8 +899,8 @@ select {
 }
 
 .player-area.current-turn .player-info {
-    box-shadow: var(--turn-glow);
-    border-color: rgba(212, 168, 67, 0.4);
+    box-shadow: 0 0 0 2px rgba(244, 205, 93, 0.2), 0 0 24px rgba(244, 205, 93, 0.34);
+    border-color: rgba(244, 205, 93, 0.72);
 }
 
 .player-score {
@@ -908,14 +957,16 @@ select {
 #game-screen .player-area.right .player-info {
     width: 100%;
     max-width: 100%;
-    padding: 4px;
-    gap: 4px;
+    padding: 5px 6px;
+    gap: 3px;
     justify-content: center;
 }
 
 #game-screen .player-area.left .player-avatar,
 #game-screen .player-area.right .player-avatar {
-    display: none;
+    display: flex;
+    width: 27px;
+    height: 27px;
 }
 
 #game-screen .player-area.left .player-name,
@@ -962,24 +1013,74 @@ select {
     min-width: 0;
     min-height: 0;
     transform: none !important;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    align-items: center;
+    justify-items: center;
+    gap: 8px;
+    padding: 12px 18px 10px;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at center, rgba(5, 24, 15, 0.12), rgba(0, 0, 0, 0.08)),
+        repeating-linear-gradient(0deg, transparent 0 31px, rgba(255, 255, 255, 0.018) 31px 32px),
+        repeating-linear-gradient(90deg, transparent 0 31px, rgba(255, 255, 255, 0.018) 31px 32px);
+    border: 1px solid rgba(232, 200, 112, 0.12);
+    border-radius: 28px;
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.13);
+}
+
+.table-status-core {
+    min-width: 122px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    padding: 4px 13px 4px 5px;
+    color: #f5e7bb;
+    background: linear-gradient(180deg, rgba(10, 26, 19, 0.96), rgba(7, 17, 13, 0.94));
+    border: 1px solid rgba(232, 200, 112, 0.34);
+    border-radius: 999px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    font-variant-numeric: tabular-nums;
+}
+
+.table-wind-mark {
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: #2a210d;
+    background: linear-gradient(145deg, #f3d878, #c99932);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    font-weight: 900;
+}
+
+.table-round-mark {
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
 }
 
 .turn-guidance {
+    grid-row: 2;
     max-width: min(100%, 360px);
     min-height: 32px;
     padding: 7px 14px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(8, 24, 16, 0.78);
-    border: 1px solid rgba(212, 168, 67, 0.18);
+    background: rgba(7, 20, 14, 0.9);
+    border: 1px solid rgba(232, 200, 112, 0.24);
     border-radius: 999px;
     color: var(--text-secondary);
     font-size: 0.82rem;
     font-weight: 600;
     line-height: 1.25;
     text-align: center;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.04);
     pointer-events: none;
 }
 
@@ -1024,10 +1125,10 @@ select {
 
 .turn-indicator.active {
     opacity: 1;
-    animation: turnPulse 1.5s ease infinite;
+    animation: turnDotPulse 1.5s ease infinite;
 }
 
-@keyframes turnPulse {
+@keyframes turnDotPulse {
     0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; }
     50% { transform: translateX(-50%) scale(1.4); opacity: 0.7; }
 }
@@ -1039,10 +1140,20 @@ select {
 
 /* 弃牌堆 */
 .discard-pile {
-    width: min(48vw, 260px);
-    height: min(28vh, 160px);
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(212, 168, 67, 0.08);
+    grid-row: 3;
+    width: min(68vw, 760px);
+    height: 100%;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(32px, 38px));
+    grid-auto-rows: min-content;
+    align-content: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 9px;
+    background: rgba(4, 18, 11, 0.1);
+    border: 1px dashed rgba(232, 200, 112, 0.12);
+    border-radius: 18px;
 }
 
 /* 动作按钮栏 */
@@ -1052,12 +1163,13 @@ select {
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 8px;
+    gap: 10px;
     z-index: 15;
-    padding: 6px;
-    background: var(--hud-bg);
-    border: 1px solid var(--hud-border);
-    border-radius: var(--radius-md);
+    padding: 7px;
+    padding-bottom: 7px !important;
+    background: rgba(7, 18, 13, 0.86);
+    border: 1px solid rgba(232, 200, 112, 0.2);
+    border-radius: 999px;
     backdrop-filter: blur(12px);
     opacity: 0;
     visibility: hidden;
@@ -1079,27 +1191,37 @@ select {
 }
 
 .action-btn {
-    min-width: 56px;
-    height: 48px;
-    padding: 0 16px;
+    min-width: 52px;
+    height: 52px;
+    padding: 0 14px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, rgba(212,168,67,0.12), rgba(139,90,43,0.05));
-    border: 1px solid rgba(212, 168, 67, 0.2);
-    border-radius: var(--radius-sm);
-    color: var(--accent-gold);
-    font-size: 1rem;
-    font-weight: 700;
+    background: linear-gradient(145deg, #f0cf67, #b77d20);
+    border: 1px solid rgba(255, 239, 173, 0.68);
+    border-radius: 999px;
+    color: #2f2107;
+    font-size: 1.05rem;
+    font-weight: 900;
     cursor: pointer;
     transition: all 0.15s ease;
     position: relative;
     overflow: hidden;
+    box-shadow: 0 5px 14px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+
+.action-bar .action-btn:not(:disabled) {
+    animation: actionButtonReveal 0.18s ease both;
+}
+
+@keyframes actionButtonReveal {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 .action-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, rgba(212,168,67,0.2), rgba(139,90,43,0.1));
-    border-color: rgba(212, 168, 67, 0.4);
+    background: linear-gradient(145deg, #ffe490, #cb9330);
+    border-color: rgba(255, 245, 203, 0.88);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -1150,27 +1272,29 @@ select {
 }
 
 .action-btn.secondary {
-    background: rgba(255,255,255,0.03);
-    border-color: rgba(255,255,255,0.08);
-    color: var(--text-muted);
-    font-weight: 500;
+    background: linear-gradient(145deg, #445149, #26332c);
+    border-color: rgba(255,255,255,0.16);
+    color: #e2e7df;
+    font-weight: 700;
 }
 
 .action-btn.secondary:hover:not(:disabled) {
-    background: rgba(255,255,255,0.06);
-    border-color: rgba(255,255,255,0.15);
-    color: var(--text-secondary);
+    background: linear-gradient(145deg, #56645b, #324138);
+    border-color: rgba(255, 255, 255, 0.28);
+    color: #fffdf5;
 }
 
 .action-btn.highlight {
-    background: linear-gradient(135deg, rgba(212,168,67,0.3), rgba(200,150,50,0.18));
-    border-color: rgba(212, 168, 67, 0.55);
-    box-shadow: 0 0 20px rgba(212, 168, 67, 0.2);
+    background: linear-gradient(145deg, #f36c48, #a92c24);
+    border-color: rgba(255, 204, 155, 0.72);
+    color: #fff5df;
+    box-shadow: 0 6px 20px rgba(145, 36, 26, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.34);
 }
 
 .action-btn.highlight:hover:not(:disabled) {
-    background: linear-gradient(135deg, rgba(212,168,67,0.4), rgba(200,150,50,0.25));
-    box-shadow: 0 0 30px rgba(212, 168, 67, 0.35);
+    background: linear-gradient(145deg, #ff8060, #c43a2e);
+    border-color: rgba(255, 225, 190, 0.9);
+    box-shadow: 0 8px 24px rgba(145, 36, 26, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 /* 移除旧的游戏控制栏 */
@@ -1435,8 +1559,116 @@ select {
     line-height: 1;
 }
 
-.mahjong-tile {
+#game-screen .mahjong-tile:not(.back),
+#replay-player .mahjong-tile:not(.back) {
     position: relative;
+    background: linear-gradient(180deg, rgb(255, 253, 245) 0%, #f8f2e4 62%, #e8dcc1 100%);
+    border-color: var(--tile-edge);
+    color: #234f39;
+    box-shadow:
+        0 5px 0 #9f8e67,
+        0 8px 14px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    filter: none;
+}
+
+#game-screen .mahjong-tile:not(.back) .tile-face,
+#replay-player .mahjong-tile:not(.back) .tile-face {
+    filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.82));
+    text-shadow: none;
+}
+
+#game-screen .mahjong-tile.suit-wan,
+#replay-player .mahjong-tile.suit-wan,
+#game-screen .mahjong-tile.suit-jian,
+#replay-player .mahjong-tile.suit-jian {
+    color: #a72e27;
+}
+
+#game-screen .mahjong-tile.suit-tong,
+#replay-player .mahjong-tile.suit-tong {
+    color: #147547;
+}
+
+#game-screen .mahjong-tile.suit-tiao,
+#replay-player .mahjong-tile.suit-tiao {
+    color: #1d5792;
+}
+
+#game-screen .mahjong-tile.suit-feng,
+#replay-player .mahjong-tile.suit-feng {
+    color: #293e58;
+}
+
+#game-screen .mahjong-tile.suit-hua,
+#replay-player .mahjong-tile.suit-hua {
+    color: #8e3d75;
+}
+
+#game-screen .mahjong-tile:not(.back)::after,
+#replay-player .mahjong-tile:not(.back)::after {
+    left: 3%;
+    width: 94%;
+    height: 18%;
+    background: linear-gradient(180deg, transparent, rgba(114, 94, 54, 0.13));
+}
+
+#game-screen .mahjong-tile.back,
+#replay-player .mahjong-tile.back {
+    background: linear-gradient(155deg, #267f78 0%, #155a60 58%, #0c3e49 100%);
+    border-color: #7ab3a5;
+    box-shadow:
+        0 4px 0 #d3c69f,
+        0 7px 12px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+#game-screen .mahjong-tile.back::before,
+#replay-player .mahjong-tile.back::before {
+    inset: 4px;
+    background:
+        radial-gradient(circle at center, transparent 0 34%, rgba(224, 247, 235, 0.16) 35% 40%, transparent 41%),
+        repeating-linear-gradient(45deg, transparent 0 4px, rgba(255, 255, 255, 0.08) 4px 5px);
+    border: 1px solid rgba(226, 248, 238, 0.18);
+}
+
+#game-screen .mahjong-tile.selected {
+    transform: translateY(-14px) scale(1.04);
+    border-color: #f2c94c;
+    box-shadow:
+        0 0 0 3px rgba(242, 201, 76, 0.92),
+        0 8px 0 #9f8e67,
+        0 15px 22px rgba(0, 0, 0, 0.38);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    #game-screen .mahjong-tile:not(.back):hover {
+        transform: translateY(-7px) scale(1.025);
+        border-color: #ddba55;
+        box-shadow:
+            0 7px 0 #9f8e67,
+            0 13px 20px rgba(0, 0, 0, 0.34),
+            0 0 0 2px rgba(242, 201, 76, 0.42);
+        filter: brightness(1.03);
+    }
+}
+
+#game-screen #hand-bottom .mahjong-tile.disabled {
+    opacity: 0.72;
+    filter: saturate(0.72) brightness(0.92);
+}
+
+#game-screen .discard-pile .mahjong-tile,
+#game-screen .discard-pile .mahjong-tile.tile-small {
+    min-width: 0;
+    min-height: 0;
+    width: 34px;
+    height: 46px;
+    border-radius: 5px;
+}
+
+#game-screen .discard-pile .mahjong-tile .tile-face {
+    font-size: 1.45rem;
 }
 
 /* Toggle Switch */
@@ -1578,11 +1810,12 @@ select {
     .action-bar {
         gap: 6px;
         padding: 4px;
+        padding-bottom: 4px !important;
         bottom: 176px;
     }
     .action-btn {
         min-width: 48px;
-        height: 42px;
+        height: 46px;
         padding: 0 12px;
         font-size: 0.9rem;
     }
@@ -1596,6 +1829,32 @@ select {
     .player-avatar {
         font-size: 1rem;
     }
+
+    #game-screen .player-area.left .player-info,
+    #game-screen .player-area.right .player-info {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        grid-template-rows: 1fr 1fr;
+        column-gap: 3px;
+        padding: 3px;
+        line-height: 1;
+    }
+    #game-screen .player-area.left .player-avatar,
+    #game-screen .player-area.right .player-avatar {
+        grid-row: 1 / 3;
+        width: 24px;
+        height: 24px;
+    }
+    #game-screen .player-area.left .player-name,
+    #game-screen .player-area.right .player-name,
+    #game-screen .player-area.left .player-score,
+    #game-screen .player-area.right .player-score {
+        min-width: 0;
+        max-width: 100%;
+        text-align: left;
+        font-size: 0.62rem;
+        line-height: 1.05;
+    }
     .player-score {
         min-width: 32px;
         font-size: 0.8rem;
@@ -1603,10 +1862,44 @@ select {
 
     /* 弃牌堆移动端 */
     .discard-pile {
-        width: min(55vw, 220px);
-        height: min(24vh, 130px);
+        width: 100%;
+        height: 100%;
+        grid-template-columns: repeat(auto-fit, minmax(26px, 30px));
         padding: 6px;
         gap: 3px;
+    }
+
+    #game-screen .table-center {
+        gap: 6px;
+        padding: 8px 6px 7px;
+        border-radius: 20px;
+    }
+
+    .table-status-core {
+        min-width: 104px;
+        height: 34px;
+        padding: 3px 10px 3px 4px;
+        gap: 7px;
+    }
+
+    .table-wind-mark {
+        width: 26px;
+        height: 26px;
+        font-size: 0.78rem;
+    }
+
+    .table-round-mark {
+        font-size: 0.68rem;
+    }
+
+    #game-screen .discard-pile .mahjong-tile,
+    #game-screen .discard-pile .mahjong-tile.tile-small {
+        width: 27px;
+        height: 37px;
+    }
+
+    #game-screen .discard-pile .mahjong-tile .tile-face {
+        font-size: 1.1rem;
     }
 
     #game-screen .game-table {
@@ -1644,7 +1937,7 @@ select {
     #game-screen .player-area.bottom .hand-area .mahjong-tile {
         min-width: 0;
         min-height: 0;
-        width: clamp(24px, 8vw, 30px);
+        width: clamp(28px, 9vw, 34px);
         height: clamp(48px, 9vh, 60px);
         border-radius: 5px;
     }
@@ -1652,19 +1945,19 @@ select {
         font-size: clamp(1.2rem, 5vw, 1.7rem);
     }
     #game-screen .player-area.bottom .hand-area .mahjong-tile + .mahjong-tile {
-        margin-left: -7px;
-    }
-    #game-screen .player-area.bottom .hand-area[data-tile-count="15"] .mahjong-tile + .mahjong-tile {
-        margin-left: -9px;
-    }
-    #game-screen .player-area.bottom .hand-area[data-tile-count="16"] .mahjong-tile + .mahjong-tile {
-        margin-left: -10px;
-    }
-    #game-screen .player-area.bottom .hand-area[data-tile-count="17"] .mahjong-tile + .mahjong-tile {
         margin-left: -11px;
     }
-    #game-screen .player-area.bottom .hand-area[data-tile-count="18"] .mahjong-tile + .mahjong-tile {
+    #game-screen .player-area.bottom .hand-area[data-tile-count="15"] .mahjong-tile + .mahjong-tile {
         margin-left: -13px;
+    }
+    #game-screen .player-area.bottom .hand-area[data-tile-count="16"] .mahjong-tile + .mahjong-tile {
+        margin-left: -15px;
+    }
+    #game-screen .player-area.bottom .hand-area[data-tile-count="17"] .mahjong-tile + .mahjong-tile {
+        margin-left: -16px;
+    }
+    #game-screen .player-area.bottom .hand-area[data-tile-count="18"] .mahjong-tile + .mahjong-tile {
+        margin-left: -17px;
     }
     .turn-guidance {
         min-height: 28px;
@@ -1696,6 +1989,13 @@ select {
     }
     .result-actions {
         flex-direction: column;
+    }
+}
+
+@media (max-width: 390px) and (max-height: 700px) {
+    #game-screen .player-area.left .hand-area .mahjong-tile + .mahjong-tile,
+    #game-screen .player-area.right .hand-area .mahjong-tile + .mahjong-tile {
+        margin-top: -9px;
     }
 }
 
@@ -1838,6 +2138,11 @@ select {
         line-height: 1.05;
     }
 
+    #game-screen .player-area.left .player-avatar,
+    #game-screen .player-area.right .player-avatar {
+        display: none;
+    }
+
     #game-screen .player-area.left .player-name,
     #game-screen .player-area.right .player-name {
         max-width: 66px;
@@ -1904,21 +2209,57 @@ select {
         font-size: 1.7rem;
     }
 
+    .turn-guidance {
+        min-height: 26px;
+        padding: 3px 9px;
+        font-size: 0.68rem;
+    }
+
     .action-bar {
-        bottom: 150px;
+        bottom: 126px;
         gap: 4px;
         padding: 4px;
+        padding-bottom: 4px !important;
     }
 
     .action-btn {
         min-width: 44px;
-        height: 38px;
+        height: 44px;
         padding: 0 10px;
         font-size: 0.85rem;
     }
 
     .discard-pile {
-        height: min(24vh, 96px);
+        height: 100%;
+        grid-template-columns: repeat(auto-fit, minmax(24px, 27px));
+    }
+
+    #game-screen .table-center {
+        gap: 4px;
+        padding: 5px 7px;
+        border-radius: 16px;
+    }
+
+    .table-status-core {
+        min-width: 88px;
+        height: 28px;
+        padding: 2px 8px 2px 3px;
+    }
+
+    .table-wind-mark {
+        width: 22px;
+        height: 22px;
+        font-size: 0.68rem;
+    }
+
+    #game-screen .discard-pile .mahjong-tile,
+    #game-screen .discard-pile .mahjong-tile.tile-small {
+        width: 24px;
+        height: 31px;
+    }
+
+    #game-screen .discard-pile .mahjong-tile .tile-face {
+        font-size: 0.92rem;
     }
 }
 

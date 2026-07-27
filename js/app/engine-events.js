@@ -71,8 +71,6 @@
             renderGameState();
             disableActionButtons();
             updateTurnGuidance('准备开局…');
-            const typeName = Tiles.getConfig(engine.config.mahjongType)?.name || engine.config.mahjongType;
-            Utils.toast(`${typeName} · 第${data.round}局`);
             AudioManager.SFX.gameStart();
         });
         
