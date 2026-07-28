@@ -669,6 +669,7 @@ test('game table uses tactile tiles and a focused match hierarchy', async ({ pag
     await expect(page.locator('#table-round-info')).toContainText('1/4');
 
     const visual = await page.evaluate(() => {
+        enableActionButtons({ type: 'peng' });
         const tile = document.querySelector('#hand-bottom .mahjong-tile:not(.back)');
         const sideAvatar = document.querySelector('#player-left .player-avatar');
         const action = document.querySelector('#btn-peng');
@@ -680,7 +681,7 @@ test('game table uses tactile tiles and a focused match hierarchy', async ({ pag
             tileLightness: tileStyle.color,
             sideAvatarVisible: getComputedStyle(sideAvatar).display !== 'none',
             actionRadius: Number.parseFloat(actionStyle.borderRadius),
-            actionHeight: action.getBoundingClientRect().height,
+            actionHeight: Number.parseFloat(actionStyle.height),
             tableFrame: getComputedStyle(table, '::before').content
         };
     });
