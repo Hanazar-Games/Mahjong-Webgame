@@ -87,9 +87,7 @@
         ];
         
         for (let i = 1; i < config.playerCount; i++) {
-            const difficulties = ['简', '普', '难', '专'];
-            const diffIndex = ['easy', 'normal', 'hard', 'expert'].indexOf(config.aiDifficulty);
-            const diffName = difficulties[diffIndex] || '电脑';
+            const diffName = { easy: '简', normal: '普', expert: '难' }[config.aiDifficulty] || '电脑';
             const name = config.playerCount === 3 
                 ? ['下', '上'][i - 1]
                 : ['下', '对', '上'][i - 1];

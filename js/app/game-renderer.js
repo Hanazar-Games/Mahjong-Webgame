@@ -194,7 +194,7 @@
         const player = App.engine.players?.[playerIndex];
         if (!player || !player.melds) return;
         
-        const existingGroups = meldsEl.querySelectorAll('.meld-group');
+        const existingGroups = [...meldsEl.querySelectorAll('.meld-group')];
         
         // 防御：如果副露变短了（如回放跳转或网络同步），移除多余元素
         if (existingGroups.length > player.melds.length) {
@@ -203,19 +203,24 @@
             }
         }
         
-        // 只添加新增的 meld（副露通常只增不减）
-        for (let i = existingGroups.length; i < player.melds.length; i++) {
+        for (let i = 0; i < player.melds.length; i++) {
             const meld = player.melds[i];
             if (!meld || !Array.isArray(meld.tiles)) continue;
-            const group = document.createElement('div');
-            group.className = 'meld-group';
-            
+            const signature = meld.tiles.map(tile => tile?.id || '').join('|');
+            let group = existingGroups[i];
+            if (!group) {
+                group = document.createElement('div');
+                group.className = 'meld-group';
+                meldsEl.appendChild(group);
+            }
+            if (group.dataset.signature === signature) continue;
+            group.querySelectorAll('.mahjong-tile').forEach(tile => tile._cleanupDrag?.());
+            group.replaceChildren();
             for (const tile of meld.tiles) {
                 const tileEl = UIComponents.createTileElement(tile, { small: true });
                 group.appendChild(tileEl);
             }
-            
-            meldsEl.appendChild(group);
+            group.dataset.signature = signature;
         }
     }
 

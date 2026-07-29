@@ -267,14 +267,14 @@ test('release metadata and announcement history stay aligned', async ({ request 
     const changelog = await (await request.get('/CHANGELOG.md')).text();
     const historyIndex = changelog.indexOf('## 历史公告');
 
-    expect(packageJson.version).toBe('1.0.17');
-    expect(packageLock.version).toBe('1.0.17');
-    expect(packageLock.packages[''].version).toBe('1.0.17');
-    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v18'");
+    expect(packageJson.version).toBe('1.0.18');
+    expect(packageLock.version).toBe('1.0.18');
+    expect(packageLock.packages[''].version).toBe('1.0.18');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v19'");
     expect(serviceWorker).toContain("'./assets/ui/icons.svg'");
     expect(serviceWorker).toContain("'./manifest.json'");
-    expect(changelog.indexOf('## [1.0.17] - 2026-07-29')).toBeLessThan(historyIndex);
-    expect(changelog.indexOf('### [1.0.16] - 2026-07-27')).toBeGreaterThan(historyIndex);
+    expect(changelog.indexOf('## [1.0.18] - 2026-07-29')).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.17] - 2026-07-29')).toBeGreaterThan(historyIndex);
 });
 
 test('audio and appearance settings update and persist', async ({ page }) => {
@@ -606,6 +606,15 @@ test('AI difficulty explains its strategy accessibly', async ({ page }) => {
 
     const difficulty = page.locator('#ai-difficulty');
     await expect(difficulty).toHaveAttribute('aria-describedby', 'ai-difficulty-hint');
+    await expect(difficulty.locator('option')).toHaveCount(3);
+    expect(await difficulty.locator('option').evaluateAll(options => options.map(option => ({
+        value: option.value,
+        label: option.textContent.trim()
+    })))).toEqual([
+        { value: 'easy', label: '简单' },
+        { value: 'normal', label: '普通' },
+        { value: 'expert', label: '困难' }
+    ]);
     await expect(page.locator('#ai-difficulty-hint')).toContainText('牌效');
     await difficulty.selectOption('expert');
     await expect(page.locator('#ai-difficulty-hint')).toContainText('对手建模');
@@ -620,7 +629,7 @@ test('game HUD uses SVG player identities and compact AI names', async ({ page }
     await startQuickGame(page);
 
     await expect(page.locator('#game-screen .player-avatar .ui-icon')).toHaveCount(4);
-    for (const name of ['玩家', '专下', '专对', '专上']) {
+    for (const name of ['玩家', '难下', '难对', '难上']) {
         await expect(page.locator('#game-screen').getByText(name, { exact: true })).toHaveCount(1);
     }
     const overflowingNames = await page.locator('#game-screen .player-name').evaluateAll(elements =>
@@ -1037,6 +1046,100 @@ test('cancelling an kong choice keeps the action available', async ({ page }) =>
     await expect(page.locator('#btn-gang')).toBeEnabled();
     await expect(page.locator('#action-bar')).toBeVisible();
     expect(await page.evaluate(() => App.anGangOptions.length)).toBe(2);
+});
+
+test('skipping a higher-priority claim replaces stale action buttons', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(() => {
+        const engine = App.engine;
+        const player = engine.players[App.localPlayerIndex ?? 0];
+        const hu = { player, action: { type: 'hu', priority: 4 }, priority: 4 };
+        const peng = { player, action: { type: 'peng', priority: 2 }, priority: 2 };
+        engine.stopTimer();
+        engine.state = 'waiting';
+        engine.pendingAction = hu;
+        engine._pendingActions = [hu, peng];
+        disableActionButtons();
+        enableActionButtons(hu.action);
+    });
+
+    await page.evaluate(() => handleAction('skip'));
+    await expect(page.locator('#btn-hu')).toBeHidden();
+    await expect(page.locator('#btn-peng')).toBeEnabled();
+    await expect(page.locator('#btn-skip')).toBeEnabled();
+    expect(await page.evaluate(() => App.engine.pendingAction?.action.type)).toBe('peng');
+});
+
+test('rules that forbid chi explain the restriction when the game starts', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => startGame({
+        mahjongType: 'sichuan',
+        playerCount: 4,
+        aiDifficulty: 'normal',
+        speed: 'instant',
+        maxRounds: 1
+    }));
+
+    await expect(page.locator('#toast-container .toast').filter({ hasText: '当前规则不可吃牌' })).toBeVisible();
+});
+
+test('clicking chi claims the discard and continues with a playable hand', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(() => {
+        const engine = App.engine;
+        const player = engine.players[App.localPlayerIndex ?? 0];
+        const one = Tiles.createTile('wan', 1, 'chi-ui-one');
+        const two = Tiles.createTile('wan', 2, 'chi-ui-two');
+        const discard = Tiles.createTile('wan', 3, 'chi-ui-discard');
+        player.hand = [one, two, ...Array.from({ length: 11 }, (_, index) =>
+            Tiles.createTile('feng', index % 4 + 1, `chi-ui-rest-${index}`))];
+        player.melds = [];
+        engine.stopTimer();
+        engine.state = 'waiting';
+        engine.currentPlayerIndex = 3;
+        engine.lastDiscard = discard;
+        engine.discardPile = [discard];
+        const action = { type: 'chi', options: Rules.canChi(player.hand, discard, engine.ruleConfig), priority: 1 };
+        engine.pendingAction = { player, action, priority: 1 };
+        engine._pendingActions = [engine.pendingAction];
+        renderPlayerHand(player.position, player.hand.length);
+        engine.emit('actionAvailable', { player: player.toJSON(), action, tile: discard });
+    });
+
+    await page.locator('#btn-chi').click();
+    await expect.poll(() => page.evaluate(() => App.engine.players[0].melds.length)).toBe(1);
+    expect(await page.evaluate(() => ({
+        meldSize: App.engine.players[0].melds[0].tiles.length,
+        handSize: App.engine.players[0].hand.length,
+        discardCount: App.engine.discardPile.length,
+        currentPlayer: App.engine.currentPlayerIndex,
+        state: App.engine.state
+    }))).toEqual({ meldSize: 3, handSize: 11, discardCount: 0, currentPlayer: 0, state: 'playing' });
+    await expect(page.locator('#melds-bottom .meld-group .mahjong-tile')).toHaveCount(3);
+    await expect(page.locator('#hand-bottom .mahjong-tile').first()).toHaveAttribute('aria-disabled', 'false');
+});
+
+test('upgrading a peng to jia gang renders the fourth meld tile', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(() => {
+        const player = App.engine.players[0];
+        window.__jiaGangSfx = 0;
+        AudioManager.SFX.gang = () => { window.__jiaGangSfx++; };
+        const tiles = Array.from({ length: 4 }, (_, index) =>
+            Tiles.createTile('tong', 5, `jia-gang-ui-${index}`));
+        player.melds = [{ type: 'triplet', tiles: tiles.slice(0, 3) }];
+        renderPlayerMelds(0);
+        player.melds[0].type = 'gang';
+        player.melds[0].tiles.push(tiles[3]);
+        App.engine.emit('jiaGang', { player: player.toJSON(), meld: player.melds[0] });
+    });
+
+    await expect(page.locator('#melds-bottom .meld-group')).toHaveCount(1);
+    await expect(page.locator('#melds-bottom .meld-group .mahjong-tile')).toHaveCount(4);
+    expect(await page.evaluate(() => window.__jiaGangSfx)).toBe(1);
 });
 
 test('network state sync updates turn guidance, highlight, and authoritative input lock', async ({ page }) => {

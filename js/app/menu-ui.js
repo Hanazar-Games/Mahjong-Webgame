@@ -145,7 +145,7 @@
         
         const rules = config.rules;
         const ruleLabels = {
-            allowChi: '允许吃牌',
+            allowChi: '允许吃牌（仅限上家）',
             allowPeng: '允许碰牌',
             allowGang: '允许杠牌',
             allowAnGang: '允许暗杠',

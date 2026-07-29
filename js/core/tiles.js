@@ -122,7 +122,7 @@ const Tiles = (function() {
         },
         'sichuan': {
             name: '四川麻将',
-            desc: '108张，血战到底，缺一门',
+            desc: '108张，不可吃，血战到底',
             icon: '🀆',
             tileSets: [
                 { suit: 'wan', range: [1, 9], count: 4 },
@@ -247,7 +247,7 @@ const Tiles = (function() {
         },
         'changsha': {
             name: '长沙麻将',
-            desc: '108张，扎鸟',
+            desc: '108张，不可吃，扎鸟',
             icon: '🀇',
             tileSets: [
                 { suit: 'wan', range: [1, 9], count: 4 },
@@ -369,7 +369,7 @@ const Tiles = (function() {
         // 3人麻将变体
         'sichuan-3p': {
             name: '四川三人麻将',
-            desc: '108张，三人血战',
+            desc: '108张，不可吃，三人血战',
             icon: '🀆',
             tileSets: [
                 { suit: 'wan', range: [1, 9], count: 4 },

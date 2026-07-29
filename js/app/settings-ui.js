@@ -9,7 +9,6 @@
     const AI_DIFFICULTY_HINTS = {
         easy: '休闲出牌，偶尔会保留次优牌型。',
         normal: '均衡牌效，会优先保留有效进张。',
-        hard: '结合向听数、进张与残局安全度。',
         expert: '综合对手建模、听牌质量与攻守收益。'
     };
     const BGM_STYLE_LABELS = { none: '关闭', calm: '悠然', upbeat: '轻快', zen: '禅意' };

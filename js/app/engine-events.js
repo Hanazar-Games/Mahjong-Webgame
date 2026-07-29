@@ -74,6 +74,9 @@
             renderGameState();
             disableActionButtons();
             updateTurnGuidance('准备开局…');
+            if (engine.ruleConfig?.allowChi === false) {
+                Utils.toast('当前规则不可吃牌，只可碰、杠或胡', 4500, 'warning');
+            }
             AudioManager.SFX.gameStart();
         });
         
@@ -171,6 +174,7 @@
             AppEventBus.emit('engine:actionAvailable', data);
             if (!data || !data.player) return;
             if (data.player.position === (App.localPlayerIndex ?? 0)) {
+                disableActionButtons();
                 enableActionButtons(data.action);
                 updateTurnGuidance('请选择可用操作，或点击“过”继续', 'action');
                 const now = Date.now();
@@ -243,6 +247,24 @@
             });
             AudioManager.SFX.anGang();
             UIComponents.createParticles(window.innerWidth / 2, window.innerHeight / 2, { count: 16, color: '#9c27b0', spread: 120 });
+            if (App.isNetworkGame) broadcastGameState();
+        });
+
+        engine.on('jiaGang', (data) => {
+            AppEventBus.emit('engine:jiaGang', data);
+            stopTurnTimerUI();
+            if (!data || !data.player) return;
+            UIComponents.showActionEffect('加杠');
+            requestAnimationFrame(() => {
+                renderPlayerMelds(data.player.position);
+                renderPlayerHand(data.player.position, data.player.handSize);
+            });
+            AudioManager.SFX.gang();
+            UIComponents.createParticles(window.innerWidth / 2, window.innerHeight / 2, {
+                count: 20,
+                color: '#ff9800',
+                spread: 150
+            });
             if (App.isNetworkGame) broadcastGameState();
         });
         

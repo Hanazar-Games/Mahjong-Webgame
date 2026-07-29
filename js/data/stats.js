@@ -54,7 +54,7 @@ const Stats = (function() {
     };
 
     const SETTING_OPTIONS = {
-        aiDifficulty: ['easy', 'normal', 'hard', 'expert'],
+        aiDifficulty: ['easy', 'normal', 'expert'],
         tableTheme: ['classic-green', 'dark-blue', 'wood', 'red', 'amethyst', 'ink', 'sunset'],
         gameRounds: [1, 4, 8, 16],
         gameSpeed: ['slow', 'normal', 'fast', 'instant'],
