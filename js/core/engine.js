@@ -122,8 +122,7 @@ class MahjongEngine extends Utils.EventEmitter {
         this.hunPai = null;
         
         this.state = 'dealing';
-        this.emit('gameStart', { round: this.round, wind: this.currentWind });
-        
+
         // 生成牌堆
         this.deck = Tiles.generateDeck(this.config.mahjongType);
         this.deckCount = this.deck.length;
@@ -148,6 +147,7 @@ class MahjongEngine extends Utils.EventEmitter {
             this.matchHistory = [];
         }
         this.replayData = [];
+        this.emit('gameStart', { round: this.round, wind: this.currentWind });
         
         try {
             // 发牌
@@ -535,7 +535,12 @@ class MahjongEngine extends Utils.EventEmitter {
             for (const item of allActions) {
                 if (item.player.isAI) {
                     const ctx = this.buildAIContext(item.player);
-                    const wants = AIPlayer.shouldAction(item.player, item.action, tile, this.config.aiDifficulty, ctx);
+                    let wants = item.action.type === 'hu';
+                    try {
+                        wants = AIPlayer.shouldAction(item.player, item.action, tile, this.config.aiDifficulty, ctx);
+                    } catch (error) {
+                        console.error('AI action strategy error:', error);
+                    }
                     if (wants) {
                         willingActions.push(item);
                     }
@@ -700,20 +705,42 @@ class MahjongEngine extends Utils.EventEmitter {
                 await this.nextTurn();
                 return;
             }
-            let chiTiles;
+            const options = action.options.filter(option => Array.isArray(option));
+            if (options.length === 0) {
+                console.error('executeChi: no valid options available');
+                this.state = 'playing';
+                await this.nextTurn();
+                return;
+            }
+            let chiTiles = options[0];
             if (player.isAI) {
-                const ctx = this.buildAIContext(player);
-                chiTiles = AIPlayer.chooseChiOption(player, action.options, this.config.aiDifficulty, ctx);
+                try {
+                    const selected = AIPlayer.chooseChiOption(
+                        player,
+                        options,
+                        this.config.aiDifficulty,
+                        this.buildAIContext(player)
+                    );
+                    if (options.includes(selected)) chiTiles = selected;
+                } catch (error) {
+                    console.error('AI chi strategy error:', error);
+                }
             } else {
-                chiTiles = action.selectedOption || action.options[0];
+                if (options.includes(action.selectedOption)) chiTiles = action.selectedOption;
             }
             const discardTile = this.lastDiscard;
-            
-            // 从弃牌堆移除被吃的牌
-            this.removeFromDiscardPile(discardTile);
-            
-            // 移除手牌中的两张
             const handTiles = chiTiles.filter(t => t.id !== discardTile.id);
+            const hasLegalTiles = chiTiles.length === 3 && handTiles.length === 2 &&
+                handTiles.every(tile => player.hand.some(handTile => handTile.id === tile.id));
+            if (!hasLegalTiles) {
+                console.error('executeChi: invalid selected option');
+                this.state = 'playing';
+                await this.nextTurn();
+                return;
+            }
+
+            // 校验完成后再改动弃牌堆和手牌，避免策略异常吞牌。
+            this.removeFromDiscardPile(discardTile);
             player.removeFromHand(handTiles);
             
             // 添加副露
@@ -1407,7 +1434,12 @@ class MahjongEngine extends Utils.EventEmitter {
             // 检查暗杠
             if (drawResult.anGangOptions && drawResult.anGangOptions.length > 0) {
                 const ctx = this.buildAIContext(player);
-                const shouldGang = AIPlayer.shouldAnGang(player, drawResult.anGangOptions, this.config.aiDifficulty, ctx);
+                let shouldGang = false;
+                try {
+                    shouldGang = AIPlayer.shouldAnGang(player, drawResult.anGangOptions, this.config.aiDifficulty, ctx);
+                } catch (error) {
+                    console.error('AI gang strategy error:', error);
+                }
                 if (shouldGang) {
                     await this.executeAnGang(player, drawResult.anGangOptions[0]);
                     // executeAnGang 内部已处理后续打牌
@@ -1566,12 +1598,14 @@ class MahjongEngine extends Utils.EventEmitter {
                 }
             }
         }, this.turnTimeout);
+        this.emit('timerStart', { timeout: this.turnTimeout, playerIndex });
     }
 
     stopTimer() {
         if (this.timer) {
             clearTimeout(this.timer);
             this.timer = null;
+            this.emit('timerStop');
         }
     }
 

@@ -267,14 +267,14 @@ test('release metadata and announcement history stay aligned', async ({ request 
     const changelog = await (await request.get('/CHANGELOG.md')).text();
     const historyIndex = changelog.indexOf('## 历史公告');
 
-    expect(packageJson.version).toBe('1.0.16');
-    expect(packageLock.version).toBe('1.0.16');
-    expect(packageLock.packages[''].version).toBe('1.0.16');
-    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v17'");
+    expect(packageJson.version).toBe('1.0.17');
+    expect(packageLock.version).toBe('1.0.17');
+    expect(packageLock.packages[''].version).toBe('1.0.17');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v18'");
     expect(serviceWorker).toContain("'./assets/ui/icons.svg'");
     expect(serviceWorker).toContain("'./manifest.json'");
-    expect(changelog.indexOf('## [1.0.16] - 2026-07-27')).toBeLessThan(historyIndex);
-    expect(changelog.indexOf('### [1.0.15] - 2026-07-26')).toBeGreaterThan(historyIndex);
+    expect(changelog.indexOf('## [1.0.17] - 2026-07-29')).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.16] - 2026-07-27')).toBeGreaterThan(historyIndex);
 });
 
 test('audio and appearance settings update and persist', async ({ page }) => {
@@ -470,6 +470,29 @@ test('background audio pauses while the page is hidden and resumes when visible'
     });
 });
 
+test('changing BGM while hidden defers playback until the page is visible', async ({ page }) => {
+    await openApp(page);
+    const states = await page.evaluate(() => {
+        AudioManager.stopBgm();
+        AudioManager.setBgmVolume(0.3);
+        Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+        AudioManager.startBgm('zen');
+        const hidden = { playing: AudioManager.isPlaying, style: AudioManager.currentBgm };
+
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+        document.dispatchEvent(new Event('visibilitychange'));
+        const visible = { playing: AudioManager.isPlaying, style: AudioManager.currentBgm };
+        delete document.hidden;
+        AudioManager.stopBgm();
+        return { hidden, visible };
+    });
+
+    expect(states).toEqual({
+        hidden: { playing: false, style: null },
+        visible: { playing: true, style: 'zen' }
+    });
+});
+
 test('configured BGM startup is idempotent and stops stale playback when disabled', async ({ page }) => {
     await openApp(page);
     const state = await page.evaluate(() => {
@@ -642,7 +665,15 @@ test('expert AI advances after the human discard at instant speed', async ({ pag
     await expect.poll(() => page.evaluate(() => App.engine.gameHistory.some(entry =>
         entry.action === 'discard' && entry.data.playerId !== (App.localPlayerIndex ?? 0)
     ))).toBe(true);
-    expect(await page.evaluate(() => App.engine.state)).not.toBe('waiting');
+    const flow = await page.evaluate(() => ({
+        state: App.engine.state,
+        localIndex: App.localPlayerIndex ?? 0,
+        pendingPlayer: App.engine.pendingAction?.player?.position ?? null,
+        enabledActions: document.querySelectorAll('#action-bar .action-btn:not(:disabled)').length
+    }));
+    expect(flow.state !== 'waiting' || (
+        flow.pendingPlayer === flow.localIndex && flow.enabledActions > 0
+    )).toBe(true);
 });
 
 test('AI turns expose an explicit thinking state', async ({ page }) => {
@@ -914,7 +945,41 @@ test('game table explains the next action and hides unavailable action buttons',
     await expect(page.locator('#btn-chi')).toBeHidden();
     await expect(page.locator('#btn-gang')).toBeHidden();
     await expect(page.locator('#btn-hu')).toBeHidden();
+    await expect(page.locator('#btn-peng')).toHaveCSS('animation-name', 'none');
+    const immediateReadyStyle = await page.evaluate(() => {
+        disableActionButtons();
+        enableActionButtons({ type: 'peng' });
+        const style = getComputedStyle(document.getElementById('btn-peng'));
+        return { opacity: style.opacity, filter: style.filter };
+    });
+    expect(immediateReadyStyle).toEqual({ opacity: '1', filter: 'none' });
     await page.screenshot({ path: 'test-results/ui-audit-action-state.png', fullPage: true });
+
+    await page.evaluate(() => disableActionButtons());
+    expect(await page.locator('#action-bar').evaluate(element => {
+        const style = getComputedStyle(element);
+        return { opacity: style.opacity, visibility: style.visibility };
+    })).toEqual({ opacity: '0', visibility: 'hidden' });
+});
+
+test('pausing from the game menu keeps the engine and visible countdown in sync', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(() => {
+        App.engine.turnTimeout = 5_000;
+        App.engine.startTimer();
+    });
+    await expect(page.locator('#turn-timer-value')).toHaveText('5');
+    await expect(page.locator('#turn-timer-display')).toBeVisible();
+
+    await page.evaluate(() => showIngameMenu());
+    await expect(page.locator('#turn-timer-display')).toBeHidden();
+    expect(await page.evaluate(() => App.engine.timer)).toBeNull();
+
+    await page.evaluate(() => hideIngameMenu());
+    await expect(page.locator('#turn-timer-value')).toHaveText('5');
+    await expect(page.locator('#turn-timer-display')).toBeVisible();
+    expect(await page.evaluate(() => Boolean(App.engine.timer))).toBe(true);
 });
 
 test('drag discard replaces stale selection guidance immediately', async ({ page }) => {

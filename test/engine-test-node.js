@@ -303,22 +303,108 @@ async function finish() {
     AIPlayer.chooseDiscard = originalChooseDiscard;
     assertEqual('invalid AI discard choice falls back to a legal tile', invalidChoiceFallback.id, fallbackTile.id);
 
-    // Test 19: 固定牌墙下专家 AI 必须完成整局
-    const engine9 = new MahjongEngine({
-        mahjongType: 'guangdong',
-        playerCount: 4,
-        aiDifficulty: 'expert',
-        speed: 'instant',
-        maxRounds: 1
+    // Test 19: AI 杠牌评估异常时仍应完成本回合弃牌
+    const gangFallbackTile = Tiles.createTile('tong', 6, 'ai-gang-fallback');
+    engine8.players[0].hand = [gangFallbackTile];
+    engine8.playerDraw = async () => ({
+        ziMo: false,
+        anGangOptions: [{ type: 'an_gang', tiles: [gangFallbackTile] }]
     });
-    engine9.initPlayers([
-        { name: 'AI0', isAI: true },
+    fallbackDiscardId = null;
+    skippedTurns = 0;
+    const originalShouldAnGang = AIPlayer.shouldAnGang;
+    AIPlayer.shouldAnGang = () => { throw new Error('expected gang strategy failure'); };
+    console.error = () => {};
+    await engine8.aiTurn(engine8.players[0]);
+    console.error = originalConsoleError;
+    AIPlayer.shouldAnGang = originalShouldAnGang;
+    assertEqual('aiTurn discards after anGang strategy failure', fallbackDiscardId, gangFallbackTile.id);
+    assertEqual('aiTurn does not skip turn after anGang strategy failure', skippedTurns, 0);
+
+    // Test 20: AI 吃牌选项异常时回退到合法组合，且不能先吞掉弃牌再失败
+    const engineChi = new MahjongEngine({ playerCount: 4, speed: 'instant' });
+    engineChi.initPlayers([
+        { name: 'P0', isAI: false },
+        { name: 'AI1', isAI: true },
+        { name: 'P2', isAI: true },
+        { name: 'P3', isAI: true }
+    ]);
+    const chiOne = Tiles.createTile('wan', 1, 'chi-one');
+    const chiTwo = Tiles.createTile('wan', 2, 'chi-two');
+    const chiDiscard = Tiles.createTile('wan', 3, 'chi-discard');
+    const chiFallbackDiscard = Tiles.createTile('tong', 9, 'chi-fallback-discard');
+    const chiPlayer = engineChi.players[1];
+    chiPlayer.hand = [chiOne, chiTwo, chiFallbackDiscard];
+    engineChi.state = 'action';
+    engineChi.currentPlayerIndex = 0;
+    engineChi.lastDiscard = chiDiscard;
+    engineChi.discardPile = [chiDiscard];
+    let chiDiscardId = null;
+    engineChi.playerDiscard = async tileId => { chiDiscardId = tileId; };
+    const originalChooseChiOption = AIPlayer.chooseChiOption;
+    AIPlayer.chooseChiOption = () => { throw new Error('expected chi strategy failure'); };
+    console.error = () => {};
+    await engineChi.executeChi(chiPlayer, { type: 'chi', options: [[chiOne, chiTwo, chiDiscard]] });
+    console.error = originalConsoleError;
+    AIPlayer.chooseChiOption = originalChooseChiOption;
+    assertEqual('AI chi strategy failure still creates one legal meld', chiPlayer.melds.length, 1);
+    assertEqual('AI chi strategy failure consumes the claimed discard once', engineChi.discardPile.length, 0);
+    assertEqual('AI chi strategy failure continues with a legal discard', chiDiscardId, chiFallbackDiscard.id);
+
+    // Test 21: AI 响应评估异常时必须安全跳过，不能卡在 waiting
+    const engineReaction = new MahjongEngine({ playerCount: 4, speed: 'instant' });
+    engineReaction.initPlayers([
+        { name: 'P0', isAI: false },
         { name: 'AI1', isAI: true },
         { name: 'AI2', isAI: true },
         { name: 'AI3', isAI: true }
     ]);
+    engineReaction.state = 'playing';
+    engineReaction.currentPlayerIndex = 0;
+    engineReaction.checkActions = player => player.position === 1
+        ? [{ type: 'peng', priority: 2 }]
+        : [];
+    let reactionAdvanced = 0;
+    engineReaction.nextTurn = async () => { reactionAdvanced++; };
+    const originalShouldAction = AIPlayer.shouldAction;
+    AIPlayer.shouldAction = () => { throw new Error('expected reaction strategy failure'); };
+    console.error = () => {};
+    await engineReaction.waitForActions(chiDiscard);
+    console.error = originalConsoleError;
+    AIPlayer.shouldAction = originalShouldAction;
+    assertEqual('AI reaction strategy failure advances safely', reactionAdvanced, 1);
+
+    // Test 22: 新局事件必须在清理上一局桌面状态后发出
+    const engineRound = new MahjongEngine({ playerCount: 4, speed: 'instant' });
+    engineRound.initPlayers([
+        { name: 'P0', isAI: false },
+        { name: 'AI1', isAI: true },
+        { name: 'AI2', isAI: true },
+        { name: 'AI3', isAI: true }
+    ]);
+    engineRound.players[0].hand = [Tiles.createTile('wan', 9, 'stale-hand')];
+    engineRound.discardPile = [Tiles.createTile('tong', 9, 'stale-discard')];
+    engineRound.deckCount = 3;
+    let stateAtGameStart = null;
+    engineRound.on('gameStart', () => {
+        stateAtGameStart = {
+            handSize: engineRound.players[0].hand.length,
+            discards: engineRound.discardPile.length,
+            deckCount: engineRound.deckCount
+        };
+    });
+    engineRound.dealTiles = async () => {};
+    engineRound.startTurn = async () => {};
+    await engineRound.start();
+    assertEqual('gameStart observes a cleared hand', stateAtGameStart?.handSize, 0);
+    assertEqual('gameStart observes a cleared discard pile', stateAtGameStart?.discards, 0);
+    assert('gameStart observes the new deck count', stateAtGameStart?.deckCount > 3);
+
+    // Test 23: 全部规则的固定牌墙专家 AI 必须完成整局
     const originalShuffle = Utils.shuffle;
-    let seed = 20260726;
+    const allTypeResults = [];
+    const unexpectedEngineErrors = [];
+    let seed = 20260729;
     Utils.shuffle = array => {
         const shuffled = [...array];
         for (let i = shuffled.length - 1; i > 0; i--) {
@@ -328,16 +414,42 @@ async function finish() {
         }
         return shuffled;
     };
+    console.error = (...args) => unexpectedEngineErrors.push(args.map(String).join(' '));
     try {
-        await engine9.start();
+        for (const [typeIndex, type] of Tiles.getMahjongTypes().entries()) {
+            seed = 20260729 + typeIndex * 97;
+            const expertEngine = new MahjongEngine({
+                mahjongType: type.key,
+                playerCount: type.playerCount,
+                aiDifficulty: 'expert',
+                speed: 'instant',
+                maxRounds: 1
+            });
+            expertEngine.initPlayers(Array.from({ length: type.playerCount }, (_, index) => ({
+                name: `AI${index}`,
+                isAI: true
+            })));
+            await expertEngine.start();
+            const history = expertEngine.matchHistory[0]?.history || [];
+            allTypeResults.push({
+                type: type.key,
+                ended: expertEngine.state === 'ended',
+                archived: expertEngine.matchHistory.length === 1,
+                discarded: history.some(item => item.action === 'discard'),
+                roundEnded: history.some(item => item.action === 'roundEnd')
+            });
+        }
     } finally {
         Utils.shuffle = originalShuffle;
+        console.error = originalConsoleError;
     }
-    const completedHistory = engine9.matchHistory[0]?.history || [];
-    assertEqual('expert AI full round reaches ended state', engine9.state, 'ended');
-    assertEqual('expert AI full round is archived once', engine9.matchHistory.length, 1);
-    assert('expert AI full round contains legal discards', completedHistory.some(item => item.action === 'discard'));
-    assert('expert AI full round records its ending', completedHistory.some(item => item.action === 'roundEnd'));
+    const failedTypes = key => allTypeResults.filter(result => !result[key]).map(result => result.type);
+    assertEqual('expert AI stress covers every ruleset', allTypeResults.length, Tiles.getMahjongTypes().length);
+    assert('expert AI all rulesets reach ended state', failedTypes('ended').length === 0, failedTypes('ended').join(', '));
+    assert('expert AI all rulesets archive once', failedTypes('archived').length === 0, failedTypes('archived').join(', '));
+    assert('expert AI all rulesets contain legal discards', failedTypes('discarded').length === 0, failedTypes('discarded').join(', '));
+    assert('expert AI all rulesets record their ending', failedTypes('roundEnded').length === 0, failedTypes('roundEnded').join(', '));
+    assert('expert AI all rulesets finish without engine errors', unexpectedEngineErrors.length === 0, unexpectedEngineErrors.join(' | '));
 
     // ===== 结果汇总 =====
     console.log('\n========== 引擎基础测试 ==========');

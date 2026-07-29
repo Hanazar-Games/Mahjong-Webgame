@@ -562,6 +562,11 @@ const AudioManager = (function() {
         const pattern = BGM_PATTERNS[style];
         currentBgm = pattern ? style : null;
         if (!pattern || bgmVolume <= 0.0001) return;
+        if (document.hidden) {
+            bgmResumeAfterVisibility = style;
+            currentBgm = null;
+            return;
+        }
 
         init();
         resume();

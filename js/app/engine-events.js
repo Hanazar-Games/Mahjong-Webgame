@@ -30,12 +30,12 @@
         
         // 回合倒计时 UI 管理
         let _turnTimerInterval = null;
-        function startTurnTimerUI() {
+        function startTurnTimerUI(timeout = engine.turnTimeout) {
             stopTurnTimerUI();
             const display = document.getElementById('turn-timer-display');
             const valueEl = document.getElementById('turn-timer-value');
             if (!display || !valueEl) return;
-            const timeoutSec = Math.floor((engine.turnTimeout || 30000) / 1000);
+            const timeoutSec = Math.max(1, Math.ceil((timeout || 30000) / 1000));
             let remaining = timeoutSec;
             valueEl.textContent = remaining;
             display.classList.remove('hidden');
@@ -60,6 +60,9 @@
                 display.classList.remove('urgent');
             }
         }
+
+        engine.on('timerStart', data => startTurnTimerUI(data?.timeout));
+        engine.on('timerStop', stopTurnTimerUI);
         
         engine.on('beforeDestroy', () => {
             stopTurnTimerUI();
@@ -103,7 +106,6 @@
                         enablePlayerActions(true);
                         updateTurnGuidance('选择一张手牌，再次点击打出', 'active');
                         engine.startTimer();
-                        startTurnTimerUI();
                     }
                     // 联机模式：广播状态
                     if (App.isNetworkGame) broadcastGameState();
@@ -329,7 +331,6 @@
                 updateTurnGuidance('选择一张手牌，再次点击打出', 'active');
                 Utils.toast('请打出一张牌', 3000, 'warning');
                 engine.startTimer();
-                startTurnTimerUI();
             }
         });
         

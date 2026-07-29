@@ -1186,7 +1186,7 @@ select {
     visibility: hidden;
     pointer-events: none;
     transform: translate(-50%, 8px);
-    transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+    transition: none;
     animation: none;
 }
 
@@ -1199,6 +1199,12 @@ select {
 
 .action-bar.has-actions .action-btn:disabled {
     display: none;
+}
+
+.action-bar .action-btn:not(:disabled) {
+    animation: none;
+    opacity: 1;
+    filter: none;
 }
 
 .action-btn {
@@ -1215,10 +1221,14 @@ select {
     font-size: 1.05rem;
     font-weight: 900;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
     position: relative;
     overflow: hidden;
     box-shadow: 0 5px 14px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+
+.action-btn:not(:disabled) {
+    background: linear-gradient(145deg, #f0cf67, #b77d20);
 }
 
 .action-btn:hover:not(:disabled) {
