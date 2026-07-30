@@ -175,7 +175,8 @@
             if (!data || !data.player) return;
             if (data.player.position === (App.localPlayerIndex ?? 0)) {
                 disableActionButtons();
-                enableActionButtons(data.action);
+                const actions = Array.isArray(data.actions) && data.actions.length ? data.actions : [data.action];
+                actions.forEach(enableActionButtons);
                 updateTurnGuidance('请选择可用操作，或点击“过”继续', 'action');
                 const now = Date.now();
                 if (now - _lastTickTime > 400) {

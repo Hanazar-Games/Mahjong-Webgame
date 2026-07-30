@@ -267,14 +267,14 @@ test('release metadata and announcement history stay aligned', async ({ request 
     const changelog = await (await request.get('/CHANGELOG.md')).text();
     const historyIndex = changelog.indexOf('## 历史公告');
 
-    expect(packageJson.version).toBe('1.0.18');
-    expect(packageLock.version).toBe('1.0.18');
-    expect(packageLock.packages[''].version).toBe('1.0.18');
-    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v19'");
+    expect(packageJson.version).toBe('1.0.19');
+    expect(packageLock.version).toBe('1.0.19');
+    expect(packageLock.packages[''].version).toBe('1.0.19');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v20'");
     expect(serviceWorker).toContain("'./assets/ui/icons.svg'");
     expect(serviceWorker).toContain("'./manifest.json'");
-    expect(changelog.indexOf('## [1.0.18] - 2026-07-29')).toBeLessThan(historyIndex);
-    expect(changelog.indexOf('### [1.0.17] - 2026-07-29')).toBeGreaterThan(historyIndex);
+    expect(changelog.indexOf('## [1.0.19] - 2026-07-30')).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.18] - 2026-07-29')).toBeGreaterThan(historyIndex);
 });
 
 test('audio and appearance settings update and persist', async ({ page }) => {
@@ -1048,27 +1048,21 @@ test('cancelling an kong choice keeps the action available', async ({ page }) =>
     expect(await page.evaluate(() => App.anGangOptions.length)).toBe(2);
 });
 
-test('skipping a higher-priority claim replaces stale action buttons', async ({ page }) => {
+test('a new claim replaces stale action buttons', async ({ page }) => {
     await openApp(page);
     await startQuickGame(page);
     await page.evaluate(() => {
         const engine = App.engine;
         const player = engine.players[App.localPlayerIndex ?? 0];
-        const hu = { player, action: { type: 'hu', priority: 4 }, priority: 4 };
-        const peng = { player, action: { type: 'peng', priority: 2 }, priority: 2 };
         engine.stopTimer();
         engine.state = 'waiting';
-        engine.pendingAction = hu;
-        engine._pendingActions = [hu, peng];
-        disableActionButtons();
-        enableActionButtons(hu.action);
+        engine.emit('actionAvailable', { player: player.toJSON(), action: { type: 'hu', priority: 4 } });
+        engine.emit('actionAvailable', { player: player.toJSON(), action: { type: 'peng', priority: 2 } });
     });
 
-    await page.evaluate(() => handleAction('skip'));
     await expect(page.locator('#btn-hu')).toBeHidden();
     await expect(page.locator('#btn-peng')).toBeEnabled();
     await expect(page.locator('#btn-skip')).toBeEnabled();
-    expect(await page.evaluate(() => App.engine.pendingAction?.action.type)).toBe('peng');
 });
 
 test('rules that forbid chi explain the restriction when the game starts', async ({ page }) => {
@@ -1119,6 +1113,87 @@ test('clicking chi claims the discard and continues with a playable hand', async
     }))).toEqual({ meldSize: 3, handSize: 11, discardCount: 0, currentPlayer: 0, state: 'playing' });
     await expect(page.locator('#melds-bottom .meld-group .mahjong-tile')).toHaveCount(3);
     await expect(page.locator('#hand-bottom .mahjong-tile').first()).toHaveAttribute('aria-disabled', 'false');
+});
+
+test('an upstream discard offers every legal chi choice through the real turn flow', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(async () => {
+        const engine = App.engine;
+        const local = engine.players[0];
+        const upstream = engine.players[3];
+        const discard = Tiles.createTile('wan', 3, 'chi-flow-discard');
+        local.hand = [
+            Tiles.createTile('wan', 1, 'chi-flow-one'),
+            Tiles.createTile('wan', 2, 'chi-flow-two'),
+            Tiles.createTile('wan', 4, 'chi-flow-four'),
+            Tiles.createTile('wan', 5, 'chi-flow-five'),
+            ...Array.from({ length: 9 }, (_, index) =>
+                Tiles.createTile('feng', index % 4 + 1, `chi-flow-rest-${index}`))
+        ];
+        local.melds = [];
+        upstream.hand = [discard];
+        for (const index of [1, 2]) {
+            engine.players[index].hand = Array.from({ length: 13 }, (_, tileIndex) =>
+                Tiles.createTile('jian', tileIndex % 3 + 1, `chi-flow-p${index}-${tileIndex}`));
+        }
+        engine.stopTimer();
+        engine.state = 'playing';
+        engine.currentPlayerIndex = 3;
+        engine.discardPile = [];
+        engine.lastDiscard = null;
+        renderGameState();
+        await engine.playerDiscard(discard.id);
+    });
+
+    await expect(page.locator('#btn-chi')).toBeEnabled();
+    expect(await page.evaluate(() => App.engine.pendingAction?.action?.options?.length)).toBe(3);
+    await page.locator('#btn-chi').click();
+    const selector = page.getByRole('dialog', { name: '请选择吃的组合' });
+    await expect(selector).toBeVisible();
+    await expect(selector.getByRole('button')).toHaveCount(3);
+    await selector.getByRole('button').nth(2).click();
+
+    await expect.poll(() => page.evaluate(() => App.engine.players[0].melds.length)).toBe(1);
+    expect(await page.evaluate(() => App.engine.players[0].melds[0].tiles.map(tile => tile.value))).toEqual([4, 5, 3]);
+    await expect(page.locator('#hand-bottom .mahjong-tile').first()).toHaveAttribute('aria-disabled', 'false');
+});
+
+test('chi remains directly selectable when the same player can also peng', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(async () => {
+        const engine = App.engine;
+        const local = engine.players[0];
+        const upstream = engine.players[3];
+        const discard = Tiles.createTile('wan', 3, 'chi-peng-discard');
+        local.hand = [
+            Tiles.createTile('wan', 1, 'chi-peng-one'),
+            Tiles.createTile('wan', 2, 'chi-peng-two'),
+            Tiles.createTile('wan', 3, 'chi-peng-three-a'),
+            Tiles.createTile('wan', 3, 'chi-peng-three-b'),
+            ...Array.from({ length: 9 }, (_, index) =>
+                Tiles.createTile('feng', index % 4 + 1, `chi-peng-rest-${index}`))
+        ];
+        local.melds = [];
+        upstream.hand = [discard];
+        for (const index of [1, 2]) {
+            engine.players[index].hand = Array.from({ length: 13 }, (_, tileIndex) =>
+                Tiles.createTile('jian', tileIndex % 3 + 1, `chi-peng-p${index}-${tileIndex}`));
+        }
+        engine.stopTimer();
+        engine.state = 'playing';
+        engine.currentPlayerIndex = 3;
+        engine.discardPile = [];
+        engine.lastDiscard = null;
+        renderGameState();
+        await engine.playerDiscard(discard.id);
+    });
+
+    await expect(page.locator('#btn-peng')).toBeEnabled();
+    await expect(page.locator('#btn-chi')).toBeEnabled();
+    await page.locator('#btn-chi').click();
+    await expect.poll(() => page.evaluate(() => App.engine.players[0].melds[0]?.type)).toBe('sequence');
 });
 
 test('upgrading a peng to jia gang renders the fourth meld tile', async ({ page }) => {
@@ -1194,6 +1269,112 @@ test('network state sync updates turn guidance, highlight, and authoritative inp
     await expect(page.locator('#turn-guidance')).toHaveText('操作已发送，等待房主确认…');
     await expect(page.locator('#hand-bottom .mahjong-tile').first()).toHaveAttribute('aria-disabled', 'true');
     await expect(page.locator('#action-bar')).toBeHidden();
+});
+
+test('host immediately acknowledges a remote chi inside the broadcast throttle window', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    const result = await page.evaluate(async () => {
+        const engine = App.engine;
+        const remote = engine.players[1];
+        const discard = Tiles.createTile('wan', 3, 'network-chi-discard');
+        remote.networkId = 'remote-player';
+        remote.isAI = false;
+        remote.hand = [
+            Tiles.createTile('wan', 1, 'network-chi-one'),
+            Tiles.createTile('wan', 2, 'network-chi-two'),
+            ...Array.from({ length: 11 }, (_, index) =>
+                Tiles.createTile('feng', index % 4 + 1, `network-chi-rest-${index}`))
+        ];
+        engine.stopTimer();
+        engine.state = 'waiting';
+        engine.currentPlayerIndex = 0;
+        engine.lastDiscard = discard;
+        engine.discardPile = [discard];
+        const action = { type: 'chi', options: Rules.canChi(remote.hand, discard, engine.ruleConfig), priority: 1 };
+        engine.pendingAction = { player: remote, action, priority: 1 };
+        engine._pendingActions = [engine.pendingAction];
+
+        const sends = [];
+        App.isNetworkGame = true;
+        App.network = {
+            isHost: true,
+            playerId: 'host-player',
+            players: [
+                { id: 'host-player', isHost: true },
+                { id: 'remote-player', isHost: false }
+            ],
+            sendTo(id, payload) {
+                sends.push({ id, state: payload.state?.state, currentPlayer: payload.state?.currentPlayer });
+                return true;
+            }
+        };
+
+        broadcastGameState(true);
+        sends.length = 0;
+        await handleRemotePlayerAction('remote-player', { type: 'chi', selectedOptionIndex: 0 });
+        return {
+            sends,
+            meldCount: remote.melds.length,
+            currentPlayer: engine.currentPlayerIndex
+        };
+    });
+
+    expect(result.meldCount).toBe(1);
+    expect(result.currentPlayer).toBe(1);
+    expect(result.sends).toEqual([
+        { id: 'remote-player', state: 'playing', currentPlayer: 1 }
+    ]);
+});
+
+test('network guest receives simultaneous chi and peng choices and can send chi', async ({ page }) => {
+    await openApp(page);
+    await startQuickGame(page);
+    await page.evaluate(() => {
+        const networkIds = ['host', 'guest', 'peer-2', 'peer-3'];
+        const state = App.engine.getState();
+        const discard = Tiles.createTile('wan', 3, 'guest-chi-discard');
+        const one = Tiles.createTile('wan', 1, 'guest-chi-one');
+        const two = Tiles.createTile('wan', 2, 'guest-chi-two');
+        state.state = 'waiting';
+        state.currentPlayer = 0;
+        state.lastDiscard = discard;
+        state.discardPile = [discard];
+        state.players = App.engine.players.map((player, index) => ({
+            ...player.toJSON(index === 1),
+            networkId: networkIds[index],
+            hand: index === 1 ? [one, two, ...player.hand.slice(2)] : undefined
+        }));
+        state.pendingAction = {
+            playerIndex: 1,
+            action: { type: 'peng', priority: 2 },
+            actions: [
+                { type: 'peng', priority: 2 },
+                { type: 'chi', priority: 1, options: [[one, two, discard]] }
+            ]
+        };
+        state.selfActions = {};
+        window.__guestActions = [];
+        App.isNetworkGame = true;
+        App.network = {
+            isHost: false,
+            playerId: 'guest',
+            players: networkIds.map((id, index) => ({ id, isHost: index === 0 })),
+            sendTo(id, payload) {
+                window.__guestActions.push({ id, data: payload.data });
+                return true;
+            }
+        };
+        handleNetworkData('stateSync', { state, config: App.engine.config }, 'host');
+    });
+
+    await expect(page.locator('#btn-peng')).toBeEnabled();
+    await expect(page.locator('#btn-chi')).toBeEnabled();
+    await page.locator('#btn-chi').click();
+    expect(await page.evaluate(() => window.__guestActions)).toEqual([
+        { id: 'host', data: { type: 'chi', selectedOptionIndex: 0 } }
+    ]);
+    await expect(page.locator('#turn-guidance')).toHaveText('操作已发送，等待房主确认…');
 });
 
 test('failed network discard restores hand input for retry', async ({ page }) => {
@@ -1414,7 +1595,10 @@ for (const viewport of VIEWPORTS) {
         const failures = collectRuntimeFailures(page);
         await openApp(page);
         await startQuickGame(page);
-        await page.evaluate(() => enableActionButtons({ type: 'peng' }));
+        await page.evaluate(() => {
+            disableActionButtons();
+            ['chi', 'peng', 'gang', 'hu'].forEach(type => enableActionButtons({ type }));
+        });
 
         const layout = await page.evaluate(() => {
             const rect = selector => {

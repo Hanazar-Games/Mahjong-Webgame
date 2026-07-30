@@ -565,12 +565,17 @@
         state.selfActions = {};
 
         if (engine.pendingAction?.player?.networkId === targetPlayerId) {
+            const selectableActions = engine.getSelectableActions(engine.pendingAction.player);
             state.pendingAction = {
                 playerIndex: engine.pendingAction.player.position,
                 action: engine.pendingAction.action ? {
                     ...engine.pendingAction.action,
                     winInfo: engine.pendingAction.action.winInfo ? { ...engine.pendingAction.action.winInfo } : undefined
-                } : null
+                } : null,
+                actions: selectableActions.map(action => ({
+                    ...action,
+                    winInfo: action.winInfo ? { ...action.winInfo } : undefined
+                }))
             };
         }
 
@@ -712,39 +717,48 @@
         }
 
         try {
+            const getClaimAction = type => engine.getSelectableActions(player)
+                .find(candidate => candidate.type === type) || null;
             switch (action.type) {
                 case 'discard':
                     await engine.playerDiscard(action.tileId);
                     break;
                 case 'chi':
-                    if (engine.pendingAction?.action?.type === 'chi') {
-                        const options = engine.pendingAction.action.options || [];
+                    {
+                        const pendingChi = getClaimAction('chi');
+                        if (!pendingChi) break;
+                        const options = pendingChi.options || [];
                         const selectedOption = options[action.selectedOptionIndex] || options[0];
-                        await engine.executeAction(player, { ...engine.pendingAction.action, selectedOption });
+                        await engine.executeAction(player, { ...pendingChi, selectedOption });
                     }
                     break;
                 case 'peng':
-                    if (engine.pendingAction?.action?.type === 'peng') {
-                        await engine.executeAction(player, engine.pendingAction.action);
+                    {
+                        const pendingPeng = getClaimAction('peng');
+                        if (pendingPeng) await engine.executeAction(player, pendingPeng);
                     }
                     break;
-                case 'gang':
-                    if (engine.pendingAction?.player?.position === playerIdx && engine.pendingAction?.action?.type === 'gang') {
-                        await engine.executeAction(player, engine.pendingAction.action);
+                case 'gang': {
+                    const pendingGang = getClaimAction('gang');
+                    if (engine.pendingAction?.player?.position === playerIdx && pendingGang) {
+                        await engine.executeAction(player, pendingGang);
                     } else if (engine.currentPlayerIndex === playerIdx) {
                         const options = Rules.canAnGang(player.hand, player.melds, engine.ruleConfig);
                         const option = options[action.optionIndex || 0];
                         if (option) await engine.executeAnGang(player, option);
                     }
                     break;
-                case 'hu':
+                }
+                case 'hu': {
+                    const pendingHu = getClaimAction('hu');
                     if (action.selfWin && engine.currentPlayerIndex === playerIdx) {
                         const win = Rules.canWin(player.hand, engine.ruleConfig);
                         if (win.canWin) await engine.executeHu(player, { type: 'hu', winInfo: win });
-                    } else if (engine.pendingAction?.player?.position === playerIdx && engine.pendingAction?.action?.type === 'hu' && engine.lastDiscard) {
-                        await engine.executeAction(player, engine.pendingAction.action);
+                    } else if (engine.pendingAction?.player?.position === playerIdx && pendingHu && engine.lastDiscard) {
+                        await engine.executeAction(player, pendingHu);
                     }
                     break;
+                }
                 case 'skip':
                     if (engine.pendingAction?.player?.position === playerIdx) {
                         await engine.skipAction();
@@ -756,7 +770,7 @@
         }
 
         // 广播更新后的状态
-        broadcastGameState();
+        broadcastGameState(true);
     }
 
     /**
@@ -829,8 +843,11 @@
 
         if (state.pendingAction?.action && state.pendingAction.playerIndex === (App.localPlayerIndex ?? 0)) {
             const player = engine.players[App.localPlayerIndex ?? 0];
-            engine.pendingAction = { player, action: state.pendingAction.action };
-            enableActionButtons(state.pendingAction.action);
+            const actions = Array.isArray(state.pendingAction.actions) && state.pendingAction.actions.length
+                ? state.pendingAction.actions
+                : [state.pendingAction.action];
+            engine.pendingAction = { player, action: state.pendingAction.action, actions };
+            actions.forEach(enableActionButtons);
             if (skipBtn) skipBtn.disabled = false;
         } else {
             engine.pendingAction = null;

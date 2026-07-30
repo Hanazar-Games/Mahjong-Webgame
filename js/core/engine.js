@@ -630,6 +630,21 @@ class MahjongEngine extends Utils.EventEmitter {
         return priorities[actionType] || 0;
     }
 
+    getSelectableActions(player = this.pendingAction?.player) {
+        if (!player || !Array.isArray(this._pendingActions)) return [];
+        const count = this.config.playerCount;
+        const distance = item => (item.player.position - this.currentPlayerIndex + count) % count;
+        return this._pendingActions
+            .filter(item => item.player.position === player.position)
+            .filter(candidate => !this._pendingActions.some(other =>
+                other.player.position !== player.position && (
+                    other.priority > candidate.priority ||
+                    (other.priority === candidate.priority && distance(other) < distance(candidate))
+                )
+            ))
+            .map(item => item.action);
+    }
+
     /**
      * 执行操作
      */
@@ -1469,13 +1484,13 @@ class MahjongEngine extends Utils.EventEmitter {
         try {
             if (this.pendingAction) {
                 const skippedPlayerPos = this.pendingAction.player.position;
-                const skippedActionType = this.pendingAction.action.type;
+                const selectableActions = new Set(this.getSelectableActions(this.pendingAction.player));
+                if (selectableActions.size === 0) selectableActions.add(this.pendingAction.action);
                 this.pendingAction = null;
                 
-                // 从 pendingActions 中移除已跳过的动作
                 if (this._pendingActions) {
                     this._pendingActions = this._pendingActions.filter(
-                        a => !(a.player.position === skippedPlayerPos && a.action.type === skippedActionType)
+                        item => item.player.position !== skippedPlayerPos || !selectableActions.has(item.action)
                     );
                 }
                 
@@ -1514,9 +1529,14 @@ class MahjongEngine extends Utils.EventEmitter {
             })[0];
             
             this.pendingAction = winner;
+            const selectableActions = this.getSelectableActions(winner.player);
             this.emit('actionAvailable', {
                 player: winner.player.toJSON(),
                 action: winner.action ? { ...winner.action, winInfo: winner.action.winInfo ? { ...winner.action.winInfo } : undefined } : null,
+                actions: selectableActions.map(action => ({
+                    ...action,
+                    winInfo: action.winInfo ? { ...action.winInfo } : undefined
+                })),
                 tile: this.lastDiscard ? { ...this.lastDiscard } : null
             });
             
@@ -1550,7 +1570,11 @@ class MahjongEngine extends Utils.EventEmitter {
             } else {
                 this.emit('playerAction', {
                     player: winner.player.toJSON(),
-                    action: winner.action ? { ...winner.action, winInfo: winner.action.winInfo ? { ...winner.action.winInfo } : undefined } : null
+                    action: winner.action ? { ...winner.action, winInfo: winner.action.winInfo ? { ...winner.action.winInfo } : undefined } : null,
+                    actions: selectableActions.map(action => ({
+                        ...action,
+                        winInfo: action.winInfo ? { ...action.winInfo } : undefined
+                    }))
                 });
             }
         } catch (e) {

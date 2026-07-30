@@ -374,6 +374,44 @@ async function finish() {
     AIPlayer.shouldAction = originalShouldAction;
     assertEqual('AI reaction strategy failure advances safely', reactionAdvanced, 1);
 
+    const engineClaims = new MahjongEngine({ playerCount: 4, speed: 'instant' });
+    engineClaims.initPlayers([
+        { name: 'P0', isAI: false },
+        { name: 'P1', isAI: false },
+        { name: 'P2', isAI: false },
+        { name: 'P3', isAI: false }
+    ]);
+    const p1Chi = { player: engineClaims.players[1], action: { type: 'chi', priority: 1 }, priority: 1 };
+    const p1Peng = { player: engineClaims.players[1], action: { type: 'peng', priority: 2 }, priority: 2 };
+    const p2Peng = { player: engineClaims.players[2], action: { type: 'peng', priority: 2 }, priority: 2 };
+    engineClaims.currentPlayerIndex = 0;
+    engineClaims._pendingActions = [p1Chi, p1Peng, p2Peng];
+    assertEqual(
+        'same player can select peng while another peng blocks lower-priority chi',
+        engineClaims.getSelectableActions(engineClaims.players[1]).map(action => action.type).join(','),
+        'peng'
+    );
+    engineClaims._pendingActions = [p1Chi, p1Peng];
+    assertEqual(
+        'same player can directly choose chi or peng when no claim blocks either',
+        engineClaims.getSelectableActions(engineClaims.players[1]).map(action => action.type).sort().join(','),
+        'chi,peng'
+    );
+    engineClaims.pendingAction = p1Peng;
+    engineClaims._offerNextAction = async () => {};
+    await engineClaims.skipAction();
+    assertEqual('skip clears every action shown for the same claim opportunity', engineClaims._pendingActions.length, 0);
+    engineClaims._pendingActions = [
+        { player: engineClaims.players[2], action: { type: 'hu', priority: 4 }, priority: 4 },
+        { player: engineClaims.players[2], action: { type: 'peng', priority: 2 }, priority: 2 },
+        p1Peng
+    ];
+    assertEqual(
+        'closer equal-priority claim blocks a lower seat from selecting peng',
+        engineClaims.getSelectableActions(engineClaims.players[2]).map(action => action.type).join(','),
+        'hu'
+    );
+
     // Test 22: 新局事件必须在清理上一局桌面状态后发出
     const engineRound = new MahjongEngine({ playerCount: 4, speed: 'instant' });
     engineRound.initPlayers([

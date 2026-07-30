@@ -285,19 +285,27 @@
             networkActionFailed = !sent;
             return sent;
         };
+        const getPendingAction = actionType => {
+            const synced = engine.pendingAction?.actions;
+            const actions = Array.isArray(synced) && synced.length
+                ? synced
+                : engine.getSelectableActions?.(player) || [engine.pendingAction?.action];
+            return actions.find(action => action?.type === actionType) || null;
+        };
         
         try {
         switch (type) {
-            case 'chi':
-                if (engine.pendingAction?.action.type === 'chi' && engineStillValid()) {
-                    const options = engine.pendingAction.action.options;
-                    let actionToExecute = engine.pendingAction.action;
+            case 'chi': {
+                const pendingChi = getPendingAction('chi');
+                if (pendingChi && engineStillValid()) {
+                    const options = pendingChi.options;
+                    let actionToExecute = pendingChi;
                     let selectedOptionIndex = 0;
                     if (options && options.length > 1) {
                         const selected = await showChiOptionsSelector(options);
                         if (!engineStillValid() || selected === null) break;
                         selectedOptionIndex = options.indexOf(selected);
-                        actionToExecute = { ...engine.pendingAction.action, selectedOption: selected };
+                        actionToExecute = { ...pendingChi, selectedOption: selected };
                     }
                     if (App.isNetworkGame && App.network && !App.network.isHost) {
                         sendAction({ type: 'chi', selectedOptionIndex });
@@ -306,23 +314,27 @@
                     await engine.executeAction(player, actionToExecute);
                 }
                 break;
-            case 'peng':
-                if (engine.pendingAction?.action.type === 'peng' && engineStillValid()) {
+            }
+            case 'peng': {
+                const pendingPeng = getPendingAction('peng');
+                if (pendingPeng && engineStillValid()) {
                     if (App.isNetworkGame && App.network && !App.network.isHost) {
                         sendAction({ type: 'peng' });
                         break;
                     }
-                    await engine.executeAction(player, engine.pendingAction.action);
+                    await engine.executeAction(player, pendingPeng);
                 }
                 break;
-            case 'gang':
-                if (engine.pendingAction?.action.type === 'gang' && engineStillValid()) {
+            }
+            case 'gang': {
+                const pendingGang = getPendingAction('gang');
+                if (pendingGang && engineStillValid()) {
                     // 明杠（碰后加杠或别人打出杠）
                     if (App.isNetworkGame && App.network && !App.network.isHost) {
                         sendAction({ type: 'gang' });
                         break;
                     }
-                    await engine.executeAction(player, engine.pendingAction.action);
+                    await engine.executeAction(player, pendingGang);
                 } else if (App.anGangOptions && App.anGangOptions.length > 0 && engineStillValid()) {
                     // 暗杠/加杠
                     let option = App.anGangOptions[0];
@@ -340,7 +352,8 @@
                     App.anGangOptions = null;
                 }
                 break;
-            case 'hu':
+            }
+            case 'hu': {
                 // 优先检查自摸（仅在当前玩家回合且手牌已包含摸到的牌）
                 if (typeof Rules === 'undefined' || !Rules.canWin) {
                     console.error('Rules模块未加载');
@@ -348,21 +361,23 @@
                 }
                 const isLocalTurn = engine.currentPlayerIndex === localIndex;
                 const selfWin = isLocalTurn ? Rules.canWin(player.hand, engine.ruleConfig) : null;
+                const pendingHu = getPendingAction('hu');
                 if (selfWin && selfWin.canWin && engineStillValid()) {
                     if (App.isNetworkGame && App.network && !App.network.isHost) {
                         sendAction({ type: 'hu', selfWin: true });
                         break;
                     }
                     await engine.executeAction(player, { type: 'hu', winInfo: selfWin });
-                } else if (engine.pendingAction?.action.type === 'hu' && engine.lastDiscard && engineStillValid()) {
+                } else if (pendingHu && engine.lastDiscard && engineStillValid()) {
                     // 点炮胡：必须通过pendingAction验证，防止利用过期lastDiscard作弊
                     if (App.isNetworkGame && App.network && !App.network.isHost) {
                         sendAction({ type: 'hu' });
                         break;
                     }
-                    await engine.executeAction(player, engine.pendingAction.action);
+                    await engine.executeAction(player, pendingHu);
                 }
                 break;
+            }
             case 'skip':
                 if (engine.pendingAction && engineStillValid()) {
                     if (App.isNetworkGame && App.network && !App.network.isHost) {
