@@ -364,10 +364,9 @@
             if (tableEl) {
                 tableEl.classList.toggle('three-player', this.players.length === 3);
             }
-            const positions = this.players.length === 3
-                ? ['left', 'right', 'bottom']
-                : ['top', 'left', 'right', 'bottom'];
-            positions.forEach(pos => {
+            const seats = new Set(this.players.map((player, index) => this._getPositionName(index)));
+            ['top', 'left', 'right', 'bottom'].forEach(pos => {
+                document.getElementById(`replay-p-${pos}`)?.classList.toggle('hidden', !seats.has(pos));
                 const handEl = document.getElementById(`replay-hand-${pos}`);
                 if (handEl) handEl.innerHTML = '';
                 const meldsEl = document.getElementById(`replay-melds-${pos}`);
@@ -616,6 +615,7 @@
 
         _getPositionName(index) {
             const count = this.players.length || 4;
+            if (count === 2) return ['bottom', 'top'][index];
             if (count === 3) {
                 return ['bottom', 'left', 'right'][index];
             }

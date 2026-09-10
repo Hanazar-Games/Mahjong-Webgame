@@ -2,7 +2,7 @@
  * 万能麻将 - Service Worker
  * 缓存静态资源，支持离线运行
  */
-const CACHE_NAME = 'mahjong-v22';
+const CACHE_NAME = 'mahjong-v23';
 const STATIC_ASSETS = [
   './',
   './index.html',

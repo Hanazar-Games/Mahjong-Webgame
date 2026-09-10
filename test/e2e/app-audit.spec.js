@@ -267,15 +267,16 @@ test('release metadata and announcement history stay aligned', async ({ request 
     const changelog = await (await request.get('/CHANGELOG.md')).text();
     const historyIndex = changelog.indexOf('## 历史公告');
 
-    expect(packageJson.version).toBe('1.0.21');
-    expect(packageLock.version).toBe('1.0.21');
-    expect(packageLock.packages[''].version).toBe('1.0.21');
-    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v22'");
+    expect(packageJson.version).toBe('1.0.22');
+    expect(packageLock.version).toBe('1.0.22');
+    expect(packageLock.packages[''].version).toBe('1.0.22');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v23'");
     expect(serviceWorker).toContain("'./assets/ui/icons.svg'");
     expect(serviceWorker).toContain("'./manifest.json'");
-    const currentIndex = changelog.indexOf('## [1.0.21] - 2026-09-11');
+    const currentIndex = changelog.indexOf('## [1.0.22] - 2026-09-11');
     expect(currentIndex).toBeGreaterThanOrEqual(0);
     expect(currentIndex).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.21] - 2026-09-11')).toBeGreaterThan(historyIndex);
     expect(changelog.indexOf('### [1.0.20] - 2026-09-11')).toBeGreaterThan(historyIndex);
     expect(changelog.indexOf('### [1.0.19] - 2026-07-30')).toBeGreaterThan(historyIndex);
     expect(changelog.indexOf('### [1.0.18] - 2026-07-29')).toBeGreaterThan(historyIndex);

@@ -14,6 +14,65 @@ function runtime(overrides = {}) {
     return vm.runInContext('({ Utils, Tiles, Rules, Player, AIUtils, MahjongEngine, P2PNetwork, ReplayPlayer })', context);
 }
 
+for (const mode of ['create', 'join']) {
+    test(`leaving during a pending ${mode} cannot adopt the late room response`, async () => {
+        const { P2PNetwork } = runtime();
+        const net = new P2PNetwork();
+        net.setServerUrl('http://signal.test');
+        let complete;
+        const cleanup = [];
+        net._post = () => new Promise(resolve => { complete = resolve; });
+        net._fetchWithTimeout = async (url, options) => { cleanup.push({ url, options }); return { ok: true }; };
+        net._startSSE = () => { throw new Error('Cancelled room must not start SSE'); };
+        const pending = mode === 'create' ? net.createRoom('Room', 'guangdong', 'Player') : net.joinRoom('room', 'Player');
+        await net.leaveRoom();
+        complete({ roomId: 'room', playerId: 'player', playerToken: 'late-token' });
+        assert.equal(await pending, null);
+        assert.equal(net.roomId, null);
+        assert.equal(cleanup[0].url, 'http://signal.test/room/room/leave');
+        assert.equal(cleanup[0].options.headers.Authorization, 'Bearer late-token');
+    });
+}
+
+test('concurrent room requests cannot orphan an earlier membership', async () => {
+    const { P2PNetwork } = runtime();
+    const net = new P2PNetwork();
+    net.setServerUrl('http://signal.test');
+    let complete, calls = 0;
+    const response = new Promise(resolve => { complete = resolve; });
+    net._post = () => { calls++; return response; };
+    net._startSSE = () => {};
+    const first = net.joinRoom('room', 'Player');
+    const second = net.joinRoom('other', 'Player').catch(error => error);
+    complete({ roomId: 'room', playerId: 'player', playerToken: 'token' });
+    await first;
+    assert.equal(typeof (await second).message, 'string');
+    assert.equal(calls, 1);
+});
+
+test('a cancelled membership response cannot replace a subsequently joined room', async () => {
+    const { P2PNetwork } = runtime();
+    const net = new P2PNetwork();
+    net.setServerUrl('http://signal.test');
+    const responses = new Map(), cleanup = [];
+    let connections = 0;
+    net._post = path => new Promise(resolve => responses.set(path, resolve));
+    net._fetchWithTimeout = async (url, options) => { cleanup.push(options.headers.Authorization); };
+    net._startSSE = () => { connections++; };
+    const old = net.joinRoom('old', 'Old name');
+    await net.leaveRoom(false);
+    const fresh = net.joinRoom('fresh', 'New name');
+    responses.get('/room/fresh/join')({ roomId: 'fresh', playerId: 'new-player', playerToken: 'new-token' });
+    await fresh;
+    responses.get('/room/old/join')({ roomId: 'old', playerId: 'old-player', playerToken: 'old-token' });
+    await old;
+    assert.equal(net.roomId, 'fresh');
+    assert.equal(net.playerName, 'New name');
+    assert.equal(net.playerToken, 'new-token');
+    assert.equal(connections, 1);
+    assert.deepEqual(cleanup, ['Bearer old-token']);
+});
+
 test('ICE arriving before an offer or remote description is retained until negotiation is ready', async () => {
     const applied = [];
     let releaseRemote;

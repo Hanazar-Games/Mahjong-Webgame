@@ -13,7 +13,7 @@
             btn.addEventListener('click', () => {
                 AudioManager.SFX.buttonClick();
                 // 网络大厅返回：如果在房间内先离开
-                if (btn.id === 'network-lobby-back' && App.network?.roomId) {
+                if (btn.id === 'network-lobby-back' && App.network) {
                     App.network.leaveRoom().catch(() => {});
                     showLobbyContent();
                 }

@@ -153,7 +153,7 @@
             const createBtn = document.getElementById('create-room');
             if (createBtn) createBtn.disabled = true;
             try {
-                await App.network.createRoom(name, type, playerName);
+                if (!await App.network.createRoom(name, type, playerName)) return;
                 Utils.toast(`房间 ${name} 已创建`, 3000, 'success');
             } catch (err) {
                 showNetworkError('创建房间失败: ' + (err?.message || '未知错误'));
@@ -371,7 +371,7 @@
                     joinBtn.disabled = true;
                     const playerName = App.settings?.playerName || '玩家';
                     try {
-                        await App.network.joinRoom(room.id, playerName);
+                        if (!await App.network.joinRoom(room.id, playerName)) return;
                         Utils.toast(`已加入房间`, 3000, 'success');
                     } catch (err) {
                         showNetworkError('加入房间失败: ' + (err?.message || '未知错误'));
@@ -414,7 +414,10 @@
         if (inRoomPanel) inRoomPanel.classList.add('hidden');
 
         const startBtn = document.getElementById('btn-start-network');
-        if (startBtn) startBtn.classList.add('hidden');
+        if (startBtn) {
+            startBtn.classList.add('hidden');
+            startBtn.disabled = false;
+        }
 
         const playerList = document.getElementById('lobby-player-list');
         if (playerList) playerList.innerHTML = '';
@@ -827,7 +830,7 @@
                 // 初始化玩家（名字从状态中恢复）
                 const playerConfigs = (state.players || []).map((p, i) => ({
                     name: p.name || `玩家${i+1}`,
-                    isAI: p.networkId !== App.network?.playerId,
+                    isAI: !!p.isAI,
                     networkId: p.networkId || null
                 }));
                 App.engine.initPlayers(playerConfigs);
@@ -866,7 +869,7 @@
                 ep.score = sp.score ?? ep.score;
                 ep.networkId = sp.networkId || ep.networkId;
                 ep.name = sp.name || ep.name;
-                ep.isAI = i !== (App.localPlayerIndex ?? 0);
+                ep.isAI = !!sp.isAI;
                 ep.handSize = sp.handSize ?? ep.handSize;
                 if (Array.isArray(sp.hand)) {
                     ep.hand = sp.hand;
@@ -911,6 +914,7 @@
 
         // 渲染
         renderGameState();
+        updateShantenDisplay(App.localPlayerIndex ?? 0);
         if (Number.isFinite(state.turnRemainingMs) && state.turnRemainingMs > 0) {
             engine.emit('timerStart', { timeout: state.turnRemainingMs });
         } else {

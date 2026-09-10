@@ -10,6 +10,18 @@
         if (tableEl) {
             tableEl.classList.toggle('three-player', App.engine.config.playerCount === 3);
         }
+        const seats = new Set(App.engine.players.map((player, index) => getPositionName(index)));
+        for (const position of ['bottom', 'right', 'top', 'left']) {
+            const unused = !seats.has(position);
+            document.getElementById(`player-${position}`)?.classList.toggle('hidden', unused);
+            document.getElementById(`turn-${position}`)?.classList.toggle('hidden', unused);
+            if (unused) {
+                const hand = document.getElementById(`hand-${position}`);
+                hand?.querySelectorAll('.mahjong-tile').forEach(tile => tile._cleanupDrag?.());
+                hand?.replaceChildren();
+                document.getElementById(`melds-${position}`)?.replaceChildren();
+            }
+        }
         
         // 渲染所有玩家
         for (let i = 0; i < App.engine.config.playerCount; i++) {
@@ -245,22 +257,14 @@
         
         const discardPile = App.engine.discardPile || [];
         const existingEls = pileEl.querySelectorAll('.mahjong-tile');
-        
-        // 防御：如果弃牌堆变短了（如回放跳转或网络同步），移除多余元素
-        if (existingEls.length > discardPile.length) {
-            for (let i = existingEls.length - 1; i >= discardPile.length; i--) {
-                existingEls[i].remove();
-            }
-        }
-        
-        // 重新查询，移除旧动画类（避免re-render时重复动画）
-        const currentEls = pileEl.querySelectorAll('.mahjong-tile');
-        if (currentEls.length > 0) {
-            currentEls[currentEls.length - 1].classList.remove('tile-discarded');
-        }
-        
-        // 只添加新元素
-        for (let i = currentEls.length; i < discardPile.length; i++) {
+        let unchanged = 0;
+        while (unchanged < existingEls.length && unchanged < discardPile.length &&
+            existingEls[unchanged].dataset.id === discardPile[unchanged].id) unchanged++;
+        if (unchanged === existingEls.length && unchanged === discardPile.length) return;
+        for (let i = unchanged; i < existingEls.length; i++) existingEls[i].remove();
+        if (unchanged > 0) existingEls[unchanged - 1].classList.remove('tile-discarded');
+
+        for (let i = unchanged; i < discardPile.length; i++) {
             const tile = discardPile[i];
             const tileEl = UIComponents.createTileElement(tile, { small: true });
             if (animateLast && i === discardPile.length - 1) {
@@ -333,6 +337,7 @@
         const count = App.engine?.config?.playerCount ?? 4;
         const localIndex = App.localPlayerIndex ?? 0;
         const relativeIndex = (index - localIndex + count) % count;
+        if (count === 2) return ['bottom', 'top'][relativeIndex];
         if (count === 3) {
             return ['bottom', 'left', 'right'][relativeIndex];
         }

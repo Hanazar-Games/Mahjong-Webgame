@@ -20,6 +20,7 @@ const AudioManager = (function() {
     let sfxEnabled = true;
     let bgmResumeAfterVisibility = null;
     let bgmGeneration = 0;
+    let interactionBound = false;
     const activeSfxTimers = new Set();
 
     function init() {
@@ -696,15 +697,17 @@ const AudioManager = (function() {
     function getSfxVolume() { return sfxVolume; }
 
     function setupUserInteraction() {
+        if (interactionBound) return;
+        interactionBound = true;
         const events = ['click', 'touchstart', 'keydown'];
         const handler = () => {
-            const bgmToResume = bgmPlaying ? currentBgm : null;
+            if (document.hidden || audioCtx?.state === 'running') return;
+            const bgmToResume = currentBgm;
             init();
-            resume();
             if (bgmToResume) startBgm(bgmToResume);
-            events.forEach(e => document.removeEventListener(e, handler));
+            else resume();
         };
-        events.forEach(e => document.addEventListener(e, handler, { once: true }));
+        events.forEach(e => document.addEventListener(e, handler));
 
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {

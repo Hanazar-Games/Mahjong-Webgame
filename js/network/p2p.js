@@ -31,6 +31,7 @@ class P2PNetwork extends Utils.EventEmitter {
         this.connecting = false;
         this._sseStarting = false;
         this._startGamePromise = null;
+        this._roomRequest = null;
     }
 
     // ===== 连接管理 =====
@@ -82,38 +83,47 @@ class P2PNetwork extends Utils.EventEmitter {
     // ===== 创建房间 =====
 
     async createRoom(name, mahjongType, playerName) {
-        if (!this.serverUrl) throw new Error('未设置服务器地址');
-        this.playerName = playerName || '玩家';
-        const data = await this._post('/room/create', {
-            name, mahjongType, playerName: this.playerName, maxPlayers: 4
-        });
-        this.roomId = data.roomId;
-        this.playerId = data.playerId;
-        this.playerToken = data.playerToken;
-        this.isHost = true;
-        this.players = [{ id: this.playerId, name: this.playerName, isHost: true }];
-        this._startSSE();
-        this.emit('roomCreated', { roomId: this.roomId, name, players: this.players });
-        return { roomId: this.roomId, players: this.players };
+        return this._enterRoom('/room/create', { name, mahjongType, playerName: playerName || '玩家', maxPlayers: 4 }, true);
     }
 
     // ===== 加入房间 =====
 
     async joinRoom(roomId, playerName) {
+        return this._enterRoom('/room/' + roomId + '/join', { playerName: playerName || '玩家' }, false);
+    }
+
+    async _enterRoom(path, body, isHost) {
         if (!this.serverUrl) throw new Error('未设置服务器地址');
-        this.playerName = playerName || '玩家';
-        const data = await this._post('/room/' + roomId + '/join', {
-            playerName: this.playerName
-        });
-        this.roomId = data.roomId;
-        this.playerId = data.playerId;
-        this.playerToken = data.playerToken;
-        this.isHost = false;
-        // 把自己加入列表，SSE 会推送其他玩家
-        this.players = [{ id: this.playerId, name: this.playerName, isHost: false }];
-        this._startSSE();
-        this.emit('roomJoined', { roomId: this.roomId, playerId: this.playerId });
-        return { roomId: this.roomId, playerId: this.playerId };
+        if (this.roomId || this._roomRequest) throw new Error('正在进入或已在房间中，请先退出');
+        const request = { serverUrl: this.serverUrl };
+        this._roomRequest = request;
+        const isCurrent = () => this._roomRequest === request && this.serverUrl === request.serverUrl;
+        try {
+            const data = await this._post(path, body);
+            if (!isCurrent()) {
+                await this._fetchWithTimeout(`${request.serverUrl}/room/${data.roomId}/leave`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.playerToken}` },
+                    body: JSON.stringify({ playerId: data.playerId })
+                }).catch(() => {});
+                return null;
+            }
+            this.roomId = data.roomId;
+            this.playerId = data.playerId;
+            this.playerToken = data.playerToken;
+            this.playerName = body.playerName;
+            this.isHost = isHost;
+            this.players = [{ id: this.playerId, name: this.playerName, isHost }];
+            this._startSSE();
+            const result = isHost ? { roomId: this.roomId, players: this.players } : { roomId: this.roomId, playerId: this.playerId };
+            this.emit(isHost ? 'roomCreated' : 'roomJoined', { ...result, name: body.name });
+            return result;
+        } catch (error) {
+            if (!isCurrent()) return null;
+            throw error;
+        } finally {
+            if (this._roomRequest === request) this._roomRequest = null;
+        }
     }
 
     // ===== SSE 长连接（信令接收） =====
@@ -538,6 +548,7 @@ class P2PNetwork extends Utils.EventEmitter {
     async leaveRoom(notifyServer = true) {
         this._sseStarting = false;
         this._startGamePromise = null;
+        this._roomRequest = null;
         if (this.sseReconnectTimer) { clearTimeout(this.sseReconnectTimer); this.sseReconnectTimer = null; }
         this._stopHeartbeat();
         if (this.sse) {

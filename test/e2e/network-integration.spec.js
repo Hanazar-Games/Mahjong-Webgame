@@ -23,7 +23,49 @@ test.afterEach(async () => {
     }
 });
 
-async function connectPair(browser, baseURL) {
+test('leaving the lobby during room creation cleans up the late server membership', async ({ page, request }) => {
+    await page.goto('/');
+    await page.locator('#loading-screen').waitFor({ state: 'detached' });
+    await page.evaluate(url => {
+        document.getElementById('signal-server').value = url;
+        initNetwork();
+        App.networkServerReachable = true;
+        App.currentScreen = 'network-lobby';
+        UIComponents.switchScreen('network-lobby');
+    }, signalUrl);
+    let finishResponse, createdRoom;
+    await page.route(signalUrl + '/room/create', async route => {
+        const response = await route.fetch();
+        createdRoom = await response.json();
+        await new Promise(resolve => { finishResponse = resolve; });
+        await route.fulfill({ response });
+    });
+    await page.locator('#create-room').click();
+    await expect.poll(() => !!finishResponse).toBe(true);
+    await page.locator('#network-lobby-back').click();
+    finishResponse();
+    await expect(page.locator('#create-room')).toBeEnabled();
+    expect(await page.evaluate(() => App.network.roomId)).toBe(null);
+    const rooms = await (await request.get(signalUrl + '/rooms')).json();
+    expect(rooms.rooms.some(room => room.id === createdRoom.roomId)).toBe(false);
+    await expect(page.locator('#main-menu')).toHaveClass(/active/);
+});
+
+test('a second room can start after the host leaves a started room', async ({ browser, baseURL }) => {
+    const { contexts, host, guest } = await connectPair(browser, baseURL, true);
+    try {
+        await host.evaluate(() => App.network.leaveRoom());
+        await expect.poll(() => guest.evaluate(() => App.network.roomId)).toBe(null);
+        const { roomId } = await host.evaluate(() => App.network.createRoom('Next room', 'guangdong', 'Host'));
+        await guest.evaluate(id => App.network.joinRoom(id, 'Guest'), roomId);
+        await expect(host.locator('#btn-start-network')).toBeEnabled();
+        await host.locator('#btn-start-network').click();
+        await expect(guest.locator('#game-screen')).toHaveClass(/active/);
+        await expect(guest.locator('#hand-bottom .mahjong-tile')).toHaveCount(13);
+    } finally { await Promise.all(contexts.map(context => context.close())); }
+});
+
+async function connectPair(browser, baseURL, startViaUI = false) {
     const contexts = await Promise.all([0, 1].map(() => browser.newContext({ baseURL, serviceWorkers: 'block' })));
     const [host, guest] = await Promise.all(contexts.map(context => context.newPage()));
     const errors = [];
@@ -37,7 +79,17 @@ async function connectPair(browser, baseURL) {
     const { roomId } = await host.evaluate(() => App.network.createRoom('Recovery', 'guangdong', 'Host'));
     await guest.evaluate(id => App.network.joinRoom(id, 'Guest'), roomId);
     await expect.poll(() => host.evaluate(() => [...App.network.channels.values()].some(c => c.readyState === 'open'))).toBe(true);
-    await host.evaluate(() => App.network.startGame({ speed: 'instant', maxRounds: 1 }));
+    if (startViaUI) {
+        await host.evaluate(() => {
+            App.settings.gameSpeed = 'instant';
+            App.settings.gameRounds = 1;
+            App.currentScreen = 'network-lobby';
+            UIComponents.switchScreen('network-lobby');
+        });
+        await host.locator('#btn-start-network').click();
+    } else {
+        await host.evaluate(() => App.network.startGame({ speed: 'instant', maxRounds: 1 }));
+    }
     await expect(guest.locator('#hand-bottom .mahjong-tile')).toHaveCount(13);
     return { contexts, host, guest, errors };
 }
