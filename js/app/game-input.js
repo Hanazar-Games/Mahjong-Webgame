@@ -20,7 +20,7 @@
     }
 
     function handleTileClick(tile) {
-        if (!App.engine || App.engine.paused || App.engine.awaitingRemoteAction || App.engine.state !== 'playing') return;
+        if (!App.engine || App.engine.paused || App.engine.pendingRemoteAction || App.engine.state !== 'playing') return;
         const localIndex = App.localPlayerIndex ?? 0;
         if (App.engine.currentPlayerIndex !== localIndex) return;
         if (App._actionPending) return;
@@ -58,7 +58,7 @@
     async function _doDiscard(tileId) {
         const engine = App.engine;
         const localIndex = App.localPlayerIndex ?? 0;
-        if (!engine || engine.paused || engine.awaitingRemoteAction || App._actionPending ||
+        if (!engine || engine.paused || engine.pendingRemoteAction || App._actionPending ||
             engine.state !== 'playing' || engine.currentPlayerIndex !== localIndex) return false;
         const restoreHand = (message = '出牌失败，请重新选择手牌') => {
             if (App.engine !== engine || engine.paused || engine.state !== 'playing' || engine.currentPlayerIndex !== localIndex) return;
@@ -84,17 +84,19 @@
     }
 
     function sendNetworkPlayerAction(action) {
-        if (!App.network || App.network.isHost || App.engine?.awaitingRemoteAction) return false;
+        if (!App.network || App.network.isHost || !App.engine || App.engine.pendingRemoteAction) return false;
         const host = (App.network.players || []).find(p => p.isHost);
         if (!host) {
             Utils.toast('未连接到房主，操作发送失败', 3000, 'error');
             return false;
         }
-        const sent = App.network.sendTo(host.id, { type: 'playerAction', data: action });
+        const engine = App.engine;
+        const request = { type: 'playerAction', data: action, actionId: Utils.uuid(), gameId: engine.config.gameId };
+        const sent = App.network.sendTo(host.id, request);
         if (!sent) {
             Utils.toast('操作发送失败，请检查联机连接', 3000, 'error');
         } else {
-            if (App.engine) App.engine.awaitingRemoteAction = true;
+            engine.pendingRemoteAction = request;
             disableActionButtons();
             const skipBtn = document.getElementById('btn-skip');
             if (skipBtn) skipBtn.disabled = true;
@@ -211,7 +213,7 @@
     }
 
     async function handleAction(type) {
-        if (!App.engine || App.engine.paused || App.engine.awaitingRemoteAction) return;
+        if (!App.engine || App.engine.paused || App.engine.pendingRemoteAction) return;
         if (App._actionPending) return;
         App._actionPending = true;
         
@@ -228,7 +230,7 @@
         const currentPlayer = engine.currentPlayerIndex;
         const discardId = engine.lastDiscard?.id;
         const engineStillValid = () => App.engine === engine && !engine.paused &&
-            !engine.awaitingRemoteAction && engine.round === round && engine.currentPlayerIndex === currentPlayer &&
+            !engine.pendingRemoteAction && engine.round === round && engine.currentPlayerIndex === currentPlayer &&
             engine.lastDiscard?.id === discardId && ['playing', 'waiting'].includes(engine.state);
         const choicesStillValid = (offered, current) => engineStillValid() &&
             offered.length === current?.length && offered.every(option => current.some(candidate => tileOptionKey(candidate) === tileOptionKey(option)));
@@ -293,10 +295,10 @@
                     await engine.executeAction(player, pendingGang);
                 } else if (App.anGangOptions && App.anGangOptions.length > 0 && engineStillValid()) {
                     // 暗杠/加杠
+                    const offered = App.anGangOptions;
                     let option = App.anGangOptions[0];
                     let optionIndex = 0;
                     if (App.anGangOptions.length > 1) {
-                        const offered = App.anGangOptions;
                         option = await showAnGangOptionsSelector(offered,
                             () => choicesStillValid(offered, App.anGangOptions));
                         if (!engineStillValid() || option === null) break;
@@ -309,7 +311,7 @@
                         break;
                     }
                     await engine.executeAnGang(player, option);
-                    App.anGangOptions = null;
+                    if (App.engine === engine && App.anGangOptions === offered) App.anGangOptions = null;
                 }
                 break;
             }
@@ -391,7 +393,7 @@
      * 启用操作按钮（增量模式，允许多个按钮同时启用）
      */
     function enableActionButtons(action) {
-        if (!action || !action.type || App.engine?.awaitingRemoteAction) return;
+        if (!action || !action.type || App.engine?.pendingRemoteAction) return;
         const buttonMap = {
             'chi': 'btn-chi',
             'peng': 'btn-peng',
@@ -433,7 +435,7 @@
      * 启用/禁用玩家操作
      */
     function enablePlayerActions(enable) {
-        enable = enable && !App.engine?.awaitingRemoteAction;
+        enable = enable && !App.engine?.pendingRemoteAction;
         const handEl = document.getElementById('hand-bottom');
         if (!handEl) return;
         
@@ -448,6 +450,7 @@
      * 键盘事件
      */
     function handleKeydown(e) {
+        if (e.defaultPrevented) return;
         // 忽略重复按键（长按不连续关闭多层弹窗或触发游戏操作）
         if (e.repeat) return;
 

@@ -269,7 +269,13 @@
             Utils.toast(name ? `${name} 断开连接` : '玩家断开连接', 3000, 'warning');
         });
 
-        net.on('peerConnected', () => broadcastGameState(true));
+        net.on('peerConnected', () => {
+            if (net.isHost) broadcastGameState(true);
+            else {
+                const host = net.players.find(player => player.isHost);
+                if (host && App.engine?.pendingRemoteAction) net.sendTo(host.id, App.engine.pendingRemoteAction);
+            }
+        });
         net.on('error', error => {
             showNetworkError(error.message || '联机连接失败');
             Utils.toast(error.message || '联机连接失败', 3000, 'error');
@@ -282,15 +288,7 @@
             });
         });
 
-        net.on('data', ({ from, type, data }) => {
-            if (type === 'playerAction') {
-                handleRemotePlayerAction(from, data).catch(err => {
-                    console.warn('Remote action error:', err);
-                });
-            } else {
-                handleNetworkData(type, data, from);
-            }
-        });
+        net.on('data', ({ from, type, data, actionId, gameId }) => handleNetworkData(type, data, from, actionId, gameId));
 
         net.on('left', () => {
             updateConnectionStatus(App.network?.connected ? 'online' : 'offline');
@@ -559,8 +557,9 @@
         for (const p of net.players || []) {
             if (!p || p.id === net.playerId) continue;
             const state = buildNetworkStateFor(p.id);
+            const request = App.engine.remoteActions?.get(p.id);
             net.sendTo(p.id, { type: 'stateSync', data: { state, config: App.engine.config,
-                result: App.engine.networkResult || null } });
+                result: App.engine.networkResult || null, actionAck: request?.complete ? request.id : null } });
         }
     }
 
@@ -615,14 +614,15 @@
     /**
      * 处理网络数据（P2P DataChannel）
      */
-    function handleNetworkData(type, data, fromPlayerId) {
+    function handleNetworkData(type, data, fromPlayerId, actionId, gameId) {
         const net = App.network;
         if (!net) return;
 
         if (net.isHost) {
             // 房主接收访客动作
             if (type === 'playerAction') {
-                handleRemotePlayerAction(fromPlayerId, data).catch(err => {
+                if (typeof actionId !== 'string' || !actionId || actionId.length > 64 || gameId !== App.engine?.config.gameId) return;
+                handleRemotePlayerAction(fromPlayerId, data, actionId, gameId).catch(err => {
                     console.warn('Remote action error:', err);
                 });
             }
@@ -706,10 +706,11 @@
     /**
      * 房主处理远程玩家动作
      */
-    async function handleRemotePlayerAction(fromPlayerId, action) {
+    async function handleRemotePlayerAction(fromPlayerId, action, actionId, gameId) {
         if (!action || typeof action !== 'object' || !action.type) return;
         const engine = App.engine;
-        if (!engine || (engine.state !== 'playing' && engine.state !== 'waiting')) return;
+        if (!engine || !App.network?.isHost) return;
+        if (actionId && gameId !== engine.config.gameId) return;
 
         // 找到对应玩家索引
         const net = App.network;
@@ -718,29 +719,40 @@
         const player = engine.players[playerIdx];
         if (!player) return;
 
-        // 安全检查：区分回合动作和claim动作
-        const turnActions = ['draw', 'discard', 'hu', 'gang', 'skip'];
-        const claimActions = ['chi', 'peng', 'gang', 'hu', 'skip'];
-        if (turnActions.includes(action.type)) {
-            if (engine.currentPlayerIndex !== playerIdx) {
-                if (!claimActions.includes(action.type)) {
-                    console.warn('Remote turn action from non-current player ignored');
-                    return;
-                }
-            }
-            // draw 由引擎自动处理，无需远程触发
-            if (action.type === 'draw') return;
-        } else if (claimActions.includes(action.type)) {
-            if (!engine.pendingAction || engine.pendingAction.player?.position !== playerIdx) {
-                console.warn('Remote claim action without pending action ignored');
-                return;
-            }
-        } else {
-            console.warn(`[Network] 未知的远程动作类型: ${action.type}`);
+        const previousRequest = engine.remoteActions?.get(fromPlayerId);
+        if (actionId && (previousRequest?.id === actionId || previousRequest?.complete === false)) {
+            broadcastGameState(true);
             return;
+        }
+        const request = typeof actionId === 'string' && actionId.length <= 64 ? { id: actionId, complete: false } : null;
+        if (request) {
+            engine.remoteActions ??= new Map();
+            engine.remoteActions.set(fromPlayerId, request);
         }
 
         try {
+            if (engine.state !== 'playing' && engine.state !== 'waiting') return;
+
+            // 安全检查：区分回合动作和claim动作
+            const turnActions = ['draw', 'discard', 'hu', 'gang', 'skip'];
+            const claimActions = ['chi', 'peng', 'gang', 'hu', 'skip'];
+            if (turnActions.includes(action.type)) {
+                if (engine.currentPlayerIndex !== playerIdx && !claimActions.includes(action.type)) {
+                    console.warn('Remote turn action from non-current player ignored');
+                    return;
+                }
+                // draw 由引擎自动处理，无需远程触发
+                if (action.type === 'draw') return;
+            } else if (claimActions.includes(action.type)) {
+                if (!engine.pendingAction || engine.pendingAction.player?.position !== playerIdx) {
+                    console.warn('Remote claim action without pending action ignored');
+                    return;
+                }
+            } else {
+                console.warn(`[Network] 未知的远程动作类型: ${action.type}`);
+                return;
+            }
+
             const getClaimAction = type => engine.getSelectableActions(player)
                 .find(candidate => candidate.type === type) || null;
             switch (action.type) {
@@ -793,10 +805,10 @@
             }
         } catch (err) {
             console.warn('远程动作处理失败:', err);
+        } finally {
+            if (request) request.complete = true;
+            if (App.engine === engine && App.network === net) broadcastGameState(true);
         }
-
-        // 广播更新后的状态
-        broadcastGameState(true);
     }
 
     /**
@@ -844,7 +856,7 @@
         // 同步引擎状态（轻量同步，不触发事件）
         const engine = App.engine;
         if (_networkGameResultHandled) return;
-        engine.awaitingRemoteAction = false;
+        if (engine.pendingRemoteAction?.actionId === data.actionAck) engine.pendingRemoteAction = null;
         const previousDiscardId = engine.lastDiscard?.id;
         const localPlayer = engine.players[App.localPlayerIndex ?? 0];
         const previousHandIds = new Set((localPlayer?.hand || []).map(tile => tile.id));
@@ -901,7 +913,7 @@
                 : [state.pendingAction.action];
             engine.pendingAction = { player, action: state.pendingAction.action, actions };
             actions.forEach(enableActionButtons);
-            if (skipBtn) skipBtn.disabled = false;
+            if (skipBtn && !engine.pendingRemoteAction) skipBtn.disabled = false;
         } else {
             engine.pendingAction = null;
         }
@@ -911,7 +923,7 @@
         if (selector && !selector._isValid()) closeAllSelectors();
         if (state.selfActions?.canHu) enableActionButtons({ type: 'hu' });
         if (App.anGangOptions?.length) enableActionButtons({ type: 'gang' });
-        if ((state.selfActions?.canHu || App.anGangOptions?.length) && skipBtn) {
+        if ((state.selfActions?.canHu || App.anGangOptions?.length) && skipBtn && !engine.pendingRemoteAction) {
             skipBtn.disabled = false;
         }
 
@@ -954,7 +966,9 @@
             state.pendingAction.playerIndex === (App.localPlayerIndex ?? 0);
         const canHu = !!state.selfActions?.canHu;
         const canGang = !!App.anGangOptions?.length;
-        if (hasPendingAction) {
+        if (engine.pendingRemoteAction) {
+            updateTurnGuidance('操作已发送，等待房主确认…');
+        } else if (hasPendingAction) {
             updateTurnGuidance('请选择可用操作，或点击“过”继续', 'action');
         } else if (canHu && canGang) {
             updateTurnGuidance('可以胡牌或杠牌，也可以点击“过”继续', 'action');

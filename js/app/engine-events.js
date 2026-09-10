@@ -349,11 +349,12 @@
         engine.on('needDiscard', (data) => {
             AppEventBus.emit('engine:needDiscard', data);
             if (App.engine !== engine || engine.state !== 'playing') return;
+            App.anGangOptions = null;
+            disableActionButtons();
             updatePlayerHighlight(data.index);
             if (data.index === (App.localPlayerIndex ?? 0)) {
                 enablePlayerActions(true);
                 updateTurnGuidance('选择一张手牌，再次点击打出', 'active');
-                Utils.toast('请打出一张牌', 3000, 'warning');
             } else if (App.isNetworkGame) {
                 updateTurnGuidance(`等待 ${data.player?.name || '其他玩家'} 出牌`);
             } else {

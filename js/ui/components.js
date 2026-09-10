@@ -56,7 +56,7 @@ const UIComponents = (function() {
             div.addEventListener('keydown', (event) => {
                 if (event.key !== 'Enter' && event.key !== ' ') return;
                 event.preventDefault();
-                activate();
+                if (!event.repeat) activate();
             });
         }
         
@@ -80,9 +80,19 @@ const UIComponents = (function() {
         let startX, startY;
         let clone = null;
         let isListening = false;
+        let suppressClick = false;
         
         element.addEventListener('mousedown', startDrag);
         element.addEventListener('touchstart', startDrag, { passive: false });
+        element.addEventListener('click', suppressDragClick, true);
+
+        function suppressDragClick(e) {
+            if (suppressClick && e.detail > 0) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+            }
+            suppressClick = false;
+        }
         
         function startDrag(e) {
             if (element.classList.contains('back') || element.classList.contains('disabled')) return;
@@ -92,6 +102,7 @@ const UIComponents = (function() {
             if (isListening) {
                 onEnd({ type: 'touchcancel' });
             }
+            suppressClick = false;
             
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -168,6 +179,7 @@ const UIComponents = (function() {
             if (discardPile) discardPile.classList.remove('discard-target');
             
             if (isDragging && clone) {
+                suppressClick = true;
                 const clientX = (e.changedTouches && e.changedTouches.length > 0) ? e.changedTouches[0].clientX : e.clientX;
                 const clientY = (e.changedTouches && e.changedTouches.length > 0) ? e.changedTouches[0].clientY : e.clientY;
                 
@@ -212,6 +224,7 @@ const UIComponents = (function() {
             isDragging = false;
             element.removeEventListener('mousedown', startDrag);
             element.removeEventListener('touchstart', startDrag, { passive: false });
+            element.removeEventListener('click', suppressDragClick, true);
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onEnd);
             document.removeEventListener('touchstart', onAdditionalTouch);

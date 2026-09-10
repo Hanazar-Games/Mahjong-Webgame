@@ -26,6 +26,8 @@ const AudioManager = (function() {
     function init() {
         if (audioCtx && audioCtx.state !== 'closed') return;
         if (audioCtx) {
+            activeSfxTimers.forEach(id => clearTimeout(id));
+            activeSfxTimers.clear();
             bgmGeneration++;
             bgmPlaying = false;
             if (bgmTimer) clearTimeout(bgmTimer);
@@ -94,9 +96,11 @@ const AudioManager = (function() {
 
     // SFX timer 管理（防止游戏切换后旧音效仍播放）
     function sfxTimeout(fn, delay) {
-        if (!sfxEnabled || sfxVolume <= 0.0001 || isMuted || document.hidden) return null;
+        if (!sfxEnabled || sfxVolume <= 0.0001 || isMuted || !ensureAudio()) return null;
+        const context = audioCtx;
         const id = setTimeout(() => {
             activeSfxTimers.delete(id);
+            if (audioCtx !== context || context.state === 'closed') return;
             fn();
         }, delay);
         activeSfxTimers.add(id);
@@ -689,7 +693,7 @@ const AudioManager = (function() {
     function setBgmVolume(vol) {
         bgmVolume = normalizeVolume(vol);
         if (bgmGain) bgmGain.gain.value = bgmVolume;
-        if (bgmVolume <= 0.0001 && bgmPlaying) stopBgm();
+        if (bgmVolume <= 0.0001) stopBgm();
     }
 
     function setSfxVolume(vol) {

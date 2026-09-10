@@ -947,6 +947,10 @@ class MahjongEngine extends Utils.EventEmitter {
             
             // 杠后已经摸过牌，直接要求打牌（不再走turnStart的摸牌流程）
             this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
+            if (!player.isAI) {
+                const options = Rules.canAnGang(player.hand, player.melds, this.ruleConfig);
+                if (options.length) this.emit('anGangOptions', { player: player.toJSON(), options });
+            }
             
             if (player.isAI) {
                 try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }
@@ -1045,6 +1049,10 @@ class MahjongEngine extends Utils.EventEmitter {
             // 暗杠后需要打牌
             this.state = 'playing';
             this.emit('needDiscard', { player: player.toJSON(), index: this.currentPlayerIndex });
+            if (!player.isAI) {
+                const options = Rules.canAnGang(player.hand, player.melds, this.ruleConfig);
+                if (options.length) this.emit('anGangOptions', { player: player.toJSON(), options });
+            }
             
             if (player.isAI) {
                 try { await Utils.sleep(this.speedMap[this.config.speed] * AI_POST_ACTION_DELAY_MULTIPLIER, this._token); } catch (e) { if (e?.message === 'CANCELLED') return; throw e; }

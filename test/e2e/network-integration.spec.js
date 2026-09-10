@@ -10,10 +10,16 @@ test.beforeEach(async ({ baseURL }) => {
     const port = socket.address().port;
     await new Promise(resolve => socket.close(resolve));
     signalUrl = `http://127.0.0.1:${port}`;
+    let startupError = '';
     server = spawn(process.execPath, [path.join(__dirname, '../../server/signaling-server.js'), String(port)], {
-        env: { ...process.env, NODE_ENV: 'production', ALLOWED_ORIGINS: baseURL }, stdio: 'ignore'
+        env: { ...process.env, NODE_ENV: 'production', ALLOWED_ORIGINS: baseURL }, stdio: ['ignore', 'ignore', 'pipe']
     });
-    await expect.poll(async () => fetch(signalUrl + '/rooms').then(r => r.status).catch(() => 0)).toBe(200);
+    server.stderr.on('data', data => { startupError += data; });
+    await expect.poll(async () => {
+        if (server.exitCode !== null) throw new Error(`Signaling server exited (${server.exitCode}): ${startupError}`);
+        return fetch(signalUrl + '/rooms', { signal: AbortSignal.timeout(1000) })
+            .then(response => response.status).catch(error => error.cause?.code || error.message);
+    }, { message: `Signaling server readiness at ${signalUrl}` }).toBe(200);
 });
 test.afterEach(async () => {
     if (server && server.exitCode === null) {
@@ -107,6 +113,51 @@ test('guest display preferences preserve authoritative opponent hand counts', as
         expect(await guest.evaluate(() => App.engine.players[0].hand.length)).toBe(0);
     } finally { await Promise.all(contexts.map(context => context.close())); }
 });
+
+for (const lost of ['request', 'acknowledgement']) {
+    test(`reconnection recovers a lost action ${lost} without executing twice`, async ({ browser, baseURL }) => {
+        const { contexts, host, guest, errors } = await connectPair(browser, baseURL);
+        try {
+            const tileId = await host.evaluate(() => {
+                const engine = App.engine;
+                engine.stopTimer();
+                engine.players[0].hand = [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5].map(value => Tiles.createTile('wan', value));
+                engine.players[1].hand.push(Tiles.createTile('tong', 9));
+                const id = engine.players[1].hand.at(-1).id;
+                engine.currentPlayerIndex = 1;
+                engine.state = 'playing';
+                engine.pendingAction = null;
+                engine._pendingActions = [];
+                window.__remoteDiscards = 0;
+                engine.on('discard', data => { if (data.tile.id === id) window.__remoteDiscards++; });
+                broadcastGameState(true);
+                return id;
+            });
+            await expect(guest.locator('#hand-bottom [aria-disabled="false"]')).toHaveCount(14);
+            await guest.evaluate(lost => {
+                const send = App.network.sendTo.bind(App.network);
+                const apply = applyRemoteState;
+                window.__dropTransmission = true;
+                App.network.sendTo = (id, message) => lost === 'request' && window.__dropTransmission && message.type === 'playerAction'
+                    ? true : send(id, message);
+                applyRemoteState = data => apply(lost === 'acknowledgement' && window.__dropTransmission ? { ...data, actionAck: null } : data);
+            }, lost);
+            await guest.evaluate(id => _doDiscard(id), tileId);
+            if (lost === 'acknowledgement') await expect.poll(() => host.evaluate(() => window.__remoteDiscards)).toBe(1);
+            await expect(guest.locator('#turn-guidance')).toContainText('等待房主确认');
+            await guest.evaluate(() => {
+                window.__dropTransmission = false;
+                [...App.network.channels.values()][0].close();
+            });
+            await expect.poll(() => guest.evaluate(() => !!App.engine.pendingRemoteAction), { timeout: 15_000 }).toBe(false);
+            await expect.poll(() => host.evaluate(() => window.__remoteDiscards)).toBe(1);
+            await expect(guest.locator('#hand-bottom .mahjong-tile')).toHaveCount(13);
+            await host.evaluate(() => broadcastGameState(true));
+            expect(await host.evaluate(() => window.__remoteDiscards)).toBe(1);
+            expect(errors).toEqual([]);
+        } finally { await Promise.all(contexts.map(context => context.close())); }
+    });
+}
 
 for (const transition of ['result', 'room-close']) {
     test(`network ${transition} closes game menus and settings`, async ({ browser, baseURL }) => {

@@ -171,7 +171,8 @@ test('a settings redraw cannot unlock or repeat an unacknowledged guest discard'
     await expect(page.locator('#hand-bottom .mahjong-tile[aria-disabled="false"]')).toHaveCount(0);
     await page.evaluate(() => _doDiscard(App.engine.players[1].hand[0].id));
     expect(await page.evaluate(() => window.__guestMessages.length)).toBe(1);
-    await page.evaluate(() => applyRemoteState(JSON.parse(JSON.stringify(window.__choicePayload))));
+    await page.evaluate(() => applyRemoteState({ ...JSON.parse(JSON.stringify(window.__choicePayload)),
+        actionAck: window.__guestMessages[0].actionId }));
     await expect(page.locator('#hand-bottom .mahjong-tile[aria-disabled="false"]')).toHaveCount(14);
 });
 

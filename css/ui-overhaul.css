@@ -2328,6 +2328,94 @@ select {
     }
 }
 
+/* 有副露时为本家手牌保留完整高度，避免额外一排大牌挤出牌桌。 */
+#game-screen #player-bottom:has(.meld-group) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    justify-items: center;
+    column-gap: 8px;
+}
+
+#game-screen #player-bottom:has(.meld-group) .player-info {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    max-width: 100%;
+}
+
+#game-screen #melds-bottom {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    min-height: 0;
+    max-width: 100%;
+    flex-wrap: nowrap;
+    gap: 2px;
+    padding: 2px;
+}
+
+#game-screen #melds-bottom .meld-group {
+    min-width: 0;
+    padding: 1px;
+    gap: 0;
+}
+
+#game-screen #melds-bottom .mahjong-tile {
+    min-width: 0;
+    min-height: 0;
+    width: 20px;
+    height: 28px;
+    border-radius: 3px;
+    box-shadow: 0 2px 0 #9f8e67;
+}
+
+#game-screen #melds-bottom .tile-face {
+    font-size: 1.05rem;
+}
+
+#game-screen #player-bottom:has(.meld-group) .hand-area {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    padding: 4px 2px 6px;
+    justify-content: center;
+}
+
+#game-screen #player-bottom:has(.meld-group) .hand-area .mahjong-tile {
+    min-height: 0;
+    width: clamp(26px, 6vw, 54px);
+    height: clamp(44px, 9vh, 72px);
+}
+
+#game-screen #player-bottom:has(.meld-group) .hand-area .mahjong-tile + .mahjong-tile {
+    margin-left: 0;
+}
+
+@media (max-width: 560px) {
+    #game-screen:has(#player-bottom .meld-group) #action-bar {
+        bottom: 194px;
+    }
+
+    #game-screen #player-bottom:has(.meld-group) .player-info,
+    #game-screen #melds-bottom {
+        grid-column: 1 / -1;
+        justify-self: center;
+    }
+
+    #game-screen #melds-bottom {
+        grid-row: 2;
+    }
+
+    #game-screen #player-bottom:has(.meld-group) .hand-area {
+        grid-row: 3;
+    }
+
+    #game-screen #player-bottom:has(.meld-group) .hand-area .mahjong-tile {
+        height: clamp(44px, 9vh, 60px);
+    }
+}
+
 /* 回放牌张必须覆盖 game.css 中后声明的通用桌面尺寸。 */
 #replay-player .replay-hand .mahjong-tile,
 #replay-player .replay-hand .mahjong-tile.tile-small {
