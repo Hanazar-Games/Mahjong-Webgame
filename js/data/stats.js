@@ -158,8 +158,9 @@ const Stats = (function() {
     }
 
     function resetStats() {
-        Storage.set('stats', Utils.deepClone(DEFAULT_STATS));
-        return Utils.deepClone(DEFAULT_STATS);
+        const stats = Utils.deepClone(DEFAULT_STATS);
+        saveStats(stats);
+        return stats;
     }
 
     function addExp(amount) {

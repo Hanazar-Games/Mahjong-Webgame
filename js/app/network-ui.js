@@ -26,7 +26,6 @@
     }
 
     let _networkLobbyEventsBound = false;
-    let _lastBroadcastTime = 0;
     let _networkGameResultHandled = false;
 
     function canUseSignalServer() {
@@ -270,6 +269,12 @@
             Utils.toast(name ? `${name} 断开连接` : '玩家断开连接', 3000, 'warning');
         });
 
+        net.on('peerConnected', () => broadcastGameState(true));
+        net.on('error', error => {
+            showNetworkError(error.message || '联机连接失败');
+            Utils.toast(error.message || '联机连接失败', 3000, 'error');
+        });
+
         net.on('gameStart', (config) => {
             startNetworkGame(config).catch(err => {
                 console.error('startNetworkGame error:', err);
@@ -292,6 +297,13 @@
             showLobbyContent();
             App.isNetworkGame = false;
             if (App.engine) { App.engine.destroy(); App.engine = null; }
+            AudioManager.stopBgm();
+            AudioManager.stopAllSfx();
+            document.getElementById('ingame-menu')?.classList.add('hidden');
+            if (App.currentScreen === 'game-screen' || App.currentScreen === 'game-result') {
+                App.currentScreen = 'network-lobby';
+                UIComponents.switchScreen('network-lobby');
+            }
         });
     }
 
@@ -437,7 +449,7 @@
                     <span class="lobby-player-name">${Utils.escapeHtml(p.name || '未知')}${tags.join('')}</span>
                     <span class="lobby-player-status">${isHost ? '房主' : '玩家'}</span>
                 </div>
-                <span class="lobby-player-state connected">在线</span>
+                <span class="lobby-player-state ${p.online === false ? '' : 'connected'}">${p.online === false ? '离线' : '在线'}</span>
             `;
             list.appendChild(el);
         }
@@ -473,9 +485,13 @@
      * 开始联机游戏
      */
     async function startNetworkGame(config) {
+        if (App.isNetworkGame && App.engine && App.engine.state !== 'ended') return;
         hideNetworkError();
         const net = App.network;
         _networkGameResultHandled = false;
+        AudioManager.stopAllSfx();
+        startConfiguredBgm();
+        updateAnimSpeed(config.speed);
 
         if (net.isHost) {
             // 房主：正常启动引擎，广播状态
@@ -533,14 +549,11 @@
      */
     function broadcastGameState(force = false) {
         if (!App.engine || !App.network || !App.network.isHost) return;
-        const now = Date.now();
-        if (!force && now - _lastBroadcastTime < 200) return;
-        _lastBroadcastTime = now;
         const net = App.network;
         for (const p of net.players || []) {
             if (!p || p.id === net.playerId) continue;
             const state = buildNetworkStateFor(p.id);
-            net.sendTo(p.id, { type: 'stateSync', state, config: App.engine.config });
+            net.sendTo(p.id, { type: 'stateSync', data: { state, config: App.engine.config } });
         }
     }
 
@@ -552,7 +565,9 @@
                 players: data.players,
                 winner: data.winner || null,
                 mahjongType: App.engine?.config?.mahjongType || 'guangdong',
-                round: App.engine?.round || 1
+                round: App.engine?.round || 1,
+                history: (App.engine?.matchHistory || []).flatMap(round => (round.history || [])
+                    .filter(entry => ['hu', 'gang', 'anGang', 'jiaGang'].includes(entry.action)))
             }
         });
     }
@@ -560,6 +575,7 @@
     function buildNetworkStateFor(targetPlayerId) {
         const engine = App.engine;
         const state = engine.getState();
+        state.turnRemainingMs = engine.timer ? Math.max(0, engine._timerDeadline - Date.now()) : null;
         state.players = engine.players.map(player => player.toJSON(player.networkId === targetPlayerId));
         state.pendingAction = null;
         state.selfActions = {};
@@ -580,9 +596,9 @@
         }
 
         const targetPlayer = engine.players.find(p => p.networkId === targetPlayerId);
-        if (targetPlayer && engine.currentPlayerIndex === targetPlayer.position && engine.state === 'playing') {
+        if (targetPlayer && !targetPlayer.selfActionsSkipped && engine.currentPlayerIndex === targetPlayer.position && engine.state === 'playing') {
             const win = Rules.canWin(targetPlayer.hand, engine.ruleConfig);
-            state.selfActions.canHu = !!win.canWin;
+            state.selfActions.canHu = engine.canDeclareWin(targetPlayer, win, true);
             state.selfActions.anGangOptions = Rules.canAnGang(targetPlayer.hand, targetPlayer.melds, engine.ruleConfig);
         }
 
@@ -657,6 +673,7 @@
             App.engine.state = 'ended';
             App.engine.round = Number.isInteger(Number(data.round)) ? Math.max(1, Number(data.round)) : App.engine.round;
             App.engine.config.mahjongType = mahjongType;
+            App.engine.matchHistory = [{ history: Array.isArray(data.history) ? data.history : [] }];
             for (const player of players) {
                 const enginePlayer = App.engine.players?.[player.position];
                 if (enginePlayer) {
@@ -676,7 +693,6 @@
         const localPosition = App.localPlayerIndex ?? 0;
         AudioManager.SFX.gameEnd(winner?.position === localPosition);
         AudioManager.stopBgm();
-        App.isNetworkGame = false;
     }
 
     /**
@@ -762,6 +778,8 @@
                 case 'skip':
                     if (engine.pendingAction?.player?.position === playerIdx) {
                         await engine.skipAction();
+                    } else if (engine.currentPlayerIndex === playerIdx) {
+                        player.selfActionsSkipped = true;
                     }
                     break;
             }
@@ -805,6 +823,13 @@
 
         // 同步引擎状态（轻量同步，不触发事件）
         const engine = App.engine;
+        const previousDiscardId = engine.lastDiscard?.id;
+        const localPlayer = engine.players[App.localPlayerIndex ?? 0];
+        const previousHandIds = new Set((localPlayer?.hand || []).map(tile => tile.id));
+        const sameRound = previousHandIds.size > 0 && engine.round === state.round && engine.state !== 'ended';
+        const previousMelds = new Set(engine.players.flatMap(player => player.melds.map(meld =>
+            `${player.id}:${meld.type}:${meld.tiles.map(tile => tile.id).join(',')}`)));
+        const previousWinners = new Set(engine.players.filter(player => player.isHu).map(player => player.id));
         engine.config = { ...engine.config, ...config };
         engine.state = state.state || 'playing';
         engine.currentPlayerIndex = state.currentPlayer ?? 0;
@@ -828,6 +853,7 @@
                 if (Array.isArray(sp.hand)) {
                     ep.hand = sp.hand;
                 }
+                ep.queYiMen = sp.queYiMen ?? null;
                 ep.melds = sp.melds || ep.melds;
                 ep.discards = sp.discards || ep.discards;
                 ep.flowers = sp.flowers || ep.flowers;
@@ -862,6 +888,31 @@
 
         // 渲染
         renderGameState();
+        if (Number.isFinite(state.turnRemainingMs) && state.turnRemainingMs > 0) {
+            engine.emit('timerStart', { timeout: state.turnRemainingMs });
+        } else {
+            engine.emit('timerStop');
+        }
+        if (sameRound && engine.lastDiscard?.id !== previousDiscardId && engine.lastDiscard) {
+            const selfDiscarded = previousHandIds.has(engine.lastDiscard.id);
+            AudioManager.SFX[selfDiscarded ? 'discard' : 'opponentDiscard'](engine.lastDiscard);
+        }
+        const drawnTile = engine.players[App.localPlayerIndex ?? 0]?.hand.find(tile => !previousHandIds.has(tile.id));
+        if (sameRound && drawnTile) AudioManager.SFX.draw(drawnTile);
+        if (sameRound) {
+            for (const player of engine.players) {
+                for (const meld of player.melds) {
+                    if (previousMelds.has(`${player.id}:${meld.type}:${meld.tiles.map(tile => tile.id).join(',')}`)) continue;
+                    const action = meld.isAnGang ? 'anGang' : meld.type === 'gang' ? 'gang' : meld.type === 'sequence' ? 'chi' : 'peng';
+                    AudioManager.SFX[action]();
+                    UIComponents.showActionEffect({ anGang: '暗杠', gang: '杠', chi: '吃', peng: '碰' }[action]);
+                }
+                if (player.isHu && !previousWinners.has(player.id)) {
+                    AudioManager.SFX.hu();
+                    UIComponents.showActionEffect('胡');
+                }
+            }
+        }
 
         if (engine.currentPlayerIndex === (App.localPlayerIndex ?? 0) && engine.state === 'playing') {
             enablePlayerActions(true);

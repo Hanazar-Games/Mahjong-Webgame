@@ -65,7 +65,8 @@
         const isSelf = playerIndex === localIndex;
         const player = App.engine.players?.[playerIndex];
         if (!player) return;
-        const displayMode = isSelf ? 'full' : (App.settings?.opponentDisplay ?? 'small');
+        const opponentDisplay = App.settings?.opponentDisplay ?? 'small';
+        const displayMode = isSelf ? 'full' : (App.isNetworkGame && opponentDisplay === 'full' ? 'small' : opponentDisplay);
         
         if (isSelf || displayMode === 'full') {
             const hand = isSelf ? player.hand : (displayMode === 'full' ? player.hand : null);
@@ -114,6 +115,17 @@
                     existingEls.delete(tile.id);
                     // 清除之前的动画类（避免重复动画）
                     tileEl.classList.remove('tile-drawn');
+                }
+                let nameLabel = tileEl.querySelector('.tile-name-label');
+                if (App.settings?.showTileNames && tile.name) {
+                    if (!nameLabel) {
+                        nameLabel = document.createElement('span');
+                        nameLabel.className = 'tile-name-label';
+                        tileEl.appendChild(nameLabel);
+                    }
+                    nameLabel.textContent = tile.name;
+                } else {
+                    nameLabel?.remove();
                 }
                 
                 // 摸牌动画：优先匹配drawnTileId

@@ -32,7 +32,17 @@ const Rules = (function() {
     function _getCanWinCached(hand, config) {
         const key = _canWinCacheKey(hand, config);
         if (_canWinCache.has(key)) {
-            return _canWinCache.get(key);
+            const cached = _canWinCache.get(key);
+            if (cached.type !== 'standard') return { ...cached };
+            const available = new Map();
+            for (const tile of hand) {
+                const key = tileKey(tile);
+                if (!available.has(key)) available.set(key, []);
+                available.get(key).push(tile);
+            }
+            const restore = key => available.get(key).shift();
+            return { ...cached, pair: cached.pair.map(restore),
+                melds: cached.melds.map(m => ({ ...m, tiles: m.tiles.map(restore) })) };
         }
         return undefined;
     }
@@ -46,7 +56,10 @@ const Rules = (function() {
                 _canWinCache.set(entries[i][0], entries[i][1]);
             }
         }
-        _canWinCache.set(key, result);
+        _canWinCache.set(key, result.type === 'standard'
+            ? { ...result, pair: result.pair.map(tileKey),
+                melds: result.melds.map(m => ({ ...m, tiles: m.tiles.map(tileKey) })) }
+            : { ...result });
     }
 
     // ===== 番数体系 =====
@@ -174,8 +187,7 @@ const Rules = (function() {
     function findStandardWin(tiles) {
         if (tiles.length === 0) return { pair: [], melds: [] };
         if (tiles.length % 3 !== 2) return null;
-        // 标准胡牌至少需要5张（1对+1个面子）
-        if (tiles.length < 5) return null;
+        if (tiles.length < 2) return null;
 
         // 尝试每种牌作为将牌
         for (let i = 0; i < tiles.length - 1; i++) {
@@ -463,27 +475,27 @@ const Rules = (function() {
 
         // ===== 最高番型（独立番种，不叠加） =====
         // 大四喜
-        if (isDaSiXi(hand, melds)) {
+        if (getFanValue(config, 'da_si_xi') > 0 && isDaSiXi(hand, melds)) {
             addFan('da_si_xi', '大四喜');
             return { total: fan, fans };
         }
         // 大三元
-        if (isDaSanYuan(hand, melds)) {
+        if (getFanValue(config, 'da_san_yuan') > 0 && isDaSanYuan(hand, melds)) {
             addFan('da_san_yuan', '大三元');
             return { total: fan, fans };
         }
         // 字一色
-        if (isZiYiSe(hand, melds)) {
+        if (getFanValue(config, 'zi_yi_se') > 0 && isZiYiSe(hand, melds)) {
             addFan('zi_yi_se', '字一色');
             return { total: fan, fans };
         }
         // 绿一色
-        if (isLvYiSe(hand, melds)) {
+        if (getFanValue(config, 'lv_yi_se') > 0 && isLvYiSe(hand, melds)) {
             addFan('lv_yi_se', '绿一色');
             return { total: fan, fans };
         }
         // 清幺九
-        if (isQingYaoJiu(hand, melds)) {
+        if (getFanValue(config, 'qing_yao_jiu') > 0 && isQingYaoJiu(hand, melds)) {
             addFan('qing_yao_jiu', '清幺九');
             return { total: fan, fans };
         }
@@ -612,11 +624,10 @@ const Rules = (function() {
 
     function isHunYiSe(hand, melds) {
         const all = getAllTiles(hand, melds);
-        const suits = new Set(all.map(t => t.suit));
+        const suits = new Set(all.filter(t => !t.isHonor).map(t => t.suit));
         const hasHonor = all.some(t => t.isHonor);
-        const hasNonHonor = all.some(t => !t.isHonor);
         // 混一色 = 一种数牌花色 + 字牌，不能全是字牌（那是字一色）
-        return suits.size === 2 && hasHonor && hasNonHonor;
+        return suits.size === 1 && hasHonor;
     }
 
     function isPengPengHu(winInfo, melds) {

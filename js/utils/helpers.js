@@ -29,13 +29,28 @@ const Utils = {
      */
     sleep(ms, token) {
         return new Promise((resolve, reject) => {
-            const timer = setTimeout(resolve, ms);
+            let remaining = Math.max(0, ms), started = 0, timer = null;
+            let unsubscribe = () => {}, unpause = () => {};
+            const cleanup = () => { clearTimeout(timer); unsubscribe(); unpause(); };
+            const schedule = () => {
+                if (token?.isPaused) return;
+                started = Date.now();
+                timer = setTimeout(() => { cleanup(); resolve(); }, remaining);
+            };
             if (token) {
-                token.onCancel(() => {
-                    clearTimeout(timer);
+                unpause = token.onPauseChange(() => {
+                    if (token.isPaused) {
+                        if (timer !== null) remaining = Math.max(0, remaining - (Date.now() - started));
+                        clearTimeout(timer);
+                        timer = null;
+                    } else schedule();
+                });
+                unsubscribe = token.onCancel(() => {
+                    cleanup();
                     reject(new Error('CANCELLED'));
                 });
             }
+            if (!token?.isCancelled) schedule();
         });
     },
 
@@ -46,17 +61,38 @@ const Utils = {
         constructor() {
             this._cancelled = false;
             this._callbacks = [];
+            this._pauseListeners = new Set();
+            this.isPaused = false;
         }
         get isCancelled() { return this._cancelled; }
         cancel() {
             if (this._cancelled) return;
             this._cancelled = true;
-            this._callbacks.forEach(cb => cb());
-            this._callbacks = [];
+            const callbacks = this._callbacks.splice(0);
+            callbacks.forEach(cb => cb());
+            this._pauseListeners.clear();
         }
         onCancel(cb) {
-            if (this._cancelled) { cb(); return; }
+            if (this._cancelled) { cb(); return () => {}; }
             this._callbacks.push(cb);
+            return () => {
+                const index = this._callbacks.indexOf(cb);
+                if (index >= 0) this._callbacks.splice(index, 1);
+            };
+        }
+        onPauseChange(cb) {
+            this._pauseListeners.add(cb);
+            return () => this._pauseListeners.delete(cb);
+        }
+        pause() {
+            if (this.isPaused || this._cancelled) return;
+            this.isPaused = true;
+            this._pauseListeners.forEach(cb => cb());
+        }
+        resume() {
+            if (!this.isPaused || this._cancelled) return;
+            this.isPaused = false;
+            this._pauseListeners.forEach(cb => cb());
         }
         throwIfCancelled() {
             if (this._cancelled) throw new Error('CANCELLED');

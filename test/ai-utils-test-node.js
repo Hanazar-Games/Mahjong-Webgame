@@ -125,23 +125,25 @@ for (let i = 1; i <= 7; i++) {
 }
 assertEq('七对7对(14张)已胡: shanten=-1', AIUtils.calculateSevenPairsShanten(sevenPairs7), -1);
 
-// 6 对（12 张）= 听牌
+// 6 对 + 1 单（13 张）= 听牌
 const sevenPairs6 = [];
 for (let i = 1; i <= 6; i++) {
     sevenPairs6.push(T('wan', i), T('wan', i));
 }
-assertEq('七对6对(12张): shanten=0', AIUtils.calculateSevenPairsShanten(sevenPairs6), 0);
 
 // 6 对 + 1 单（13 张）= 听牌
 const sevenPairs6plus1 = [...sevenPairs6, T('wan', 7)];
 assertEq('七对6对+1单(13张): shanten=0', AIUtils.calculateSevenPairsShanten(sevenPairs6plus1), 0);
 
-// 5 对（10 张）= 1 向听
+// 5 对 + 3 单（13 张）= 1 向听
 const sevenPairs5 = [];
 for (let i = 1; i <= 5; i++) {
     sevenPairs5.push(T('wan', i), T('wan', i));
 }
-assertEq('七对5对(10张): shanten=1', AIUtils.calculateSevenPairsShanten(sevenPairs5), 1);
+sevenPairs5.push(T('wan', 6), T('wan', 7), T('wan', 8));
+assertEq('七对5对+3单(13张): shanten=1', AIUtils.calculateSevenPairsShanten(sevenPairs5), 1);
+const repeatedTypes = [...sevenPairs6, T('wan', 1)];
+assertEq('七对6种牌含刻子(13张): shanten=1', AIUtils.calculateSevenPairsShanten(repeatedTypes), 1);
 
 // 副露后不再具备七对/十三幺资格，综合向听必须以标准牌型为准
 const openHand = [

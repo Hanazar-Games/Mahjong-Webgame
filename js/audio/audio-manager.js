@@ -19,17 +19,15 @@ const AudioManager = (function() {
     let bgmTimer = null;
     let sfxEnabled = true;
     let bgmResumeAfterVisibility = null;
+    let bgmGeneration = 0;
     const activeSfxTimers = new Set();
 
-    // 音频缓存（避免重复创建）
-    const audioCache = new Map();
-
     function init() {
-        if (audioCtx) return;
+        if (audioCtx && audioCtx.state !== 'closed') return;
         try {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             masterGain = audioCtx.createGain();
-            masterGain.gain.value = 1;
+            masterGain.gain.value = isMuted ? 0 : 1;
             if (typeof audioCtx.createDynamicsCompressor === 'function') {
                 limiter = audioCtx.createDynamicsCompressor();
                 limiter.threshold.value = -8;
@@ -76,7 +74,7 @@ const AudioManager = (function() {
 
     function resume() {
         if (audioCtx && audioCtx.state === 'suspended') {
-            audioCtx.resume();
+            audioCtx.resume().catch(error => console.warn('Audio resume failed:', error.message));
         }
     }
 
@@ -573,11 +571,14 @@ const AudioManager = (function() {
         if (!audioCtx || !bgmGain) return;
 
         bgmPlaying = true;
+        const generation = bgmGeneration;
+        let phraseTime = audioCtx.currentTime + 0.08;
         const loop = () => {
-            if (!bgmPlaying || currentBgm !== style) return;
+            if (!bgmPlaying || currentBgm !== style || generation !== bgmGeneration) return;
+            if (audioCtx.state === 'closed') { stopBgm(); return; }
             const activePattern = BGM_PATTERNS[style];
             const melody = activePattern.notes[Math.floor(Math.random() * activePattern.notes.length)];
-            const startTime = audioCtx.currentTime + 0.08;
+            const startTime = Math.max(phraseTime, audioCtx.currentTime + 0.02);
             const endTime = schedulePhrase(
                 melody,
                 startTime,
@@ -586,7 +587,8 @@ const AudioManager = (function() {
                 activePattern.type,
                 activePattern.harmony
             );
-            const delay = Math.max(250, (endTime - audioCtx.currentTime) * 1000);
+            phraseTime = endTime;
+            const delay = Math.max(100, (endTime - audioCtx.currentTime - 0.15) * 1000);
             bgmTimer = setTimeout(loop, delay);
         };
         loop();
@@ -648,6 +650,7 @@ const AudioManager = (function() {
     }
 
     function stopBgm(preserveVisibilityResume = false) {
+        bgmGeneration++;
         bgmPlaying = false;
         currentBgm = null;
         if (!preserveVisibilityResume) bgmResumeAfterVisibility = null;

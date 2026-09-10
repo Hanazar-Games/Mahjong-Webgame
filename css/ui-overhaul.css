@@ -924,9 +924,15 @@ select {
     display: none;
 }
 
+#game-screen .player-area.bottom .hand-area .mahjong-tile {
+    flex-shrink: 1;
+    min-width: 0;
+}
+
 /* 覆盖 game.css 的大屏固定牌高，避免 720p 窗口中对家手牌挤出顶部区域。 */
 #game-screen .player-area.top .mahjong-tile,
 #game-screen .player-area.top .mahjong-tile.back {
+    flex-shrink: 1;
     min-width: 0;
     min-height: 0;
     width: clamp(34px, 3.5vw, 48px);
@@ -1024,6 +1030,7 @@ select {
     min-height: 0;
     transform: none !important;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto minmax(0, 1fr);
     align-items: center;
     justify-items: center;
@@ -1158,13 +1165,18 @@ select {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(32px, 38px));
     grid-auto-rows: min-content;
-    align-content: center;
+    align-content: start;
+    max-height: 100%;
     justify-content: center;
     gap: 4px;
     padding: 9px;
     background: rgba(4, 18, 11, 0.1);
     border: 1px dashed rgba(232, 200, 112, 0.12);
     border-radius: 18px;
+}
+
+#game-screen:has(#action-bar.has-actions) .table-center {
+    padding-bottom: 84px;
 }
 
 /* 动作按钮栏 */
@@ -2233,9 +2245,25 @@ select {
 
     .action-bar {
         bottom: 126px;
+        left: auto;
+        right: 90px;
+        transform: none;
         gap: 4px;
         padding: 4px;
         padding-bottom: 4px !important;
+    }
+
+    .action-bar.has-actions {
+        transform: none;
+    }
+
+    #game-screen:has(#action-bar.has-actions) .table-center {
+        padding-bottom: 5px;
+    }
+
+    #game-screen:has(#action-bar.has-actions) .discard-pile {
+        width: calc(100% - 260px);
+        justify-self: start;
     }
 
     .action-btn {

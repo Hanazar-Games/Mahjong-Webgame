@@ -227,8 +227,12 @@
                 () => openReplayPlayer(replay),
                 () => {
                     if (confirm('确定删除这条记录？')) {
-                        Replay.deleteReplay(replay.id);
-                        renderReplays();
+                        try {
+                            Replay.deleteReplay(replay.id);
+                            renderReplays();
+                        } catch (error) {
+                            Utils.toast(error.message, 3000, 'error');
+                        }
                     }
                 }
             ));

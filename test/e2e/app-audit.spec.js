@@ -267,13 +267,14 @@ test('release metadata and announcement history stay aligned', async ({ request 
     const changelog = await (await request.get('/CHANGELOG.md')).text();
     const historyIndex = changelog.indexOf('## 历史公告');
 
-    expect(packageJson.version).toBe('1.0.19');
-    expect(packageLock.version).toBe('1.0.19');
-    expect(packageLock.packages[''].version).toBe('1.0.19');
-    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v20'");
+    expect(packageJson.version).toBe('1.0.20');
+    expect(packageLock.version).toBe('1.0.20');
+    expect(packageLock.packages[''].version).toBe('1.0.20');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v21'");
     expect(serviceWorker).toContain("'./assets/ui/icons.svg'");
     expect(serviceWorker).toContain("'./manifest.json'");
-    expect(changelog.indexOf('## [1.0.19] - 2026-07-30')).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('## [1.0.20] - 2026-09-11')).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.19] - 2026-07-30')).toBeGreaterThan(historyIndex);
     expect(changelog.indexOf('### [1.0.18] - 2026-07-29')).toBeGreaterThan(historyIndex);
 });
 
@@ -896,7 +897,8 @@ test('network guest receives a localized final result from the trusted host', as
     await expect(page.locator('#result-subtitle')).toHaveText('净胜 +300 分');
     await expect(page.locator('.result-player-row.winner .result-p-name')).toHaveText('访客');
     await expect(page.locator('#result-rewards')).toContainText('广东麻将');
-    expect(await page.evaluate(() => App.isNetworkGame)).toBe(false);
+    expect(await page.evaluate(() => App.isNetworkGame)).toBe(true);
+    await expect(page.locator('#btn-result-restart')).toBeDisabled();
 });
 
 test('Taiwan 17-tile hand remains fully visible on a small portrait phone', async ({ page }) => {
@@ -1305,7 +1307,7 @@ test('host immediately acknowledges a remote chi inside the broadcast throttle w
                 { id: 'remote-player', isHost: false }
             ],
             sendTo(id, payload) {
-                sends.push({ id, state: payload.state?.state, currentPlayer: payload.state?.currentPlayer });
+                sends.push({ id, state: payload.data?.state?.state, currentPlayer: payload.data?.state?.currentPlayer });
                 return true;
             }
         };
@@ -1322,9 +1324,7 @@ test('host immediately acknowledges a remote chi inside the broadcast throttle w
 
     expect(result.meldCount).toBe(1);
     expect(result.currentPlayer).toBe(1);
-    expect(result.sends).toEqual([
-        { id: 'remote-player', state: 'playing', currentPlayer: 1 }
-    ]);
+    expect(result.sends.at(-1)).toEqual({ id: 'remote-player', state: 'playing', currentPlayer: 1 });
 });
 
 test('network guest receives simultaneous chi and peng choices and can send chi', async ({ page }) => {

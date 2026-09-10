@@ -12,32 +12,6 @@ const AIUtils = (function() {
     const _shantenMemo = new Map();
     const _MAX_SHANTEN_MEMO = 10000;
 
-    function _memoKey(counts) {
-        return Object.entries(counts)
-            .filter(([k, v]) => v > 0)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([k, v]) => `${k}:${v}`)
-            .join(',');
-    }
-
-    function _getMemo(counts) {
-        const key = _memoKey(counts);
-        return _shantenMemo.has(key) ? _shantenMemo.get(key) : undefined;
-    }
-
-    function _setMemo(counts, value) {
-        const key = _memoKey(counts);
-        if (_shantenMemo.size >= _MAX_SHANTEN_MEMO) {
-            // 清空一半：保留最近插入的（Map 保持插入顺序）
-            const entries = Array.from(_shantenMemo.entries());
-            _shantenMemo.clear();
-            for (let i = Math.floor(entries.length / 2); i < entries.length; i++) {
-                _shantenMemo.set(entries[i][0], entries[i][1]);
-            }
-        }
-        _shantenMemo.set(key, value);
-    }
-
     // ============================================================
     // 1. 向听数计算 (Shanten)
     // ============================================================
@@ -63,103 +37,61 @@ const AIUtils = (function() {
      * @returns {number} 向听数，0=听牌，-1=已胡
      */
     function calculateStandardShanten(hand, melds = []) {
-        const counts = handToCounts(hand);
-        const memo = new Map();
-
-        /**
-         * 递归计算手牌最大价值：value = 2*complete_groups + shapes
-         * shapes 包括：对子、两面/坎张/边张搭子
-         */
-        function analyzeHandValue(counts) {
-            // 先查模块级缓存
-            const cached = _getMemo(counts);
-            if (cached !== undefined) return cached;
-
-            const key = _memoKey(counts);
-            if (memo.has(key)) return memo.get(key);
-
-            const keys = Object.keys(counts).filter(k => counts[k] > 0);
-            if (keys.length === 0) {
-                memo.set(key, 0);
-                _setMemo(counts, 0);
-                return 0;
+        const counts = Array(34).fill(0);
+        const offsets = { wan: 0, tong: 9, tiao: 18, feng: 27, jian: 31 };
+        for (const tile of hand) {
+            if (!tile.isFlower && offsets[tile.suit] !== undefined) counts[offsets[tile.suit] + tile.value - 1]++;
+        }
+        const target = Math.max(0, Math.ceil((hand.length - 2) / 3));
+        const key = `${target}:${counts.join('')}`;
+        if (_shantenMemo.has(key)) return _shantenMemo.get(key);
+        let best = 2 * target;
+        const seen = new Set();
+        function search(index, groups, shapes, pair) {
+            if (best === -1) return;
+            while (index < 34 && counts[index] === 0) index++;
+            if (index === 34) {
+                best = Math.min(best, 2 * target - 2 * groups - Math.min(shapes, target - groups) - pair);
+                return;
             }
-
-            let max = 0;
-
-            for (const k of keys) {
-                const [suit, val] = k.split('-');
-                const v = parseInt(val);
-                const isNumber = suit !== 'feng' && suit !== 'jian';
-
-                // 完整刻子: +2
-                if (counts[k] >= 3) {
-                    const c = { ...counts };
-                    c[k] -= 3;
-                    if (c[k] === 0) delete c[k];
-                    max = Math.max(max, 2 + analyzeHandValue(c));
+            const state = `${groups}${shapes}${pair}:${counts.join('')}`;
+            if (seen.has(state)) return;
+            seen.add(state);
+            const numbered = index < 27;
+            if (groups < target) {
+                if (counts[index] >= 3) {
+                    counts[index] -= 3;
+                    search(index, groups + 1, shapes, pair);
+                    counts[index] += 3;
                 }
-
-                // 完整顺子: +2
-                if (isNumber) {
-                    const k1 = `${suit}-${v + 1}`;
-                    const k2 = `${suit}-${v + 2}`;
-                    if ((counts[k1] || 0) > 0 && (counts[k2] || 0) > 0) {
-                        const c = { ...counts };
-                        c[k]--; if (c[k] === 0) delete c[k];
-                        c[k1]--; if (c[k1] === 0) delete c[k1];
-                        c[k2]--; if (c[k2] === 0) delete c[k2];
-                        max = Math.max(max, 2 + analyzeHandValue(c));
-                    }
-                }
-
-                // 对子搭子: +1
-                if (counts[k] >= 2) {
-                    const c = { ...counts };
-                    c[k] -= 2;
-                    if (c[k] === 0) delete c[k];
-                    max = Math.max(max, 1 + analyzeHandValue(c));
-                }
-
-                // 两面/坎张/边张搭子 (两张连续数牌): +1
-                if (isNumber) {
-                    const k1 = `${suit}-${v + 1}`;
-                    if ((counts[k1] || 0) > 0) {
-                        const c = { ...counts };
-                        c[k]--; if (c[k] === 0) delete c[k];
-                        c[k1]--; if (c[k1] === 0) delete c[k1];
-                        max = Math.max(max, 1 + analyzeHandValue(c));
-                    }
+                if (numbered && index % 9 <= 6 && counts[index + 1] && counts[index + 2]) {
+                    counts[index]--; counts[index + 1]--; counts[index + 2]--;
+                    search(index, groups + 1, shapes, pair);
+                    counts[index]++; counts[index + 1]++; counts[index + 2]++;
                 }
             }
-
-            memo.set(key, max);
-            _setMemo(counts, max);
-            return max;
+            if (counts[index] >= 2) {
+                counts[index] -= 2;
+                if (!pair) search(index, groups, shapes, 1);
+                if (shapes < target - groups) search(index, groups, shapes + 1, pair);
+                counts[index] += 2;
+            }
+            if (numbered && shapes < target - groups) {
+                for (const offset of [1, 2]) {
+                    if (index % 9 + offset > 8 || !counts[index + offset]) continue;
+                    counts[index]--; counts[index + offset]--;
+                    search(index, groups, shapes + 1, pair);
+                    counts[index]++; counts[index + offset]++;
+                }
+            }
+            counts[index]--;
+            search(index, groups, shapes, pair);
+            counts[index]++;
         }
-
-        let bestValue = -Infinity;
-
-        // 判断手牌中是否已有任何对子
-        const hasAnyPair = Object.values(counts).some(c => c >= 2);
-
-        // 无对子分支：必须预留2张牌做对子，价值减1补偿
-        const noPairValue = analyzeHandValue({ ...counts });
-        bestValue = Math.max(bestValue, hasAnyPair ? noPairValue : noPairValue - 1);
-
-        // 尝试每个对子
-        for (const key of Object.keys(counts)) {
-            if (counts[key] < 2) continue;
-            const c = { ...counts };
-            c[key] -= 2;
-            if (c[key] === 0) delete c[key];
-            bestValue = Math.max(bestValue, analyzeHandValue(c) + 1);
-        }
-
-        // 动态计算目标面子数（台湾麻将16张=5面子，标准13张=4面子）
-        const targetMelds = Math.ceil((hand.length + melds.length * 3 - 2) / 3);
-        const shanten = 2 * targetMelds - 2 * melds.length - bestValue;
-        return Math.max(-1, shanten);
+        search(0, 0, 0, 0);
+        if (_shantenMemo.size >= _MAX_SHANTEN_MEMO) _shantenMemo.clear();
+        _shantenMemo.set(key, best);
+        return best;
     }
 
     /**
@@ -169,10 +101,10 @@ const AIUtils = (function() {
         const counts = handToCounts(hand);
         let pairs = 0;
         for (const key of Object.keys(counts)) {
-            pairs += Math.floor(counts[key] / 2);
+            if (counts[key] >= 2) pairs++;
         }
-        // 七对子向听数：6 - 对子数（适用于13/14/16张等所有大小）
-        return Math.max(-1, 6 - pairs);
+        const target = Math.max(7, Math.ceil(hand.length / 2));
+        return Math.max(-1, target - 1 - pairs + Math.max(0, target - Object.keys(counts).length));
     }
 
     /**
@@ -185,14 +117,12 @@ const AIUtils = (function() {
         const counts = handToCounts(hand);
         let uniqueYaoJiu = 0;
         let hasPair = false;
-        let nonYaoJiu = 0;
 
         for (const key of Object.keys(counts)) {
             const [suit, val] = key.split('-');
             const v = parseInt(val);
             const isYaoJiu = yaoJiuSuits.has(suit) || yaoJiuValues.includes(v);
             if (!isYaoJiu) {
-                nonYaoJiu += counts[key];
                 continue;
             }
 
@@ -201,8 +131,7 @@ const AIUtils = (function() {
         }
 
         // 需要13种幺九牌各一张 + 其中一种对子
-        // 非幺九牌必须全部替换掉
-        const shanten = 13 - uniqueYaoJiu - (hasPair ? 1 : 0) + nonYaoJiu;
+        const shanten = 13 - uniqueYaoJiu - (hasPair ? 1 : 0);
         return Math.max(-1, shanten);
     }
 
@@ -381,11 +310,6 @@ const AIUtils = (function() {
         const players = ctx.players || [];
         const doraIndicators = ctx.doraIndicators || [];
         const deckCount = ctx && ctx.deckCount !== undefined ? ctx.deckCount : 70;
-
-        // 1. 现物安全（已出现过的牌）
-        if (isGenbutsu(tile, discardPile)) {
-            return 0;
-        }
 
         // 2. 数量安全（已有几张出现）
         const appearedCount = countAppeared(tile, ctx);
@@ -668,7 +592,8 @@ const AIUtils = (function() {
         }
 
         const suits = Object.keys(suitCounts);
-        if (suits.length === 0) return { suit: 'wan', shantenAfter: 0, tileCount: 0 };
+        const absentSuit = ['wan', 'tong', 'tiao'].find(suit => !suitCounts[suit]);
+        if (absentSuit) return { suit: absentSuit, shantenAfter: calculateShanten(hand, [], config), tileCount: 0 };
 
         let best = null;
         let bestScore = Infinity;

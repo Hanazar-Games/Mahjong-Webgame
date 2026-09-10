@@ -52,11 +52,11 @@ const Replay = (function() {
 
     function deleteReplay(id) {
         const replays = getReplays().filter(r => r.id !== id);
-        Storage.set('replays', replays);
+        if (!Storage.set('replays', replays)) throw new Error('删除回放失败');
     }
 
     function clearReplays() {
-        Storage.set('replays', []);
+        if (!Storage.set('replays', [])) throw new Error('清空回放失败');
     }
 
     function createReplayData(engine) {

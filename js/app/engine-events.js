@@ -312,7 +312,6 @@
                 broadcastGameResult(data);
             }
             AudioManager.stopBgm();
-            App.isNetworkGame = false;
         });
         
         engine.on('drawGame', (data) => {

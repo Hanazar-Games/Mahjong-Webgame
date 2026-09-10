@@ -132,7 +132,7 @@ assert('playerDraw records draw history', hasDrawRecord, `gameHistory=${JSON.str
 // Test 2: draw 记录包含 playerId 和 tile
 const drawEntry = engine.gameHistory.find(h => h.action === 'draw');
 assert('draw record has playerId', drawEntry && typeof drawEntry.data.playerId === 'number');
-assert('draw record has tile id', drawEntry && typeof drawEntry.data.tile === 'string');
+assert('draw record has full tile', drawEntry && typeof drawEntry.data.tile.id === 'string' && !!drawEntry.data.tile.suit);
 
 // Test 3: createReplayData 返回完整结构
 engine.recordHistory('discard', { playerId: 0, tile: 'wan_1' });

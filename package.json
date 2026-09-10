@@ -1,12 +1,12 @@
 {
   "name": "mahjong-webgame",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "万能麻将 - 中国麻将大全",
   "scripts": {
     "client": "python3 -m http.server 8080",
     "start": "python3 -m http.server 8080 & node server/signaling-server.js",
     "server": "node server/signaling-server.js",
-    "test": "node test/rules-test-node.js && node test/stats-test.js && node test/ai-utils-test-node.js && node test/ai-strategy-test-node.js && node test/replay-data-test.js && node test/engine-test-node.js",
+    "test": "node test/rules-test-node.js && node test/stats-test.js && node test/ai-utils-test-node.js && node test/ai-strategy-test-node.js && node test/replay-data-test.js && node test/engine-test-node.js && node --test test/regressions.test.js",
     "test:e2e": "playwright test",
     "test:all": "npm test && npm run test:e2e",
     "lint": "echo 'ESLint not configured yet'"

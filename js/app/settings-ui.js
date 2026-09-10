@@ -163,27 +163,20 @@
     /**
      * 显示/隐藏游戏内菜单
      */
-    let _wasTimerRunning = false;
-
     function showIngameMenu() {
         const menu = document.getElementById('ingame-menu');
         if (menu) menu.classList.remove('hidden');
-        // 暂停回合计时器，防止玩家在菜单打开时被自动出牌
-        _wasTimerRunning = !!(App.engine?.timer);
-        App.engine?.stopTimer();
+        const title = document.getElementById('ingame-title-text');
+        if (title) title.textContent = App.isNetworkGame ? '菜单 · 联机对局继续中' : '暂停';
+        const restart = document.getElementById('btn-restart');
+        if (restart) restart.disabled = !!App.isNetworkGame;
+        if (!App.isNetworkGame) App.engine?.pause();
     }
 
     function hideIngameMenu() {
         const menu = document.getElementById('ingame-menu');
         if (menu) menu.classList.add('hidden');
-        // 恢复回合计时器（仅当暂停前计时器在运行、且仍是玩家回合时）
-        if (_wasTimerRunning && App.engine && App.engine.state === 'playing') {
-            const player = App.engine.players[App.engine.currentPlayerIndex];
-            if (player && !player.isAI) {
-                App.engine.startTimer();
-            }
-        }
-        _wasTimerRunning = false;
+        if (!App.isNetworkGame) App.engine?.resume();
     }
     /**
      * 处理设置变更
@@ -265,6 +258,10 @@
                     }
                 }
                 if (key === 'game-speed') {
+                    if (App.engine && !App.isNetworkGame) {
+                        App.engine.config.speed = value;
+                        if (value === 'instant') App.engine.stopTimer();
+                    }
                     if (typeof updateAnimSpeed === 'function') {
                         updateAnimSpeed(value);
                     }
@@ -279,8 +276,7 @@
                 if (key === 'show-tile-names') {
                     const enabled = !!value;
                     if (App.engine && App.currentScreen === 'game-screen') {
-                        const localIndex = App.localPlayerIndex ?? 0;
-                        renderPlayerHand(localIndex, App.engine.players[localIndex]?.hand?.length || 0);
+                        renderGameState();
                     }
                 }
                 if (key === 'show-shanten') {
@@ -523,6 +519,7 @@
                         try {
                             Stats.resetStats();
                             loadStats();
+                            renderAchievements();
                             Utils.toast('统计数据已重置', 3000, 'success');
                         } catch (e) {
                             console.error('重置统计失败:', e);

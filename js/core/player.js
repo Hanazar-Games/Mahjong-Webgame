@@ -24,6 +24,8 @@ class Player extends Utils.EventEmitter {
     }
 
     reset() {
+        delete this.handSize;
+        this.selfActionsSkipped = false;
         this.hand = [];
         this.melds = [];
         this.discards = [];
@@ -121,7 +123,7 @@ class Player extends Utils.EventEmitter {
             score: this.score,
             position: this.position,
             isDealer: this.isDealer,
-            handSize: this.hand.length,
+            handSize: this.handSize ?? this.hand.length,
             melds: this.melds.map(m => ({ ...m, tiles: m.tiles ? m.tiles.map(t => ({ ...t })) : [] })),
             discards: this.discards.map(t => ({ ...t })),
             flowers: this.flowers.map(t => ({ ...t })),

@@ -34,6 +34,11 @@
         // 渲染结算页
         const resultScreen = document.getElementById('game-result');
         if (!resultScreen) return;
+        const restartButton = document.getElementById('btn-result-restart');
+        if (restartButton) {
+            restartButton.disabled = App.isNetworkGame && !App.network?.isHost;
+            restartButton.textContent = restartButton.disabled ? '等待房主再开一局' : '再来一局';
+        }
         
         // 图标和标题
         const iconEl = document.getElementById('result-icon');
@@ -132,6 +137,7 @@
 
         let ziMoCount = 0;
         let huCount = 0;
+        let gangCount = 0;
         let maxFan = 0;
         let hasQingYiSe = false;
         let winType = null;
@@ -140,6 +146,7 @@
 
         for (const entry of allHistory) {
             if (!entry || !entry.data) continue;
+            if (entry.data.playerId === player?.id && ['gang', 'anGang', 'jiaGang'].includes(entry.action)) gangCount++;
 
             if (entry.action === 'hu' && entry.data.playerId === player?.id) {
                 huCount++;
@@ -172,7 +179,7 @@
                 mahjongType: App.engine?.config?.mahjongType || 'guangdong',
                 rounds: totalRounds,
                 wonRounds,
-                gangCount: player?.gangCount || 0,
+                gangCount,
                 huCount,
                 ziMoCount,
                 winType,
@@ -215,7 +222,7 @@
                 matchIsWin: isWin,
                 matchHuCount: huCount,
                 matchZiMoCount: ziMoCount,
-                matchGangCount: player?.gangCount || 0,
+                matchGangCount: gangCount,
                 matchFan: maxFan,
                 matchWonRounds: wonRounds,
                 matchRounds: totalRounds,
@@ -228,6 +235,15 @@
      * 重新开始
      */
     async function restartGame() {
+        if (App.isNetworkGame) {
+            if (!App.network?.isHost || App.engine?.state !== 'ended') return;
+            try {
+                await App.network.startGame({ ...App.engine.config });
+            } catch (error) {
+                Utils.toast(error.message || '重新开始失败', 3000, 'error');
+            }
+            return;
+        }
         // 清理所有可能残留的timeout，防止竞态腐蚀新游戏
         if (App._endGameTimeout) { clearTimeout(App._endGameTimeout); App._endGameTimeout = null; }
         if (App._tableEnterTimeout) { clearTimeout(App._tableEnterTimeout); App._tableEnterTimeout = null; }
@@ -253,6 +269,7 @@
      * 结束游戏
      */
     function endGame() {
+        if (App.network?.roomId) App.network.leaveRoom();
         // 取消可能存在的入场动画timeout
         if (App._tableEnterTimeout) {
             clearTimeout(App._tableEnterTimeout);

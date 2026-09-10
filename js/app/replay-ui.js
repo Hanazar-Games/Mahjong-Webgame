@@ -35,6 +35,25 @@
             this.players = Array.isArray(this.data.players) ? this.data.players : [];
             this.playerStates = [];
             this.discardPile = [];
+            this.deckCount = null;
+            this._tiles = new Map();
+            const indexTile = tile => {
+                if (tile && typeof tile === 'object' && tile.id) this._tiles.set(tile.id, tile);
+            };
+            const indexPlayers = players => {
+                for (const p of players || []) {
+                    [...(p.hand || []), ...(p.discards || []), ...(p.flowers || [])].forEach(indexTile);
+                    for (const meld of p.melds || []) (meld.tiles || []).forEach(indexTile);
+                }
+            };
+            for (const round of this.rounds) {
+                indexPlayers(round.players);
+                for (const entry of round.history) {
+                    const data = entry?.data || {};
+                    indexPlayers(data.players);
+                    [data.tile, data.flower, data.replacement, ...(data.tiles || [])].forEach(indexTile);
+                }
+            }
             this._handlers = {};
         }
 
@@ -280,6 +299,7 @@
                     return { icon: '🎉', text: `${ziMo}胡牌 ${fan}番`, player: playerName };
                 }
                 case 'drawGame': return { icon: '🤝', text: '流局', player: '' };
+                case 'flower': return { icon: '🌸', text: `补花 ${this._getTileName(data.flower)}`, player: playerName };
                 case 'roundEnd': return { icon: '🏁', text: `第${data.round}局结束`, player: '' };
                 default: return { icon: '•', text: action, player: playerName };
             }
@@ -298,6 +318,7 @@
         _findTile(tileId) {
             if (!tileId) return null;
             if (typeof tileId === 'object') return tileId;
+            if (this._tiles.has(tileId)) return this._tiles.get(tileId);
 
             for (const p of this.playerStates) {
                 for (const t of (p.hand || [])) {
@@ -335,12 +356,6 @@
                 }
             }
 
-            if (typeof tileId === 'string') {
-                const parts = tileId.split('_');
-                if (parts.length >= 2) {
-                    return Tiles.createTile(parts[0], parseInt(parts[1]), tileId);
-                }
-            }
             return null;
         }
 
@@ -368,12 +383,16 @@
             if (stepIdx < 0) stepIdx = 0;
             if (stepIdx >= round.history.length) stepIdx = round.history.length - 1;
 
-            this.playerStates = [];
-            this.discardPile = [];
-            this._resetTable();
+            const incremental = stepIdx === this.currentStep + 1 && this.playerStates.length > 0;
+            if (!incremental) {
+                this.playerStates = [];
+                this.discardPile = [];
+                this.deckCount = null;
+                this._resetTable();
+            }
 
             const hasGameStart = round.history.some(h => h.action === 'gameStart');
-            if (!hasGameStart && round.players) {
+            if (!incremental && !hasGameStart && round.players) {
                 this.playerStates = round.players.map(p => ({
                     id: p.id,
                     name: p.name,
@@ -387,7 +406,7 @@
                 }));
             }
 
-            for (let i = 0; i <= stepIdx; i++) {
+            for (let i = incremental ? stepIdx : 0; i <= stepIdx; i++) {
                 this._applyStep(round.history[i]);
             }
 
@@ -459,6 +478,7 @@
             if (!item) return;
             const action = item.action;
             const data = item.data || {};
+            if (Number.isInteger(data.deckCount)) this.deckCount = data.deckCount;
 
             const _removeFromHand = (p, tileId) => {
                 const idx = p.hand.findIndex(t => (t.id || t) === tileId);
@@ -467,7 +487,7 @@
                     p.hand.splice(idx, 1);
                     return obj;
                 }
-                return tileId;
+                return this._findTile(tileId) || tileId;
             };
 
             switch (action) {
@@ -480,6 +500,7 @@
                         hand: Array.isArray(p.hand) ? [...p.hand] : [],
                         melds: Array.isArray(p.melds) ? p.melds.map(m => ({...m, tiles: [...(m.tiles || [])]})) : [],
                         discards: Array.isArray(p.discards) ? [...p.discards] : [],
+                        flowers: Array.isArray(p.flowers) ? [...p.flowers] : [],
                         isHu: p.isHu || false,
                         isDealer: p.isDealer || false
                     }));
@@ -489,7 +510,7 @@
                 case 'draw': {
                     const p = this._findPlayerState(data.playerId);
                     if (p && data.tile) {
-                        p.hand.push(data.tile);
+                        p.hand.push(this._findTile(data.tile) || data.tile);
                     }
                     break;
                 }
@@ -497,6 +518,7 @@
                     const p = this._findPlayerState(data.playerId);
                     if (p) {
                         const tileObj = _removeFromHand(p, data.tile);
+                        p.discards.push(tileObj);
                         this.discardPile.push(tileObj);
                     }
                     break;
@@ -514,8 +536,7 @@
                         if (data.from !== undefined && this.discardPile.length > 0) {
                             const lastDiscard = this.discardPile[this.discardPile.length - 1];
                             const lastId = lastDiscard.id || lastDiscard;
-                            const consumedId = data.tiles[data.tiles.length - 1];
-                            if (lastId === consumedId) {
+                            if (data.tiles.includes(lastId)) {
                                 this.discardPile.pop();
                             }
                         }
@@ -541,7 +562,9 @@
                 case 'jiaGang': {
                     const p = this._findPlayerState(data.playerId);
                     if (p) {
-                        const obj = _removeFromHand(p, data.meldId);
+                        const tileId = data.tile?.id || data.tile;
+                        if (!tileId) break;
+                        const obj = _removeFromHand(p, tileId);
                         for (const meld of p.melds) {
                             const tiles = meld.tiles || [];
                             if (tiles.length === 3 && tiles.some(t => (t.id || t) === data.meldId)) {
@@ -554,9 +577,25 @@
                     }
                     break;
                 }
+                case 'flower': {
+                    const p = this._findPlayerState(data.playerId);
+                    if (!p) break;
+                    const flower = this._findTile(data.flower);
+                    if (flower) {
+                        _removeFromHand(p, flower.id);
+                        p.flowers.push(flower);
+                    }
+                    const replacement = this._findTile(data.replacement);
+                    if (replacement) p.hand.push(replacement);
+                    break;
+                }
                 case 'hu': {
                     const p = this._findPlayerState(data.playerId);
                     if (p) p.isHu = true;
+                    for (const score of data.scores || []) {
+                        const player = this._findPlayerState(score.id);
+                        if (player) player.score = score.score;
+                    }
                     break;
                 }
                 case 'roundEnd': {
@@ -584,6 +623,8 @@
         }
 
         _renderState() {
+            const deckEl = document.getElementById('replay-deck-count');
+            if (deckEl) deckEl.textContent = this.deckCount === null ? '剩余: —' : `剩余: ${this.deckCount}`;
             for (let i = 0; i < this.players.length; i++) {
                 const state = this.playerStates[i];
                 const pos = this._getPositionName(i);

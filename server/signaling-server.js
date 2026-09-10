@@ -10,6 +10,7 @@
 const http = require('http');
 const url = require('url');
 const os = require('os');
+const { randomBytes } = require('crypto');
 
 const PORT = parseInt(process.argv[2]) || 8081;
 const isDev = process.env.NODE_ENV !== 'production';
@@ -56,7 +57,20 @@ function getIpSSECount(ip) {
 function getCorsOrigin(req) {
     const origin = req.headers.origin;
     if (!origin) return null;
-    return ALLOWED_ORIGINS.includes(origin) ? origin : null;
+    if (ALLOWED_ORIGINS.includes(origin)) return origin;
+    if (!process.env.ALLOWED_ORIGINS) {
+        try {
+            const source = new URL(origin);
+            const target = new URL(`http://${req.headers.host}`);
+            if (source.protocol === 'http:' && source.hostname === target.hostname && source.port === '8080') return origin;
+        } catch (_) {}
+    }
+    return null;
+}
+
+function isAuthorized(req, player, roomId, token) {
+    return !!player && player.roomId === roomId &&
+        player.token === (token || req.headers.authorization?.replace(/^Bearer /, ''));
 }
 
 function jsonResponse(res, status, data, req) {
@@ -113,8 +127,7 @@ function broadcast(roomId, msg, excludePlayerId) {
 }
 
 function getClientIP(req) {
-    return req.headers['x-forwarded-for']?.split(',')[0]?.trim()
-        || req.socket.remoteAddress
+    return req.socket.remoteAddress
         || 'unknown';
 }
 
@@ -168,7 +181,7 @@ const server = http.createServer(async (req, res) => {
         res.setHeader('Access-Control-Allow-Origin', corsOrigin);
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
     const parsed = url.parse(req.url, true);
@@ -196,6 +209,7 @@ const server = http.createServer(async (req, res) => {
             const body = await readBody(req);
             const roomId = generateRoomId();
             const playerId = generatePlayerId();
+            const playerToken = randomBytes(32).toString('hex');
             const room = {
                 id: roomId, name: String(body.name || '麻将房').slice(0, 20),
                 mahjongType: body.mahjongType || 'guangdong',
@@ -206,10 +220,10 @@ const server = http.createServer(async (req, res) => {
             rooms.set(roomId, room);
             players.set(playerId, {
                 roomId, name: String(body.playerName || '房主').slice(0, 12),
-                isHost: true, res: null, lastEventId: 0
+                isHost: true, token: playerToken, res: null, lastEventId: 0
             });
             devLog(`[创建] 房间 ${roomId} 来自 ${getClientIP(req)}`);
-            jsonResponse(res, 200, { roomId, playerId, isHost: true }, req);
+            jsonResponse(res, 200, { roomId, playerId, playerToken, isHost: true }, req);
             return;
         }
 
@@ -225,11 +239,15 @@ const server = http.createServer(async (req, res) => {
             }
             const body = await readBody(req);
             const playerId = generatePlayerId();
+            if (!rooms.has(roomId) || room.started || room.playerIds.length >= room.maxPlayers) {
+                jsonResponse(res, 409, { error: '房间状态已改变，请刷新重试' }, req); return;
+            }
+            const playerToken = randomBytes(32).toString('hex');
             room.playerIds.push(playerId);
             room.lastActivity = Date.now();
             players.set(playerId, {
                 roomId, name: String(body.playerName || '玩家').slice(0, 12),
-                isHost: false, res: null, lastEventId: 0
+                isHost: false, token: playerToken, res: null, lastEventId: 0
             });
             broadcast(roomId, {
                 type: 'playerJoined', playerId,
@@ -238,7 +256,7 @@ const server = http.createServer(async (req, res) => {
                 maxPlayers: room.maxPlayers
             });
             devLog(`[加入] ${playerId} -> 房间 ${roomId}`);
-            jsonResponse(res, 200, { roomId, playerId, isHost: false }, req);
+            jsonResponse(res, 200, { roomId, playerId, playerToken, isHost: false }, req);
             return;
         }
 
@@ -248,12 +266,12 @@ const server = http.createServer(async (req, res) => {
             const roomId = eventsMatch[1];
             const playerId = parsed.query.playerId;
             const p = players.get(playerId);
-            if (!p || p.roomId !== roomId) {
-                res.writeHead(403, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': corsOrigin });
+            if (!isAuthorized(req, p, roomId, parsed.query.token)) {
+                res.writeHead(403, { 'Content-Type': 'text/plain' });
                 res.end('Forbidden'); return;
             }
             // SSE连接数限制
-            if (getIpSSECount(clientIP) >= MAX_SSE_PER_IP) {
+            if (getIpSSECount(clientIP) - (p.res && p._clientIP === clientIP ? 1 : 0) >= MAX_SSE_PER_IP) {
                 res.writeHead(429, { 'Content-Type': 'text/plain' });
                 res.end('Too many SSE connections'); return;
             }
@@ -265,7 +283,9 @@ const server = http.createServer(async (req, res) => {
             res.write(':ok\n\n');
             // 清除旧离线通知timer，防止快速重连时错误广播离线
             if (p.offlineTimeout) { clearTimeout(p.offlineTimeout); p.offlineTimeout = null; }
+            const oldResponse = p.res;
             p.res = res;
+            if (oldResponse && oldResponse !== res) oldResponse.end();
             p._clientIP = clientIP;
             p.lastEventId = parseInt(parsed.query.lastId) || 0;
             const room = rooms.get(roomId);
@@ -296,20 +316,22 @@ const server = http.createServer(async (req, res) => {
             }
 
             // 通知其他人此玩家上线
-            broadcast(roomId, { type: 'playerOnline', playerId, name: p.name }, playerId);
+            broadcast(roomId, { type: 'playerOnline', playerId, name: p.name, isHost: p.isHost }, playerId);
 
-            // SSE 心跳（25秒）
+            // JSON 心跳会进入 EventSource.onmessage，并维持活跃房间。
             const heartbeat = setInterval(() => {
-                if (res.writableEnded) { clearInterval(heartbeat); return; }
-                try { res.write(`:ping\n\n`); }
+                if (res.writableEnded || res.destroyed) { clearInterval(heartbeat); return; }
+                room.lastActivity = Date.now();
+                try { res.write('data: {"type":"ping"}\n\n'); }
                 catch (e) { clearInterval(heartbeat); }
-            }, 25000);
+            }, 3000);
 
             req.on('error', () => {
                 clearInterval(heartbeat);
             });
             req.on('close', () => {
                 clearInterval(heartbeat);
+                if (p.res !== res) return;
                 p.res = null;
                 if (p.offlineTimeout) clearTimeout(p.offlineTimeout);
                 p.offlineTimeout = setTimeout(() => {
@@ -331,7 +353,7 @@ const server = http.createServer(async (req, res) => {
             const room = rooms.get(roomId);
             if (!room) { jsonResponse(res, 404, { error: '房间不存在' }, req); return; }
             const p = players.get(body.playerId);
-            if (!p || p.roomId !== roomId) { jsonResponse(res, 403, { error: '无效玩家' }, req); return; }
+            if (!isAuthorized(req, p, roomId)) { jsonResponse(res, 403, { error: '无效玩家' }, req); return; }
             if (!ALLOWED_MESSAGE_TYPES.has(body.type)) {
                 jsonResponse(res, 400, { error: 'Invalid message type' }, req); return;
             }
@@ -358,10 +380,12 @@ const server = http.createServer(async (req, res) => {
             const room = rooms.get(roomId);
             if (!room) { jsonResponse(res, 404, { error: '房间不存在' }, req); return; }
             const p = players.get(body.playerId);
-            if (!p || !p.isHost) { jsonResponse(res, 403, { error: '只有房主可以开始' }, req); return; }
+            if (!isAuthorized(req, p, roomId) || !p.isHost) { jsonResponse(res, 403, { error: '只有房主可以开始' }, req); return; }
             if (room.playerIds.length < 2) { jsonResponse(res, 403, { error: '至少需要2人' }, req); return; }
             room.started = true;
-            broadcast(roomId, { type: 'gameStart', from: body.playerId, config: body.config || {} });
+            room.lastActivity = Date.now();
+            const config = { ...body.config, mahjongType: room.mahjongType, playerCount: room.playerIds.length };
+            broadcast(roomId, { type: 'gameStart', from: body.playerId, config });
             devLog(`[开始] 房间 ${roomId} 游戏开始 (${room.playerIds.length}人)`);
             jsonResponse(res, 200, { ok: true }, req);
             return;
@@ -373,11 +397,23 @@ const server = http.createServer(async (req, res) => {
             const roomId = leaveMatch[1];
             const body = await readBody(req);
             const p = players.get(body.playerId);
-            if (!p || p.roomId !== roomId) {
+            if (!isAuthorized(req, p, roomId)) {
                 jsonResponse(res, 403, { error: 'Forbidden' }, req);
                 return;
             }
             const room = rooms.get(roomId);
+            if (room && p.isHost) {
+                broadcast(roomId, { type: 'roomClosed' }, body.playerId);
+                for (const id of room.playerIds) {
+                    const member = players.get(id);
+                    if (member?.offlineTimeout) clearTimeout(member.offlineTimeout);
+                    member?.res?.end();
+                    players.delete(id);
+                }
+                rooms.delete(roomId);
+                jsonResponse(res, 200, { ok: true }, req);
+                return;
+            }
             if (room) {
                 room.playerIds = room.playerIds.filter(id => id !== body.playerId);
                 broadcast(roomId, { type: 'playerLeft', playerId: body.playerId, count: room.playerIds.length });

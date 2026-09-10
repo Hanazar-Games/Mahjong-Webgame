@@ -28,6 +28,7 @@
             case 'achievements':
                 App.currentScreen = 'achievements';
                 UIComponents.switchScreen('achievements');
+                renderAchievements();
                 break;
             case 'stats':
                 App.currentScreen = 'stats-page';
@@ -174,9 +175,13 @@
             qiangJin: '抢金',
             jingPai: '精牌',
             chongGuan: '冲关',
-            hongZhongLaiZi: '红中赖子'
+            hongZhongLaiZi: '红中赖子',
+            huaJiFan: '花牌计分', daDiaoChe: '大吊车', lianZhuang: '连庄加分', gangBian: '杠边',
+            baoTou: '暴头', caiShenGuiWei: '财神归位'
         };
         
+        const implemented = new Set(['allowChi', 'allowPeng', 'allowGang', 'allowAnGang', 'huaPai',
+            'gangShangKaiHua', 'haiDiLaoYue', 'queYiMen', 'xueZhanDaoDi', 'menQing', 'qiDui']);
         container.innerHTML = '';
         
         for (const [key, value] of Object.entries(rules)) {
@@ -185,9 +190,11 @@
             const label = ruleLabels[key] || key;
             const div = document.createElement('div');
             div.className = 'rule-option';
+            const enabled = value && implemented.has(key);
+            const status = value ? (enabled ? '✓ 开启' : '待实现') : '✗ 关闭';
             div.innerHTML = `
                 <span>${label}</span>
-                <span style="color:${value ? 'var(--win-color)' : 'var(--text-muted)'}">${value ? '✓ 开启' : '✗ 关闭'}</span>
+                <span style="color:${enabled ? 'var(--win-color)' : 'var(--text-muted)'}">${status}</span>
             `;
             container.appendChild(div);
         }
