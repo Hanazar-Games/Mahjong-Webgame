@@ -20,7 +20,7 @@
     }
 
     function handleTileClick(tile) {
-        if (!App.engine || App.engine.paused || App.engine.state !== 'playing') return;
+        if (!App.engine || App.engine.paused || App.engine.awaitingRemoteAction || App.engine.state !== 'playing') return;
         const localIndex = App.localPlayerIndex ?? 0;
         if (App.engine.currentPlayerIndex !== localIndex) return;
         if (App._actionPending) return;
@@ -58,7 +58,8 @@
     async function _doDiscard(tileId) {
         const engine = App.engine;
         const localIndex = App.localPlayerIndex ?? 0;
-        if (!engine || engine.paused || engine.state !== 'playing' || engine.currentPlayerIndex !== localIndex) return false;
+        if (!engine || engine.paused || engine.awaitingRemoteAction || App._actionPending ||
+            engine.state !== 'playing' || engine.currentPlayerIndex !== localIndex) return false;
         const restoreHand = (message = '出牌失败，请重新选择手牌') => {
             if (App.engine !== engine || engine.paused || engine.state !== 'playing' || engine.currentPlayerIndex !== localIndex) return;
             updateTurnGuidance(message, 'active');
@@ -83,7 +84,7 @@
     }
 
     function sendNetworkPlayerAction(action) {
-        if (!App.network || App.network.isHost) return false;
+        if (!App.network || App.network.isHost || App.engine?.awaitingRemoteAction) return false;
         const host = (App.network.players || []).find(p => p.isHost);
         if (!host) {
             Utils.toast('未连接到房主，操作发送失败', 3000, 'error');
@@ -93,6 +94,7 @@
         if (!sent) {
             Utils.toast('操作发送失败，请检查联机连接', 3000, 'error');
         } else {
+            if (App.engine) App.engine.awaitingRemoteAction = true;
             disableActionButtons();
             const skipBtn = document.getElementById('btn-skip');
             if (skipBtn) skipBtn.disabled = true;
@@ -112,7 +114,7 @@
     /**
      * 通用牌型选项选择器
      */
-    function showTileOptionsSelector(options, titleText, getTilesFn, getLabelFn = () => '') {
+    function showTileOptionsSelector(options, titleText, getTilesFn, getLabelFn = () => '', isValid = () => true) {
         closeAllSelectors();
         return new Promise((resolve) => {
             const trigger = document.activeElement;
@@ -128,6 +130,7 @@
                 resolve(value);
             };
             overlay._closeModal = () => finishSelector(null);
+            overlay._isValid = isValid;
             overlay.addEventListener('click', event => {
                 if (event.target === overlay) finishSelector(null);
             });
@@ -192,18 +195,23 @@
         });
     }
 
-    function showChiOptionsSelector(options) {
-        return showTileOptionsSelector(options, '请选择吃的组合', opt => opt);
+    function tileOptionKey(option) {
+        const tiles = Array.isArray(option) ? option : option.tiles || [option.tile];
+        return `${option.type || 'chi'}:${tiles.map(tile => tile.id).sort().join(',')}`;
     }
 
-    function showAnGangOptionsSelector(options) {
+    function showChiOptionsSelector(options, isValid) {
+        return showTileOptionsSelector(options, '请选择吃的组合', opt => opt, () => '', isValid);
+    }
+
+    function showAnGangOptionsSelector(options, isValid) {
         return showTileOptionsSelector(options, '请选择杠的组合',
             opt => opt.type === 'an_gang' ? opt.tiles : (opt.tile ? [opt.tile] : []),
-            opt => opt.type === 'jia_gang' ? '加杠' : '暗杠');
+            opt => opt.type === 'jia_gang' ? '加杠' : '暗杠', isValid);
     }
 
     async function handleAction(type) {
-        if (!App.engine || App.engine.paused) return;
+        if (!App.engine || App.engine.paused || App.engine.awaitingRemoteAction) return;
         if (App._actionPending) return;
         App._actionPending = true;
         
@@ -216,7 +224,14 @@
         }
         
         // 辅助：检查引擎是否仍有效且未被替换
-        const engineStillValid = () => App.engine === engine && !engine.paused && ['playing', 'waiting'].includes(engine.state);
+        const round = engine.round;
+        const currentPlayer = engine.currentPlayerIndex;
+        const discardId = engine.lastDiscard?.id;
+        const engineStillValid = () => App.engine === engine && !engine.paused &&
+            !engine.awaitingRemoteAction && engine.round === round && engine.currentPlayerIndex === currentPlayer &&
+            engine.lastDiscard?.id === discardId && ['playing', 'waiting'].includes(engine.state);
+        const choicesStillValid = (offered, current) => engineStillValid() &&
+            offered.length === current?.length && offered.every(option => current.some(candidate => tileOptionKey(candidate) === tileOptionKey(option)));
         let networkActionFailed = false;
         const sendAction = action => {
             const sent = sendNetworkPlayerAction(action);
@@ -240,10 +255,13 @@
                     let actionToExecute = pendingChi;
                     let selectedOptionIndex = 0;
                     if (options && options.length > 1) {
-                        const selected = await showChiOptionsSelector(options);
+                        const selected = await showChiOptionsSelector(options,
+                            () => choicesStillValid(options, getPendingAction('chi')?.options));
                         if (!engineStillValid() || selected === null) break;
-                        selectedOptionIndex = options.indexOf(selected);
-                        actionToExecute = { ...pendingChi, selectedOption: selected };
+                        const current = getPendingAction('chi');
+                        selectedOptionIndex = current?.options?.findIndex(option => tileOptionKey(option) === tileOptionKey(selected)) ?? -1;
+                        if (selectedOptionIndex < 0) break;
+                        actionToExecute = { ...current, selectedOption: current.options[selectedOptionIndex] };
                     }
                     if (App.isNetworkGame && App.network && !App.network.isHost) {
                         sendAction({ type: 'chi', selectedOptionIndex });
@@ -278,9 +296,13 @@
                     let option = App.anGangOptions[0];
                     let optionIndex = 0;
                     if (App.anGangOptions.length > 1) {
-                        option = await showAnGangOptionsSelector(App.anGangOptions);
+                        const offered = App.anGangOptions;
+                        option = await showAnGangOptionsSelector(offered,
+                            () => choicesStillValid(offered, App.anGangOptions));
                         if (!engineStillValid() || option === null) break;
-                        optionIndex = App.anGangOptions.indexOf(option);
+                        optionIndex = App.anGangOptions?.findIndex(candidate => tileOptionKey(candidate) === tileOptionKey(option)) ?? -1;
+                        if (optionIndex < 0) break;
+                        option = App.anGangOptions[optionIndex];
                     }
                     if (App.isNetworkGame && App.network && !App.network.isHost) {
                         if (sendAction({ type: 'gang', optionIndex })) App.anGangOptions = null;
@@ -369,7 +391,7 @@
      * 启用操作按钮（增量模式，允许多个按钮同时启用）
      */
     function enableActionButtons(action) {
-        if (!action || !action.type) return;
+        if (!action || !action.type || App.engine?.awaitingRemoteAction) return;
         const buttonMap = {
             'chi': 'btn-chi',
             'peng': 'btn-peng',
@@ -411,6 +433,7 @@
      * 启用/禁用玩家操作
      */
     function enablePlayerActions(enable) {
+        enable = enable && !App.engine?.awaitingRemoteAction;
         const handEl = document.getElementById('hand-bottom');
         if (!handEl) return;
         
@@ -446,7 +469,10 @@
                 if (focusable.length > 0) {
                     const first = focusable[0];
                     const last = focusable[focusable.length - 1];
-                    if (e.shiftKey && document.activeElement === first) {
+                    if (!openModal.contains(document.activeElement)) {
+                        (e.shiftKey ? last : first).focus();
+                        e.preventDefault();
+                    } else if (e.shiftKey && document.activeElement === first) {
                         last.focus();
                         e.preventDefault();
                     } else if (!e.shiftKey && document.activeElement === last) {
@@ -520,27 +546,33 @@
      * 触摸手势
      */
     function initTouchGestures() {
-        let touchStartY = 0;
+        let touchStartY = null;
         
         document.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 0) return;
+            touchStartY = null;
+            if (e.touches.length !== 1 || App.currentScreen !== 'game-screen' ||
+                e.target.closest('.mahjong-tile, .hand-area, #discard-pile, button, input, select, textarea, a, .modal, [contenteditable]')) return;
+            for (let node = e.target; node instanceof HTMLElement; node = node.parentElement) {
+                if (/(auto|scroll)/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight) return;
+            }
             touchStartY = e.touches[0].clientY;
         }, { passive: true });
         
         document.addEventListener('touchend', (e) => {
-            if (e.changedTouches.length === 0) return;
+            const startY = touchStartY;
+            touchStartY = null;
+            if (startY === null || e.touches.length || e.changedTouches.length !== 1) return;
             const touchEndY = e.changedTouches[0].clientY;
-            const diff = touchStartY - touchEndY;
+            const diff = startY - touchEndY;
             
             // 上滑显示菜单（modal 打开时不触发）
             if (diff > 100 && App.currentScreen === 'game-screen' && !document.querySelector('.modal:not(.hidden)')) {
                 showIngameMenu();
             }
-            touchStartY = 0;
         }, { passive: true });
         
         document.addEventListener('touchcancel', () => {
-            touchStartY = 0;
+            touchStartY = null;
         }, { passive: true });
     }
 

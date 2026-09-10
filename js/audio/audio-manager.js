@@ -81,7 +81,7 @@ const AudioManager = (function() {
 
     function resume() {
         if (audioCtx && audioCtx.state === 'suspended') {
-            audioCtx.resume().catch(error => console.warn('Audio resume failed:', error.message));
+            return audioCtx.resume().catch(error => console.warn('Audio resume failed:', error.message));
         }
     }
 
@@ -575,7 +575,7 @@ const AudioManager = (function() {
         }
 
         init();
-        resume();
+        const resumed = resume();
         if (!audioCtx || !bgmGain) return;
 
         bgmPlaying = true;
@@ -583,7 +583,7 @@ const AudioManager = (function() {
         let phraseTime = audioCtx.currentTime + 0.08;
         const loop = () => {
             if (!bgmPlaying || currentBgm !== style || generation !== bgmGeneration) return;
-            if (audioCtx.state === 'closed') {
+            if (audioCtx.state !== 'running') {
                 bgmPlaying = false;
                 bgmTimer = null;
                 return;
@@ -604,6 +604,12 @@ const AudioManager = (function() {
             bgmTimer = setTimeout(loop, delay);
         };
         loop();
+        resumed?.then(() => {
+            if (generation !== bgmGeneration || currentBgm !== style || bgmPlaying || audioCtx.state !== 'running') return;
+            bgmPlaying = true;
+            phraseTime = audioCtx.currentTime + 0.08;
+            loop();
+        });
     }
 
     function schedulePhrase(melody, startTime, tempo, scale, oscType, addHarmony) {
@@ -711,6 +717,7 @@ const AudioManager = (function() {
         interactionBound = true;
         const events = ['click', 'touchstart', 'keydown'];
         const handler = () => {
+            if (isMuted || (!(sfxEnabled && sfxVolume > 0.0001) && !(currentBgm && bgmVolume > 0.0001))) return;
             if (document.hidden || (audioCtx?.state === 'running' && (!currentBgm || bgmPlaying))) return;
             const bgmToResume = currentBgm;
             init();
@@ -721,7 +728,7 @@ const AudioManager = (function() {
 
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                if (bgmPlaying) {
+                if (currentBgm) {
                     bgmResumeAfterVisibility = currentBgm;
                     stopBgm(true);
                 }

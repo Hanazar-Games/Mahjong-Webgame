@@ -138,7 +138,12 @@ test('background audio suppresses new SFX and resumes the selected BGM once visi
     await openApp(page);
     const source = fs.readFileSync(path.join(__dirname, '../../js/audio/audio-manager.js'), 'utf8');
     const result = await page.evaluate(source => {
-        const context = new OfflineAudioContext(1, 44100, 44100);
+        const offline = new OfflineAudioContext(1, 44100, 44100);
+        const context = new Proxy(offline, { get(target, key) {
+            if (key === 'state') return 'running';
+            const value = target[key];
+            return typeof value === 'function' ? value.bind(target) : value;
+        } });
         let sources = 0;
         const createOscillator = context.createOscillator.bind(context);
         context.createOscillator = () => { sources++; return createOscillator(); };

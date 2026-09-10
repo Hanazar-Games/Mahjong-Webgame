@@ -85,11 +85,12 @@ const UIComponents = (function() {
         element.addEventListener('touchstart', startDrag, { passive: false });
         
         function startDrag(e) {
-            if (element.classList.contains('back')) return;
+            if (element.classList.contains('back') || element.classList.contains('disabled')) return;
+            if (e.touches ? e.touches.length !== 1 : e.button !== 0) return;
             
             // 防止重复注册 document-level 监听器（快速连点/多指触摸）
             if (isListening) {
-                onEnd(e);
+                onEnd({ type: 'touchcancel' });
             }
             
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -102,6 +103,7 @@ const UIComponents = (function() {
             
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onEnd);
+            document.addEventListener('touchstart', onAdditionalTouch, { passive: true });
             document.addEventListener('touchmove', onMove, { passive: false });
             document.addEventListener('touchend', onEnd);
             document.addEventListener('touchcancel', onEnd);
@@ -109,8 +111,16 @@ const UIComponents = (function() {
         
         // 缓存元素尺寸，避免拖拽时的强制同步布局
         let cachedWidth = 0, cachedHeight = 0;
+
+        function onAdditionalTouch(e) {
+            if (e.touches.length > 1) onEnd({ type: 'touchcancel' });
+        }
         
         function onMove(e) {
+            if (e.touches && e.touches.length !== 1) {
+                onEnd({ type: 'touchcancel' });
+                return;
+            }
             if (isDragging) e.preventDefault();
             const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
             const clientY = (e.touches && e.touches.length > 0) ? e.touches[0].clientY : e.clientY;
@@ -149,6 +159,7 @@ const UIComponents = (function() {
             isListening = false;
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onEnd);
+            document.removeEventListener('touchstart', onAdditionalTouch);
             document.removeEventListener('touchmove', onMove, { passive: false });
             document.removeEventListener('touchend', onEnd);
             document.removeEventListener('touchcancel', onEnd);
@@ -161,16 +172,17 @@ const UIComponents = (function() {
                 const clientY = (e.changedTouches && e.changedTouches.length > 0) ? e.changedTouches[0].clientY : e.clientY;
                 
                 const rect = discardPile?.getBoundingClientRect();
-                const dropped = rect && clientX >= rect.left && clientX <= rect.right &&
+                const dropped = e.type !== 'touchcancel' && !element.classList.contains('disabled') &&
+                    rect && clientX >= rect.left && clientX <= rect.right &&
                     clientY >= rect.top && clientY <= rect.bottom;
                 
                 if (dropped) {
                     // 拖到弃牌区
-                    if (onDragEnd) onDragEnd(tile);
                     clone.remove();
                     element.classList.remove('drag-source');
                     isDragging = false;
                     clone = null;
+                    if (onDragEnd) onDragEnd(tile);
                 } else {
                     // 未拖到弃牌区：snap-back 动画
                     const snapClone = clone;
@@ -195,14 +207,19 @@ const UIComponents = (function() {
         
         // 返回清理函数，供增量渲染时清理旧监听器
         return function cleanupDrag() {
+            if (isListening) document.getElementById('discard-pile')?.classList.remove('discard-target');
+            isListening = false;
+            isDragging = false;
             element.removeEventListener('mousedown', startDrag);
             element.removeEventListener('touchstart', startDrag, { passive: false });
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onEnd);
+            document.removeEventListener('touchstart', onAdditionalTouch);
             document.removeEventListener('touchmove', onMove, { passive: false });
             document.removeEventListener('touchend', onEnd);
             document.removeEventListener('touchcancel', onEnd);
             if (clone && clone.parentNode) clone.remove();
+            clone = null;
             element.classList.remove('drag-source');
         };
     }

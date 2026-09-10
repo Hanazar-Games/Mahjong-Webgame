@@ -68,8 +68,13 @@ test('BGM phrases share their time boundary and obsolete callbacks cannot revive
         };
         const stableMath = Object.create(Math);
         stableMath.random = () => 0;
+        const context = new Proxy(offline, { get(target, key) {
+            if (key === 'state') return 'running';
+            const value = target[key];
+            return typeof value === 'function' ? value.bind(target) : value;
+        } });
         const manager = new Function('window', 'document', 'setTimeout', 'clearTimeout', 'Math', source + ';return AudioManager;')(
-            { AudioContext: function() { return offline; } }, { hidden: false },
+            { AudioContext: function() { return context; } }, { hidden: false },
             (callback, delay) => { tasks.push({ callback, delay }); return tasks.length; }, () => {}, stableMath);
         manager.startBgm('calm');
         const oldLoop = tasks[0];

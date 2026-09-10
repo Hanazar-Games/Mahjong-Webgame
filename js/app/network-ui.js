@@ -844,6 +844,7 @@
         // 同步引擎状态（轻量同步，不触发事件）
         const engine = App.engine;
         if (_networkGameResultHandled) return;
+        engine.awaitingRemoteAction = false;
         const previousDiscardId = engine.lastDiscard?.id;
         const localPlayer = engine.players[App.localPlayerIndex ?? 0];
         const previousHandIds = new Set((localPlayer?.hand || []).map(tile => tile.id));
@@ -906,6 +907,8 @@
         }
 
         App.anGangOptions = state.selfActions?.anGangOptions || null;
+        const selector = document.getElementById('tile-selector-overlay');
+        if (selector && !selector._isValid()) closeAllSelectors();
         if (state.selfActions?.canHu) enableActionButtons({ type: 'hu' });
         if (App.anGangOptions?.length) enableActionButtons({ type: 'gang' });
         if ((state.selfActions?.canHu || App.anGangOptions?.length) && skipBtn) {

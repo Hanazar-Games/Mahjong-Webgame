@@ -3,6 +3,7 @@
  * 从 main.js 拆分（架构拆分轮次 2）
  */
     let _settingsTrigger = null;
+    let _ingameTrigger = null;
     let _settingsReturnToIngameMenu = false;
     let _sliderSaveTimer = null;
     let _sliderRollbackSettings = null;
@@ -105,6 +106,7 @@
     }
 
     function closeIngameMenus() {
+        _ingameTrigger = null;
         _settingsReturnToIngameMenu = false;
         _settingsTrigger = null;
         const settings = document.getElementById('settings-modal');
@@ -173,18 +175,22 @@
      */
     function showIngameMenu() {
         const menu = document.getElementById('ingame-menu');
+        if (menu?.classList.contains('hidden')) _ingameTrigger = document.activeElement;
         if (menu) menu.classList.remove('hidden');
         const title = document.getElementById('ingame-title-text');
         if (title) title.textContent = App.isNetworkGame ? '菜单 · 联机对局继续中' : '暂停';
         const restart = document.getElementById('btn-restart');
         if (restart) restart.disabled = !!App.isNetworkGame;
         if (!App.isNetworkGame) App.engine?.pause();
+        document.getElementById('btn-resume')?.focus();
     }
 
     function hideIngameMenu() {
         const menu = document.getElementById('ingame-menu');
         if (menu) menu.classList.add('hidden');
         if (!App.isNetworkGame) App.engine?.resume();
+        if (_ingameTrigger instanceof HTMLElement && _ingameTrigger.isConnected) _ingameTrigger.focus();
+        _ingameTrigger = null;
     }
     /**
      * 处理设置变更
