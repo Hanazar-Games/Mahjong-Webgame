@@ -485,10 +485,12 @@
      * 开始联机游戏
      */
     async function startNetworkGame(config) {
-        if (App.isNetworkGame && App.engine && App.engine.state !== 'ended') return;
+        if (App.isNetworkGame && App.engine && App.engine.config.gameId === config.gameId) return;
         hideNetworkError();
         const net = App.network;
         _networkGameResultHandled = false;
+        closeAllSelectors();
+        document.getElementById('ingame-menu')?.classList.add('hidden');
         AudioManager.stopAllSfx();
         startConfiguredBgm();
         updateAnimSpeed(config.speed);
@@ -498,6 +500,7 @@
             await startGameAsHost(config);
         } else {
             // 访客：创建引擎实例用于渲染，等待状态同步
+            if (App.engine) { App.engine.destroy(); App.engine = null; }
             App.isNetworkGame = true;
             App.currentScreen = 'game-screen';
             UIComponents.switchScreen('game-screen');
@@ -553,23 +556,24 @@
         for (const p of net.players || []) {
             if (!p || p.id === net.playerId) continue;
             const state = buildNetworkStateFor(p.id);
-            net.sendTo(p.id, { type: 'stateSync', data: { state, config: App.engine.config } });
+            net.sendTo(p.id, { type: 'stateSync', data: { state, config: App.engine.config,
+                result: App.engine.networkResult || null } });
         }
     }
 
     function broadcastGameResult(data) {
         if (!App.network?.isHost || !data || !Array.isArray(data.players)) return;
-        App.network.broadcast({
-            type: 'gameResult',
-            data: {
-                players: data.players,
-                winner: data.winner || null,
-                mahjongType: App.engine?.config?.mahjongType || 'guangdong',
-                round: App.engine?.round || 1,
-                history: (App.engine?.matchHistory || []).flatMap(round => (round.history || [])
-                    .filter(entry => ['hu', 'gang', 'anGang', 'jiaGang'].includes(entry.action)))
-            }
-        });
+        const result = {
+            players: data.players,
+            winner: data.winner || null,
+            gameId: App.engine?.config.gameId,
+            mahjongType: App.engine?.config?.mahjongType || 'guangdong',
+            round: App.engine?.round || 1,
+            history: (App.engine?.matchHistory || []).flatMap(round => (round.history || [])
+                .filter(entry => ['hu', 'gang', 'anGang', 'jiaGang'].includes(entry.action)))
+        };
+        App.engine.networkResult = result;
+        App.network.broadcast({ type: 'gameResult', data: result });
     }
 
     function buildNetworkStateFor(targetPlayerId) {
@@ -639,6 +643,7 @@
 
     function applyNetworkGameResult(data) {
         if (_networkGameResultHandled || !data || !Array.isArray(data.players)) return;
+        if (data.gameId !== App.engine?.config.gameId) return;
         if (data.players.length < 2 || data.players.length > 4) return;
 
         const positions = new Set();
@@ -803,8 +808,20 @@
         const config = data.config || state.config || { mahjongType: 'guangdong', playerCount: state.players.length };
         App.localPlayerIndex = getLocalNetworkPlayerIndex(state.players);
 
+        if (App.engine && App.engine.config.gameId !== config.gameId) {
+            App.engine.destroy();
+            App.engine = null;
+        }
+
         // 如果还没有engine，创建一个用于渲染
         if (!App.engine) {
+            _networkGameResultHandled = false;
+            closeAllSelectors();
+            App._actionPending = false;
+            App.isNetworkGame = true;
+            App.currentScreen = 'game-screen';
+            UIComponents.switchScreen('game-screen');
+            startConfiguredBgm();
             try {
                 App.engine = new MahjongEngine(config);
                 // 初始化玩家（名字从状态中恢复）
@@ -823,6 +840,7 @@
 
         // 同步引擎状态（轻量同步，不触发事件）
         const engine = App.engine;
+        if (_networkGameResultHandled) return;
         const previousDiscardId = engine.lastDiscard?.id;
         const localPlayer = engine.players[App.localPlayerIndex ?? 0];
         const previousHandIds = new Set((localPlayer?.hand || []).map(tile => tile.id));
@@ -861,6 +879,11 @@
                 ep.isHu = sp.isHu ?? ep.isHu;
                 ep.gangCount = sp.gangCount ?? ep.gangCount;
             }
+        }
+
+        if (data.result) {
+            applyNetworkGameResult(data.result);
+            if (_networkGameResultHandled) return;
         }
 
         disableActionButtons();

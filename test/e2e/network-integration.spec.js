@@ -23,6 +23,76 @@ test.afterEach(async () => {
     }
 });
 
+async function connectPair(browser, baseURL) {
+    const contexts = await Promise.all([0, 1].map(() => browser.newContext({ baseURL, serviceWorkers: 'block' })));
+    const [host, guest] = await Promise.all(contexts.map(context => context.newPage()));
+    const errors = [];
+    for (const page of [host, guest]) {
+        page.on('pageerror', error => errors.push(error.message));
+        page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+        await page.goto('/');
+        await page.locator('#loading-screen').waitFor({ state: 'detached' });
+        await page.evaluate(url => { document.getElementById('signal-server').value = url; initNetwork(); }, signalUrl);
+    }
+    const { roomId } = await host.evaluate(() => App.network.createRoom('Recovery', 'guangdong', 'Host'));
+    await guest.evaluate(id => App.network.joinRoom(id, 'Guest'), roomId);
+    await expect.poll(() => host.evaluate(() => [...App.network.channels.values()].some(c => c.readyState === 'open'))).toBe(true);
+    await host.evaluate(() => App.network.startGame({ speed: 'instant', maxRounds: 1 }));
+    await expect(guest.locator('#hand-bottom .mahjong-tile')).toHaveCount(13);
+    return { contexts, host, guest, errors };
+}
+
+test('a failed data channel reconnects while signaling remains online', async ({ browser, baseURL }) => {
+    const { contexts, host, guest, errors } = await connectPair(browser, baseURL);
+    try {
+        const hand = await guest.evaluate(() => App.engine.players[1].hand.map(tile => tile.id));
+        await guest.evaluate(() => { window.__originalSse = App.network.sse; });
+        for (let attempt = 0; attempt < 3; attempt++) {
+            await guest.evaluate(() => [...App.network.channels.values()][0].close());
+            await expect.poll(() => guest.evaluate(() => [...App.network.channels.values()].some(c => c.readyState === 'open')),
+                { timeout: 10_000 }).toBe(true);
+        }
+        expect(await guest.evaluate(() => App.network.sse === window.__originalSse)).toBe(true);
+        expect(await guest.evaluate(() => App.engine.players[1].hand.map(tile => tile.id))).toEqual(hand);
+        await host.evaluate(() => App.engine.endRound());
+        await expect(guest.locator('#game-result')).toHaveClass(/active/);
+        expect(errors).toEqual([]);
+    } finally { await Promise.all(contexts.map(context => context.close())); }
+});
+
+test('reconnecting after a missed result restores settlement once and accepts the next match', async ({ browser, baseURL }) => {
+    const { contexts, host, guest, errors } = await connectPair(browser, baseURL);
+    try {
+        await guest.evaluate(() => {
+            App.network.sse.onerror();
+            clearTimeout(App.network.sseReconnectTimer);
+            App.network.sseReconnectTimer = null;
+            [...App.network.channels.values()][0].close();
+        });
+        await expect.poll(() => host.evaluate(() => App.network.players.find(p => !p.isHost)?.online)).toBe(false);
+        await host.evaluate(() => App.engine.endRound());
+        await guest.evaluate(() => App.network._startSSE());
+        await expect(guest.locator('#game-result')).toHaveClass(/active/, { timeout: 15_000 });
+        expect(await guest.evaluate(() => Stats.getStats().totalGames)).toBe(1);
+        await host.evaluate(() => {
+            window.__finishedEngine = App.engine;
+            App.network.sse.onerror();
+        });
+        await expect.poll(() => host.evaluate(() => App.network.connected)).toBe(true);
+        expect(await host.evaluate(() => App.engine === window.__finishedEngine && App.engine.state === 'ended')).toBe(true);
+        await host.evaluate(() => broadcastGameState(true));
+        await guest.waitForTimeout(250);
+        expect(await guest.evaluate(() => Stats.getStats().totalGames)).toBe(1);
+        await host.locator('#btn-result-restart').click();
+        await expect(guest.locator('#game-screen')).toHaveClass(/active/);
+        await expect(guest.locator('#hand-bottom .mahjong-tile')).toHaveCount(13);
+        await host.evaluate(() => App.engine.endRound());
+        await expect(guest.locator('#game-result')).toHaveClass(/active/);
+        expect(await guest.evaluate(() => Stats.getStats().totalGames)).toBe(2);
+        expect(errors).toEqual([]);
+    } finally { await Promise.all(contexts.map(context => context.close())); }
+});
+
 test('real WebRTC clients synchronize turns, survive reconnect, rematch and leave', async ({ browser, baseURL }) => {
     test.setTimeout(60_000);
     const contexts = await Promise.all([browser.newContext({ baseURL }), browser.newContext({ baseURL })]);

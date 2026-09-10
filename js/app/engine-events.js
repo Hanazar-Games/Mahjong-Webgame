@@ -67,6 +67,10 @@
         engine.on('beforeDestroy', () => {
             stopTurnTimerUI();
             closeAllSelectors();
+            if (App.engine === engine) {
+                App._actionPending = false;
+                App.anGangOptions = null;
+            }
         });
         
         engine.on('gameStart', (data) => {

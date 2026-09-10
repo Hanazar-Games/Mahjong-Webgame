@@ -14,6 +14,90 @@ function runtime(overrides = {}) {
     return vm.runInContext('({ Utils, Tiles, Rules, Player, AIUtils, MahjongEngine, P2PNetwork, ReplayPlayer })', context);
 }
 
+test('ICE arriving before an offer or remote description is retained until negotiation is ready', async () => {
+    const applied = [];
+    let releaseRemote;
+    class Peer {
+        async setRemoteDescription(sdp) {
+            await new Promise(resolve => { releaseRemote = resolve; });
+            this.remoteDescription = sdp;
+        }
+        async addIceCandidate(candidate) {
+            assert.ok(this.remoteDescription, 'ICE must wait for the remote description');
+            applied.push(candidate.candidate);
+        }
+        async createAnswer() { return { type: 'answer' }; }
+        async setLocalDescription() {}
+    }
+    const { P2PNetwork } = runtime({ RTCPeerConnection: Peer,
+        RTCSessionDescription: function(value) { return value; }, RTCIceCandidate: function(value) { return value; } });
+    const net = new P2PNetwork();
+    net._sendSignal = () => {};
+    await net._handleIce('host', { candidate: 'before-offer' });
+    const offer = net._handleOffer('host', { type: 'offer' });
+    await net._handleIce('host', { candidate: 'during-description' });
+    releaseRemote();
+    await offer;
+    assert.deepEqual(applied, ['before-offer', 'during-description']);
+});
+
+test('a closed peer cannot send an offer into a later room', async () => {
+    let releaseOffer;
+    const sent = [];
+    class Peer {
+        createDataChannel() { return { close() {} }; }
+        createOffer() { return new Promise(resolve => { releaseOffer = resolve; }); }
+        async setLocalDescription() {}
+        close() {}
+    }
+    const { P2PNetwork } = runtime({ RTCPeerConnection: Peer });
+    const net = new P2PNetwork();
+    net._sendSignal = (...args) => sent.push(args);
+    const offer = net._createOffer('guest');
+    await net.leaveRoom(false);
+    net.roomId = 'next-room';
+    releaseOffer({ type: 'offer' });
+    await offer;
+    assert.deepEqual(sent, []);
+});
+
+test('ICE for a replacement connection never enters the old peer', async () => {
+    const applied = [];
+    class Peer {
+        async setRemoteDescription(sdp) { this.remoteDescription = sdp; }
+        async addIceCandidate(candidate) { applied.push([this.connectionId, candidate.candidate]); }
+        async createAnswer() { return { type: 'answer' }; }
+        async setLocalDescription() {}
+        close() {}
+    }
+    const { P2PNetwork } = runtime({ RTCPeerConnection: Peer,
+        RTCSessionDescription: function(value) { return value; }, RTCIceCandidate: function(value) { return value; } });
+    const net = new P2PNetwork();
+    net._sendSignal = () => {};
+    const old = net._getPeer('host');
+    old.connectionId = 'old';
+    old.remoteDescription = { type: 'offer' };
+    await net._handleIce('host', { candidate: 'new-candidate' }, 'new');
+    assert.deepEqual(applied, []);
+    await net._handleOffer('host', { type: 'offer' }, 'new');
+    await net._handleAnswer('host', { type: 'answer', stale: true }, 'old');
+    assert.deepEqual(applied, [['new', 'new-candidate']]);
+    assert.equal(net.peers.get('host').remoteDescription.stale, undefined);
+});
+
+test('rapid rematch requests start only one network game', async () => {
+    const { P2PNetwork } = runtime();
+    const net = new P2PNetwork();
+    net.isHost = true;
+    let calls = 0, complete;
+    net._post = () => { calls++; return new Promise(resolve => { complete = resolve; }); };
+    const first = net.startGame({});
+    const second = net.startGame({});
+    assert.equal(calls, 1);
+    complete();
+    await Promise.all([first, second]);
+});
+
 test('concealed pair completes a hand with four open melds', () => {
     const { Tiles, Rules } = runtime();
     assert.equal(Rules.canWin([Tiles.createTile('wan', 5), Tiles.createTile('wan', 5)]).canWin, true);

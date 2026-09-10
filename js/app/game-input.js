@@ -20,7 +20,7 @@
     }
 
     function handleTileClick(tile) {
-        if (!App.engine || App.engine.state !== 'playing') return;
+        if (!App.engine || App.engine.paused || App.engine.state !== 'playing') return;
         const localIndex = App.localPlayerIndex ?? 0;
         if (App.engine.currentPlayerIndex !== localIndex) return;
         if (App._actionPending) return;
@@ -56,24 +56,28 @@
     }
 
     async function _doDiscard(tileId) {
+        const engine = App.engine;
+        const localIndex = App.localPlayerIndex ?? 0;
+        if (!engine || engine.paused || engine.state !== 'playing' || engine.currentPlayerIndex !== localIndex) return false;
+        const restoreHand = (message = '出牌失败，请重新选择手牌') => {
+            if (App.engine !== engine || engine.paused || engine.state !== 'playing' || engine.currentPlayerIndex !== localIndex) return;
+            updateTurnGuidance(message, 'active');
+            enablePlayerActions(true);
+        };
         try {
-            if (!App.engine || App.engine.state !== 'playing') return false;
             updateTurnGuidance('已打出，等待其他玩家响应…');
             enablePlayerActions(false);
             if (App.isNetworkGame && App.network && !App.network.isHost) {
                 const sent = sendNetworkPlayerAction({ type: 'discard', tileId });
-                if (!sent) {
-                    updateTurnGuidance('出牌发送失败，请重新选择手牌', 'active');
-                    enablePlayerActions(true);
-                }
+                if (!sent) restoreHand('出牌发送失败，请重新选择手牌');
                 return sent;
             }
-            await App.engine.playerDiscard(tileId);
-            return true;
+            const accepted = await engine.playerDiscard(tileId);
+            if (!accepted) restoreHand();
+            return accepted;
         } catch (e) {
             console.warn('playerDiscard error:', e);
-            updateTurnGuidance('出牌失败，请重新选择手牌', 'active');
-            enablePlayerActions(true);
+            restoreHand();
             return false;
         }
     }
@@ -99,48 +103,37 @@
     }
 
     /**
-     * 处理操作
-     */
-    // 待处理的选择器 resolve 函数（用于游戏结束时强制关闭）
-    const _pendingSelectorResolves = [];
-
-    /**
      * 关闭所有选择器 overlay 并 resolve 挂起的 Promise（防止游戏结束时 Promise 泄漏）
      */
     function closeAllSelectors() {
-        const overlay = document.getElementById('tile-selector-overlay');
-        if (overlay) overlay.remove();
-        while (_pendingSelectorResolves.length) {
-            const resolve = _pendingSelectorResolves.pop();
-            resolve(null);
-        }
+        document.querySelectorAll('#tile-selector-overlay').forEach(overlay => overlay._closeModal());
     }
 
     /**
      * 通用牌型选项选择器
      */
-    function showTileOptionsSelector(options, titleText, getTilesFn) {
+    function showTileOptionsSelector(options, titleText, getTilesFn, getLabelFn = () => '') {
+        closeAllSelectors();
         return new Promise((resolve) => {
-            _pendingSelectorResolves.push(resolve);
             const trigger = document.activeElement;
             const overlay = document.createElement('div');
             overlay.id = 'tile-selector-overlay';
             overlay.className = 'modal';
             overlay.setAttribute('role', 'dialog');
             overlay.setAttribute('aria-modal', 'true');
-            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:240;display:flex;align-items:center;justify-content:center;';
             const finishSelector = (value) => {
                 if (!overlay.isConnected) return;
                 overlay.remove();
-                const i = _pendingSelectorResolves.indexOf(resolve);
-                if (i >= 0) _pendingSelectorResolves.splice(i, 1);
                 if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
                 resolve(value);
             };
             overlay._closeModal = () => finishSelector(null);
+            overlay.addEventListener('click', event => {
+                if (event.target === overlay) finishSelector(null);
+            });
             
             const panel = document.createElement('div');
-            panel.style.cssText = 'background:var(--bg-panel);padding:20px;border-radius:var(--border-radius);border:1px solid rgba(212,168,67,0.3);max-width:90%;';
+            panel.className = 'modal-panel tile-selector-panel';
             
             const title = document.createElement('h3');
             title.id = `tile-selector-title-${Utils.uuid()}`;
@@ -150,12 +143,13 @@
             panel.appendChild(title);
             
             const optionsContainer = document.createElement('div');
-            optionsContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+            optionsContainer.className = 'tile-selector-options';
             
             options.forEach((opt, idx) => {
+                const tiles = getTilesFn(opt);
                 const row = document.createElement('button');
                 row.type = 'button';
-                row.setAttribute('aria-label', `${titleText}，选项 ${idx + 1}`);
+                row.setAttribute('aria-label', `${titleText}，选项 ${idx + 1}：${tiles.map(tile => tile.name).join('、')}`);
                 row.style.cssText = 'display:flex;width:100%;gap:8px;align-items:center;cursor:pointer;padding:8px 12px;border-radius:8px;border:1px solid transparent;transition:all 0.2s;background:transparent;color:inherit;font:inherit;';
                 row.addEventListener('mouseenter', () => {
                     row.style.background = 'rgba(212,168,67,0.1)';
@@ -169,20 +163,32 @@
                     finishSelector(opt);
                 });
                 
-                const tiles = getTilesFn(opt);
                 for (const tile of tiles) {
                     const tileEl = UIComponents.createTileElement(tile, { small: true });
                     tileEl.style.cursor = 'pointer';
                     row.appendChild(tileEl);
                 }
-                
+                const label = getLabelFn(opt);
+                if (label) {
+                    const text = document.createElement('span');
+                    text.textContent = label;
+                    row.appendChild(text);
+                }
                 optionsContainer.appendChild(row);
             });
             
             panel.appendChild(optionsContainer);
+            const cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'modal-btn';
+            cancel.textContent = '取消';
+            cancel.addEventListener('click', () => finishSelector(null));
+            panel.appendChild(cancel);
             overlay.appendChild(panel);
             document.body.appendChild(overlay);
-            requestAnimationFrame(() => optionsContainer.querySelector('button')?.focus());
+            requestAnimationFrame(() => {
+                if (overlay.isConnected) optionsContainer.querySelector('button')?.focus();
+            });
         });
     }
 
@@ -191,81 +197,13 @@
     }
 
     function showAnGangOptionsSelector(options) {
-        return new Promise((resolve) => {
-            _pendingSelectorResolves.push(resolve);
-            const trigger = document.activeElement;
-            const overlay = document.createElement('div');
-            overlay.id = 'tile-selector-overlay';
-            overlay.className = 'modal';
-            overlay.setAttribute('role', 'dialog');
-            overlay.setAttribute('aria-modal', 'true');
-            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:240;display:flex;align-items:center;justify-content:center;';
-            const finishSelector = (value) => {
-                if (!overlay.isConnected) return;
-                overlay.remove();
-                const i = _pendingSelectorResolves.indexOf(resolve);
-                if (i >= 0) _pendingSelectorResolves.splice(i, 1);
-                if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
-                resolve(value);
-            };
-            overlay._closeModal = () => finishSelector(null);
-            
-            const panel = document.createElement('div');
-            panel.style.cssText = 'background:var(--bg-panel);padding:20px;border-radius:var(--border-radius);border:1px solid rgba(212,168,67,0.3);max-width:90%;';
-            
-            const title = document.createElement('h3');
-            title.id = `tile-selector-title-${Utils.uuid()}`;
-            title.textContent = '请选择杠的组合';
-            overlay.setAttribute('aria-labelledby', title.id);
-            title.style.cssText = 'color:var(--accent-gold);margin-bottom:16px;text-align:center;';
-            panel.appendChild(title);
-            
-            const optionsContainer = document.createElement('div');
-            optionsContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
-            
-            options.forEach((opt, optionIndex) => {
-                const row = document.createElement('button');
-                row.type = 'button';
-                row.setAttribute('aria-label', `请选择杠的组合，选项 ${optionIndex + 1}`);
-                row.style.cssText = 'display:flex;width:100%;gap:8px;align-items:center;cursor:pointer;padding:8px 12px;border-radius:8px;border:1px solid transparent;transition:all 0.2s;background:transparent;color:inherit;font:inherit;';
-                row.addEventListener('mouseenter', () => {
-                    row.style.background = 'rgba(212,168,67,0.1)';
-                    row.style.borderColor = 'rgba(212,168,67,0.3)';
-                });
-                row.addEventListener('mouseleave', () => {
-                    row.style.background = '';
-                    row.style.borderColor = 'transparent';
-                });
-                row.addEventListener('click', () => {
-                    finishSelector(opt);
-                });
-                
-                const tiles = opt.type === 'an_gang' ? opt.tiles : (opt.tile ? [opt.tile] : []);
-                for (const tile of tiles) {
-                    const tileEl = UIComponents.createTileElement(tile, { small: true });
-                    tileEl.style.cursor = 'pointer';
-                    row.appendChild(tileEl);
-                }
-                
-                if (opt.type === 'jia_gang') {
-                    const label = document.createElement('span');
-                    label.textContent = '加杠';
-                    label.style.cssText = 'color:var(--text-secondary);font-size:0.9rem;';
-                    row.appendChild(label);
-                }
-                
-                optionsContainer.appendChild(row);
-            });
-            
-            panel.appendChild(optionsContainer);
-            overlay.appendChild(panel);
-            document.body.appendChild(overlay);
-            requestAnimationFrame(() => optionsContainer.querySelector('button')?.focus());
-        });
+        return showTileOptionsSelector(options, '请选择杠的组合',
+            opt => opt.type === 'an_gang' ? opt.tiles : (opt.tile ? [opt.tile] : []),
+            opt => opt.type === 'jia_gang' ? '加杠' : '暗杠');
     }
 
     async function handleAction(type) {
-        if (!App.engine) return;
+        if (!App.engine || App.engine.paused) return;
         if (App._actionPending) return;
         App._actionPending = true;
         
@@ -278,7 +216,7 @@
         }
         
         // 辅助：检查引擎是否仍有效且未被替换
-        const engineStillValid = () => App.engine === engine && engine.state !== 'destroyed' && engine.state !== 'idle';
+        const engineStillValid = () => App.engine === engine && !engine.paused && ['playing', 'waiting'].includes(engine.state);
         let networkActionFailed = false;
         const sendAction = action => {
             const sent = sendNetworkPlayerAction(action);
@@ -392,14 +330,17 @@
                     }
                     // 跳过暗杠，继续打牌
                     App.anGangOptions = null;
+                    player.selfActionsSkipped = true;
                     disableActionButtons();
                     engine.emit('needDiscard', { player: player.toJSON(), index: localIndex });
-                } else if (engine.currentPlayerIndex === localIndex && player.hand?.length > (engine.typeConfig?.handSize || 13) && engineStillValid()) {
+                } else if (engine.currentPlayerIndex === localIndex && engineStillValid() &&
+                    player.hand?.length === (engine.typeConfig?.handSize || 13) + 1 - player.melds.length * 3) {
                     if (App.isNetworkGame && App.network && !App.network.isHost) {
                         sendAction({ type: 'skip' });
                         break;
                     }
                     // 跳过自摸，允许继续打牌
+                    player.selfActionsSkipped = true;
                     engine.emit('needDiscard', { player: player.toJSON(), index: localIndex });
                     // 重新检查暗杠（跳过自摸后可能仍有暗杠选项）
                     if (typeof Rules !== 'undefined' && Rules.canAnGang) {
@@ -417,10 +358,10 @@
         } finally {
             // 如果 skip 后引擎又提供了新的 pendingAction，不要禁用按钮
             // （engine-events.js 中的 actionAvailable 监听器可能已经启用了新按钮）
-            if (!engine.pendingAction && !App.anGangOptions && !networkActionFailed) {
+            if (App.engine === engine && !engine.pendingAction && !App.anGangOptions && !networkActionFailed) {
                 disableActionButtons();
             }
-            App._actionPending = false;
+            if (App.engine === engine) App._actionPending = false;
         }
     }
 
@@ -488,7 +429,10 @@
         if (e.repeat) return;
 
         // 模态框键盘行为不依赖当前页面：主菜单设置同样应支持 Esc 和焦点循环。
-        const openModal = document.querySelector('.modal:not(.hidden)');
+        const openModal = [...document.querySelectorAll('.modal:not(.hidden)')]
+            .filter(modal => modal.getClientRects().length > 0)
+            .sort((a, b) => (Number(getComputedStyle(a).zIndex) || 0) - (Number(getComputedStyle(b).zIndex) || 0))
+            .at(-1);
         if (openModal) {
             if (e.key === 'Escape') {
                 if (openModal.id === 'settings-modal') hideSettingsModal();

@@ -14,11 +14,13 @@ class P2PNetwork extends Utils.EventEmitter {
         this.roomId = null;
         this.playerId = null;
         this.playerToken = null;
-        this.lastEventId = 0;
         this.playerName = '';
         this.isHost = false;
         this.peers = new Map();   // playerId -> RTCPeerConnection
         this.channels = new Map(); // playerId -> RTCDataChannel
+        this.pendingIce = new Map();
+        this.peerReconnectTimers = new Map();
+        this.peerReconnectAttempts = new Map();
         this.players = [];         // 房间中所有玩家信息 [{id, name, isHost}]
         this.sse = null;
         this.sseReconnectTimer = null;
@@ -28,6 +30,7 @@ class P2PNetwork extends Utils.EventEmitter {
         this.connected = false;
         this.connecting = false;
         this._sseStarting = false;
+        this._startGamePromise = null;
     }
 
     // ===== 连接管理 =====
@@ -87,7 +90,6 @@ class P2PNetwork extends Utils.EventEmitter {
         this.roomId = data.roomId;
         this.playerId = data.playerId;
         this.playerToken = data.playerToken;
-        this.lastEventId = 0;
         this.isHost = true;
         this.players = [{ id: this.playerId, name: this.playerName, isHost: true }];
         this._startSSE();
@@ -106,7 +108,6 @@ class P2PNetwork extends Utils.EventEmitter {
         this.roomId = data.roomId;
         this.playerId = data.playerId;
         this.playerToken = data.playerToken;
-        this.lastEventId = 0;
         this.isHost = false;
         // 把自己加入列表，SSE 会推送其他玩家
         this.players = [{ id: this.playerId, name: this.playerName, isHost: false }];
@@ -133,7 +134,7 @@ class P2PNetwork extends Utils.EventEmitter {
         this.connecting = true;
         this.emit('connecting');
 
-        const params = new URLSearchParams({ playerId: this.playerId, token: this.playerToken || '', lastId: this.lastEventId });
+        const params = new URLSearchParams({ playerId: this.playerId, token: this.playerToken || '' });
         const sse = new EventSource(`${this.serverUrl}/room/${this.roomId}/events?${params}`);
         this.sse = sse;
 
@@ -152,8 +153,6 @@ class P2PNetwork extends Utils.EventEmitter {
             if (this.sse !== sse || !this.roomId) return;
             try {
                 const msg = JSON.parse(e.data);
-                if (msg.id && msg.id <= this.lastEventId) return;
-                if (msg.id) this.lastEventId = msg.id;
                 this._handleSignal(msg).catch(err => {
                     console.error('Signal error:', err);
                     this.emit('error', err);
@@ -201,14 +200,25 @@ class P2PNetwork extends Utils.EventEmitter {
         this.sseReconnectAttempts = 0;
 
         switch (msg.type) {
+            case 'roomState': {
+                this.players = msg.players;
+                for (const [id] of this.peers) {
+                    if (!this.players.some(player => player.id === id && player.online)) this._closePeer(id, false);
+                }
+                this.emit('playerListUpdated', this.players);
+                if (msg.config) this.emit('gameStart', msg.config);
+                if (this.isHost) {
+                    for (const player of this.players) {
+                        if (player.id !== this.playerId && player.online && !this.peers.has(player.id)) {
+                            this._createOffer(player.id);
+                        }
+                    }
+                }
+                break;
+            }
             case 'playerJoined': {
                 if (!this.players.find(p => p.id === msg.playerId)) {
-                    this.players.push({ id: msg.playerId, name: msg.name, isHost: false });
-                    if (this.isHost && msg.playerId !== this.playerId) {
-                        this._createOffer(msg.playerId).catch(err => {
-                            console.error('createOffer error:', err);
-                        });
-                    }
+                    this.players.push({ id: msg.playerId, name: msg.name, isHost: false, online: false });
                 }
                 this.emit('playerListUpdated', this.players);
                 break;
@@ -217,11 +227,14 @@ class P2PNetwork extends Utils.EventEmitter {
                 const existing = this.players.find(p => p.id === msg.playerId);
                 if (existing) {
                     existing.isHost = msg.isHost === true;
-                    existing.online = true;
+                    existing.online = msg.online !== false;
                 } else {
-                    this.players.push({ id: msg.playerId, name: msg.name, isHost: msg.isHost === true, online: true });
+                    this.players.push({ id: msg.playerId, name: msg.name, isHost: msg.isHost === true, online: msg.online !== false });
                 }
-                if (this.isHost && msg.playerId !== this.playerId && !this.peers.has(msg.playerId)) {
+                if (msg.online !== false && this.isHost && msg.playerId !== this.playerId &&
+                    this.channels.get(msg.playerId)?.readyState !== 'open') {
+                    this._closePeer(msg.playerId, false);
+                    this.peerReconnectAttempts.delete(msg.playerId);
                     await this._createOffer(msg.playerId);
                 }
                 this.emit('playerListUpdated', this.players);
@@ -230,32 +243,32 @@ class P2PNetwork extends Utils.EventEmitter {
             case 'playerOffline': {
                 const offlinePlayer = this.players.find(p => p.id === msg.playerId);
                 this.emit('playerDisconnected', { playerId: msg.playerId, name: offlinePlayer?.name });
-                this._closePeer(msg.playerId);
                 if (offlinePlayer) offlinePlayer.online = false;
+                this._closePeer(msg.playerId, false);
                 this.emit('playerListUpdated', this.players);
                 break;
             }
             case 'playerLeft': {
-                this._closePeer(msg.playerId);
+                this._closePeer(msg.playerId, false);
                 this.players = this.players.filter(p => p.id !== msg.playerId);
                 this.emit('playerListUpdated', this.players);
                 break;
             }
             case 'sdp-offer': {
                 if (msg.data && msg.data.targetId === this.playerId) {
-                    await this._handleOffer(msg.from, msg.data.sdp);
+                    await this._handleOffer(msg.from, msg.data.sdp, msg.data.connectionId);
                 }
                 break;
             }
             case 'sdp-answer': {
                 if (msg.data && msg.data.targetId === this.playerId) {
-                    await this._handleAnswer(msg.from, msg.data.sdp);
+                    await this._handleAnswer(msg.from, msg.data.sdp, msg.data.connectionId);
                 }
                 break;
             }
             case 'ice-candidate': {
                 if (msg.data && msg.data.targetId === this.playerId) {
-                    await this._handleIce(msg.from, msg.data.candidate);
+                    await this._handleIce(msg.from, msg.data.candidate, msg.data.connectionId);
                 }
                 break;
             }
@@ -283,17 +296,18 @@ class P2PNetwork extends Utils.EventEmitter {
                 iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
             });
             pc.onicecandidate = (e) => {
-                if (e.candidate) {
-                    this._sendSignal('ice-candidate', { targetId: playerId, candidate: e.candidate.toJSON() });
+                if (e.candidate && this.peers.get(playerId) === pc) {
+                    this._sendSignal('ice-candidate', { targetId: playerId, candidate: e.candidate.toJSON(), connectionId: pc.connectionId });
                 }
             };
             pc.onconnectionstatechange = () => {
+                if (this.peers.get(playerId) !== pc) return;
                 if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
                     this._closePeer(playerId);
                 }
             };
             pc.ondatachannel = (e) => {
-                this._attachChannel(playerId, e.channel);
+                if (this.peers.get(playerId) === pc) this._attachChannel(playerId, e.channel);
             };
             this.peers.set(playerId, pc);
         }
@@ -303,11 +317,14 @@ class P2PNetwork extends Utils.EventEmitter {
     _attachChannel(playerId, channel) {
         const previous = this.channels.get(playerId);
         if (previous && previous !== channel) {
-            previous.onclose = previous.onerror = previous.onmessage = null;
+            previous.onopen = previous.onclose = previous.onerror = previous.onmessage = null;
             previous.close?.();
         }
         this.channels.set(playerId, channel);
         channel.onopen = () => {
+            if (this.channels.get(playerId) !== channel) return;
+            this._clearPeerReconnect(playerId);
+            this.peerReconnectAttempts.delete(playerId);
             this.emit('peerConnected', playerId);
         };
         channel.onmessage = (e) => {
@@ -332,50 +349,110 @@ class P2PNetwork extends Utils.EventEmitter {
     }
 
     async _createOffer(targetId) {
+        if (this.peers.has(targetId)) return;
+        this._clearPeerReconnect(targetId);
+        let pc;
         try {
-            const pc = this._getPeer(targetId);
+            pc = this._getPeer(targetId);
+            pc.connectionId = Utils.uuid();
             const channel = pc.createDataChannel('game', { ordered: true });
             this._attachChannel(targetId, channel);
+            this.peerReconnectTimers.set(targetId, setTimeout(() => {
+                if (this.peers.get(targetId) === pc && channel.readyState !== 'open') this._closePeer(targetId);
+            }, 10000));
             const offer = await pc.createOffer();
+            if (this.peers.get(targetId) !== pc) return;
             await pc.setLocalDescription(offer);
-            this._sendSignal('sdp-offer', { targetId, sdp: offer });
+            if (this.peers.get(targetId) !== pc) return;
+            this._sendSignal('sdp-offer', { targetId, sdp: offer, connectionId: pc.connectionId });
         } catch (e) {
+            if (pc && this.peers.get(targetId) !== pc) return;
+            this._closePeer(targetId);
             console.error('createOffer error:', e);
             this.emit('error', e);
         }
     }
 
-    async _handleOffer(fromId, sdp) {
+    async _handleOffer(fromId, sdp, connectionId) {
+        const pending = (this.pendingIce.get(fromId) || []).filter(item => item.connectionId === connectionId);
+        if (this.peers.has(fromId)) this._closePeer(fromId, false);
+        this.pendingIce.set(fromId, pending);
+        const pc = this._getPeer(fromId);
+        pc.connectionId = connectionId;
         try {
-            const pc = this._getPeer(fromId);
             await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            if (this.peers.get(fromId) !== pc) return;
+            await this._flushIce(fromId, pc);
             const answer = await pc.createAnswer();
+            if (this.peers.get(fromId) !== pc) return;
             await pc.setLocalDescription(answer);
-            this._sendSignal('sdp-answer', { targetId: fromId, sdp: answer });
+            if (this.peers.get(fromId) !== pc) return;
+            this._sendSignal('sdp-answer', { targetId: fromId, sdp: answer, connectionId });
         } catch (e) {
+            if (this.peers.get(fromId) !== pc) return;
             console.error('handleOffer error:', e);
             this.emit('error', e);
         }
     }
 
-    async _handleAnswer(fromId, sdp) {
+    async _handleAnswer(fromId, sdp, connectionId) {
+        const pc = this.peers.get(fromId);
         try {
-            const pc = this.peers.get(fromId);
-            if (pc) await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            if (!pc || pc.connectionId !== connectionId) return;
+            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            if (this.peers.get(fromId) === pc) await this._flushIce(fromId, pc);
         } catch (e) {
+            if (this.peers.get(fromId) !== pc) return;
             console.error('handleAnswer error:', e);
             this.emit('error', e);
         }
     }
 
-    async _handleIce(fromId, candidate) {
+    async _handleIce(fromId, candidate, connectionId) {
+        const pc = this.peers.get(fromId);
         try {
-            const pc = this.peers.get(fromId);
-            if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            if (!pc?.remoteDescription || pc.connectionId !== connectionId) {
+                const pending = this.pendingIce.get(fromId) || [];
+                pending.push({ candidate, connectionId });
+                this.pendingIce.set(fromId, pending);
+                return;
+            }
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (e) {
+            if (this.peers.get(fromId) !== pc) return;
             console.error('handleIce error:', e);
             this.emit('error', e);
         }
+    }
+
+    async _flushIce(playerId, pc) {
+        const pending = this.pendingIce.get(playerId) || [];
+        this.pendingIce.delete(playerId);
+        for (const { candidate, connectionId } of pending) {
+            if (this.peers.get(playerId) !== pc) return;
+            if (connectionId === pc.connectionId) await this._handleIce(playerId, candidate, connectionId);
+        }
+    }
+
+    _clearPeerReconnect(playerId) {
+        clearTimeout(this.peerReconnectTimers.get(playerId));
+        this.peerReconnectTimers.delete(playerId);
+    }
+
+    _schedulePeerReconnect(playerId) {
+        if (!this.isHost || !this.roomId || !this.connected ||
+            !this.players.some(player => player.id === playerId && player.online !== false)) return;
+        const attempts = this.peerReconnectAttempts.get(playerId) || 0;
+        if (attempts >= 5) {
+            this.emit('error', new Error('游戏连接恢复失败，请退出房间后重新加入'));
+            return;
+        }
+        this.peerReconnectAttempts.set(playerId, attempts + 1);
+        this.peerReconnectTimers.set(playerId, setTimeout(() => {
+            this.peerReconnectTimers.delete(playerId);
+            if (!this.peers.has(playerId) && this.connected && this.roomId &&
+                this.players.some(player => player.id === playerId && player.online !== false)) this._createOffer(playerId);
+        }, 1000 * Math.min(attempts + 1, 3)));
     }
 
     _sendSignal(type, data) {
@@ -397,14 +474,16 @@ class P2PNetwork extends Utils.EventEmitter {
         }).catch(() => {}).finally(() => clearTimeout(timeout));
     }
 
-    _closePeer(playerId) {
+    _closePeer(playerId, reconnect = true) {
+        this._clearPeerReconnect(playerId);
+        this.pendingIce.delete(playerId);
         const pc = this.peers.get(playerId);
         const channel = this.channels.get(playerId);
         this.peers.delete(playerId);
         this.channels.delete(playerId);
         if (!pc && !channel) return;
         if (channel) {
-            channel.onclose = channel.onerror = channel.onmessage = null;
+            channel.onopen = channel.onclose = channel.onerror = channel.onmessage = null;
             try { channel.close?.(); } catch (_) {}
         }
         if (pc) {
@@ -412,6 +491,7 @@ class P2PNetwork extends Utils.EventEmitter {
             try { pc.close(); } catch (_) {}
         }
         this.emit('peerDisconnected', playerId);
+        if (reconnect) this._schedulePeerReconnect(playerId);
     }
 
     // ===== 游戏状态同步 =====
@@ -444,15 +524,20 @@ class P2PNetwork extends Utils.EventEmitter {
 
     async startGame(config) {
         if (!this.isHost) throw new Error('只有房主可以开始');
-        await this._post('/room/' + this.roomId + '/start', {
+        if (this._startGamePromise) return this._startGamePromise;
+        const request = this._post('/room/' + this.roomId + '/start', {
             playerId: this.playerId, config
         });
+        this._startGamePromise = request;
+        try { await request; }
+        finally { if (this._startGamePromise === request) this._startGamePromise = null; }
     }
 
     // ===== 离开/销毁 =====
 
     async leaveRoom(notifyServer = true) {
         this._sseStarting = false;
+        this._startGamePromise = null;
         if (this.sseReconnectTimer) { clearTimeout(this.sseReconnectTimer); this.sseReconnectTimer = null; }
         this._stopHeartbeat();
         if (this.sse) {
@@ -461,9 +546,12 @@ class P2PNetwork extends Utils.EventEmitter {
             this.sse = null;
         }
 
-        for (const [pid] of this.peers) this._closePeer(pid);
+        for (const [pid] of this.peerReconnectTimers) this._clearPeerReconnect(pid);
+        for (const [pid] of this.peers) this._closePeer(pid, false);
         this.peers.clear();
         this.channels.clear();
+        this.pendingIce.clear();
+        this.peerReconnectAttempts.clear();
 
         const leaving = notifyServer && this.roomId && this.playerId
             ? this._post(`/room/${this.roomId}/leave`, { playerId: this.playerId }).catch(() => {})
@@ -472,7 +560,6 @@ class P2PNetwork extends Utils.EventEmitter {
         this.roomId = null;
         this.playerId = null;
         this.playerToken = null;
-        this.lastEventId = 0;
         this.isHost = false;
         this.players = [];
         this.connected = false;

@@ -79,6 +79,7 @@ const AudioManager = (function() {
     }
 
     function ensureAudio() {
+        if (document.hidden) return false;
         init();
         resume();
         return !!audioCtx;
@@ -86,7 +87,7 @@ const AudioManager = (function() {
 
     // SFX timer 管理（防止游戏切换后旧音效仍播放）
     function sfxTimeout(fn, delay) {
-        if (!sfxEnabled || sfxVolume <= 0.0001 || isMuted) return null;
+        if (!sfxEnabled || sfxVolume <= 0.0001 || isMuted || document.hidden) return null;
         const id = setTimeout(() => {
             activeSfxTimers.delete(id);
             fn();

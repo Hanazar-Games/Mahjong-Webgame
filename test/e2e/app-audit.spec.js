@@ -267,13 +267,16 @@ test('release metadata and announcement history stay aligned', async ({ request 
     const changelog = await (await request.get('/CHANGELOG.md')).text();
     const historyIndex = changelog.indexOf('## 历史公告');
 
-    expect(packageJson.version).toBe('1.0.20');
-    expect(packageLock.version).toBe('1.0.20');
-    expect(packageLock.packages[''].version).toBe('1.0.20');
-    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v21'");
+    expect(packageJson.version).toBe('1.0.21');
+    expect(packageLock.version).toBe('1.0.21');
+    expect(packageLock.packages[''].version).toBe('1.0.21');
+    expect(serviceWorker).toContain("const CACHE_NAME = 'mahjong-v22'");
     expect(serviceWorker).toContain("'./assets/ui/icons.svg'");
     expect(serviceWorker).toContain("'./manifest.json'");
-    expect(changelog.indexOf('## [1.0.20] - 2026-09-11')).toBeLessThan(historyIndex);
+    const currentIndex = changelog.indexOf('## [1.0.21] - 2026-09-11');
+    expect(currentIndex).toBeGreaterThanOrEqual(0);
+    expect(currentIndex).toBeLessThan(historyIndex);
+    expect(changelog.indexOf('### [1.0.20] - 2026-09-11')).toBeGreaterThan(historyIndex);
     expect(changelog.indexOf('### [1.0.19] - 2026-07-30')).toBeGreaterThan(historyIndex);
     expect(changelog.indexOf('### [1.0.18] - 2026-07-29')).toBeGreaterThan(historyIndex);
 });
@@ -1153,8 +1156,8 @@ test('an upstream discard offers every legal chi choice through the real turn fl
     await page.locator('#btn-chi').click();
     const selector = page.getByRole('dialog', { name: '请选择吃的组合' });
     await expect(selector).toBeVisible();
-    await expect(selector.getByRole('button')).toHaveCount(3);
-    await selector.getByRole('button').nth(2).click();
+    await expect(selector.getByRole('button', { name: /选项/ })).toHaveCount(3);
+    await selector.getByRole('button', { name: /选项/ }).nth(2).click();
 
     await expect.poll(() => page.evaluate(() => App.engine.players[0].melds.length)).toBe(1);
     expect(await page.evaluate(() => App.engine.players[0].melds[0].tiles.map(tile => tile.value))).toEqual([4, 5, 3]);

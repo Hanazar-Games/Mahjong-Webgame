@@ -24,8 +24,7 @@ const ALLOWED_MESSAGE_TYPES = new Set(['sdp-offer', 'sdp-answer', 'ice-candidate
 
 // ===== 内存状态 =====
 const rooms = new Map();   // roomId -> Room
-const players = new Map(); // playerId -> { roomId, name, isHost, res, lastEventId }
-let nextMsgId = 1;
+const players = new Map(); // playerId -> { roomId, name, isHost, res }
 
 // ===== 速率限制 =====
 const rateLimits = new Map(); // ip -> { count, resetTime }
@@ -112,15 +111,11 @@ function readBody(req, maxSize = MAX_BODY_SIZE) {
 function broadcast(roomId, msg, excludePlayerId) {
     const room = rooms.get(roomId);
     if (!room) return;
-    const msgWithId = { ...msg, id: nextMsgId++ };
-    room.messages.push(msgWithId);
-    if (room.messages.length > 200) room.messages = room.messages.slice(-100);
-
     for (const pid of room.playerIds) {
         if (pid === excludePlayerId) continue;
         const p = players.get(pid);
         if (p && p.res && !p.res.writableEnded) {
-            try { p.res.write(`data: ${JSON.stringify(msgWithId)}\n\n`); }
+            try { p.res.write(`data: ${JSON.stringify(msg)}\n\n`); }
             catch (e) { /* SSE 写入失败 */ }
         }
     }
@@ -214,13 +209,13 @@ const server = http.createServer(async (req, res) => {
                 id: roomId, name: String(body.name || '麻将房').slice(0, 20),
                 mahjongType: body.mahjongType || 'guangdong',
                 maxPlayers: Math.min(4, Math.max(2, parseInt(body.maxPlayers) || 4)),
-                playerIds: [playerId], messages: [], createdAt: Date.now(),
+                playerIds: [playerId], createdAt: Date.now(),
                 lastActivity: Date.now(), started: false
             };
             rooms.set(roomId, room);
             players.set(playerId, {
                 roomId, name: String(body.playerName || '房主').slice(0, 12),
-                isHost: true, token: playerToken, res: null, lastEventId: 0
+                isHost: true, token: playerToken, res: null
             });
             devLog(`[创建] 房间 ${roomId} 来自 ${getClientIP(req)}`);
             jsonResponse(res, 200, { roomId, playerId, playerToken, isHost: true }, req);
@@ -247,7 +242,7 @@ const server = http.createServer(async (req, res) => {
             room.lastActivity = Date.now();
             players.set(playerId, {
                 roomId, name: String(body.playerName || '玩家').slice(0, 12),
-                isHost: false, token: playerToken, res: null, lastEventId: 0
+                isHost: false, token: playerToken, res: null
             });
             broadcast(roomId, {
                 type: 'playerJoined', playerId,
@@ -287,33 +282,15 @@ const server = http.createServer(async (req, res) => {
             p.res = res;
             if (oldResponse && oldResponse !== res) oldResponse.end();
             p._clientIP = clientIP;
-            p.lastEventId = parseInt(parsed.query.lastId) || 0;
             const room = rooms.get(roomId);
             room.lastActivity = Date.now();
 
-            // 补发历史消息
-            for (const msg of room.messages) {
-                if (msg.id > p.lastEventId) {
-                    try { res.write(`data: ${JSON.stringify(msg)}\n\n`); }
-                    catch (e) {}
-                }
-            }
-
-            // 向新连接玩家发送当前房间中所有其他玩家信息
-            for (const pid of room.playerIds) {
-                if (pid === playerId) continue;
-                const other = players.get(pid);
-                if (other) {
-                    try {
-                        res.write(`data: ${JSON.stringify({
-                            type: 'playerOnline',
-                            playerId: pid,
-                            name: other.name,
-                            isHost: other.isHost
-                        })}\n\n`);
-                    } catch (e) {}
-                }
-            }
+            // 重连发送当前成员和牌局；旧握手、旧开局事件不能重放。
+            const roster = room.playerIds.map(id => {
+                const member = players.get(id);
+                return { id, name: member.name, isHost: member.isHost, online: !!member.res };
+            });
+            res.write(`data: ${JSON.stringify({ type: 'roomState', players: roster, config: room.gameConfig })}\n\n`);
 
             // 通知其他人此玩家上线
             broadcast(roomId, { type: 'playerOnline', playerId, name: p.name, isHost: p.isHost }, playerId);
@@ -384,7 +361,9 @@ const server = http.createServer(async (req, res) => {
             if (room.playerIds.length < 2) { jsonResponse(res, 403, { error: '至少需要2人' }, req); return; }
             room.started = true;
             room.lastActivity = Date.now();
-            const config = { ...body.config, mahjongType: room.mahjongType, playerCount: room.playerIds.length };
+            const config = { ...body.config, mahjongType: room.mahjongType, playerCount: room.playerIds.length,
+                gameId: randomBytes(16).toString('hex') };
+            room.gameConfig = config;
             broadcast(roomId, { type: 'gameStart', from: body.playerId, config });
             devLog(`[开始] 房间 ${roomId} 游戏开始 (${room.playerIds.length}人)`);
             jsonResponse(res, 200, { ok: true }, req);

@@ -472,7 +472,7 @@ class MahjongEngine extends Utils.EventEmitter {
      */
     async playerDiscard(tileId) {
         if (this.paused) return false;
-        if (this.state !== 'playing') return;
+        if (this.state !== 'playing') return false;
         try {
             this.stopTimer();
             
@@ -480,7 +480,7 @@ class MahjongEngine extends Utils.EventEmitter {
             if (!player) {
                 console.error('playerDiscard: invalid player index');
                 await this.handleDrawGame();
-                return;
+                return false;
             }
             const tile = player.discard(tileId);
             
@@ -491,7 +491,7 @@ class MahjongEngine extends Utils.EventEmitter {
                 if (this.state === 'playing') {
                     this.startTimer();
                 }
-                return;
+                return false;
             }
             
             this.lastDiscard = tile;
@@ -502,10 +502,11 @@ class MahjongEngine extends Utils.EventEmitter {
             
             // 等待其他玩家响应
             await this.waitForActions(tile);
+            return true;
         } catch (e) {
             if (e?.message === 'CANCELLED') {
                 if (this.state !== 'destroyed') this.state = 'idle';
-                return;
+                return false;
             }
             throw e;
         }
