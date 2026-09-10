@@ -104,6 +104,14 @@
         _settingsReturnToIngameMenu = false;
     }
 
+    function closeIngameMenus() {
+        _settingsReturnToIngameMenu = false;
+        _settingsTrigger = null;
+        const settings = document.getElementById('settings-modal');
+        if (settings && !settings.classList.contains('hidden')) hideSettingsModal();
+        document.getElementById('ingame-menu')?.classList.add('hidden');
+    }
+
     /**
      * 保存所有设置
      */
@@ -220,7 +228,12 @@
             if (el.type === 'checkbox') {
                 value = el.checked;
             }
-            const prevSettings = Utils.deepClone(App.settings);
+            const prevSettings = Utils.deepClone(_sliderRollbackSettings || App.settings);
+            if (_sliderSaveTimer) {
+                clearTimeout(_sliderSaveTimer);
+                _sliderSaveTimer = null;
+            }
+            _sliderRollbackSettings = null;
             App.settings[settingKey] = value;
             if (key === 'bgm-style' && value !== 'none' && (App.settings.bgmVolume || 0) <= 0) {
                 App.settings.bgmVolume = 30;
@@ -285,7 +298,7 @@
                 if (key === 'opponent-display' && App.engine && App.currentScreen === 'game-screen') {
                     const localIndex = App.localPlayerIndex ?? 0;
                     App.engine.players.forEach((player, index) => {
-                        if (index !== localIndex) renderPlayerHand(index, player.hand?.length || 0);
+                        if (index !== localIndex) renderPlayerHand(index, player.handSize ?? player.hand?.length ?? 0);
                     });
                 }
             }

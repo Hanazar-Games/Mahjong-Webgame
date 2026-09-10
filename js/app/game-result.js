@@ -23,6 +23,7 @@
      */
     function showGameResult(data, saveResult) {
         if (!data.players || data.players.length === 0) return;
+        closeIngameMenus();
         const sorted = [...data.players].sort((a, b) => b.score - a.score);
         const targetScore = App.engine?.config?.targetScore ?? 1000;
         const localPosition = App.localPlayerIndex ?? 0;

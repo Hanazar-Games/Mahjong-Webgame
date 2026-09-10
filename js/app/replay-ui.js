@@ -158,7 +158,9 @@
             this.currentStep = -1;
             this.playerStates = [];
             this.discardPile = [];
+            this.deckCount = null;
             this._resetTable();
+            this._renderState();
             const timeline = document.getElementById('replay-timeline');
             if (timeline) timeline.innerHTML = '';
             const actionText = document.getElementById('replay-action-text');
@@ -659,7 +661,7 @@
                     }
                 }
 
-                this._updatePlayerInfo(i, state);
+                this._updatePlayerInfo(i, state || this.players[i]);
             }
 
             const pileEl = document.getElementById('replay-discard-pile');

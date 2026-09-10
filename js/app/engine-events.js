@@ -348,14 +348,18 @@
         
         engine.on('needDiscard', (data) => {
             AppEventBus.emit('engine:needDiscard', data);
+            if (App.engine !== engine || engine.state !== 'playing') return;
+            updatePlayerHighlight(data.index);
             if (data.index === (App.localPlayerIndex ?? 0)) {
-                // 防御引擎被销毁的竞态
-                if (!App.engine || App.engine !== engine || engine.state !== 'playing') {
-                    return;
-                }
                 enablePlayerActions(true);
                 updateTurnGuidance('选择一张手牌，再次点击打出', 'active');
                 Utils.toast('请打出一张牌', 3000, 'warning');
+            } else if (App.isNetworkGame) {
+                updateTurnGuidance(`等待 ${data.player?.name || '其他玩家'} 出牌`);
+            } else {
+                updateTurnGuidance(`${data.player?.name || '电脑玩家'} 正在思考…`, 'thinking');
+            }
+            if (data.index === (App.localPlayerIndex ?? 0) || (App.isNetworkGame && App.network?.isHost)) {
                 engine.startTimer();
             }
         });

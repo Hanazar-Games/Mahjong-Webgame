@@ -1356,7 +1356,7 @@ select {
 /* ========== 结算页 ========== */
 #game-result.screen {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     padding: 20px;
     background: var(--bg-primary);
@@ -1375,6 +1375,7 @@ select {
     z-index: 2;
     max-width: 440px;
     width: 100%;
+    margin-block: auto;
     display: flex;
     flex-direction: column;
     gap: 16px;

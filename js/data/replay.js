@@ -28,17 +28,9 @@ const Replay = (function() {
         }
         
         try {
-            const ok = Storage.set('replays', replays);
-            if (!ok) {
-                console.error('saveReplay failed: localStorage quota exceeded');
-                return false;
-            }
+            if (!Storage.set('replays', replays)) throw new Error('本地存储写入失败');
         } catch (e) {
-            if (e.message?.includes('circular')) {
-                console.error('saveReplay failed: circular reference in replay data');
-            } else {
-                console.error('saveReplay failed:', e);
-            }
+            console.error('saveReplay failed:', e);
             Utils.toast('回放保存失败', 3000, 'error');
             return false;
         }

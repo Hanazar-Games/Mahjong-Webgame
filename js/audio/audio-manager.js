@@ -25,6 +25,12 @@ const AudioManager = (function() {
 
     function init() {
         if (audioCtx && audioCtx.state !== 'closed') return;
+        if (audioCtx) {
+            bgmGeneration++;
+            bgmPlaying = false;
+            if (bgmTimer) clearTimeout(bgmTimer);
+            bgmTimer = null;
+        }
         try {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             masterGain = audioCtx.createGain();
@@ -577,7 +583,11 @@ const AudioManager = (function() {
         let phraseTime = audioCtx.currentTime + 0.08;
         const loop = () => {
             if (!bgmPlaying || currentBgm !== style || generation !== bgmGeneration) return;
-            if (audioCtx.state === 'closed') { stopBgm(); return; }
+            if (audioCtx.state === 'closed') {
+                bgmPlaying = false;
+                bgmTimer = null;
+                return;
+            }
             const activePattern = BGM_PATTERNS[style];
             const melody = activePattern.notes[Math.floor(Math.random() * activePattern.notes.length)];
             const startTime = Math.max(phraseTime, audioCtx.currentTime + 0.02);
@@ -701,7 +711,7 @@ const AudioManager = (function() {
         interactionBound = true;
         const events = ['click', 'touchstart', 'keydown'];
         const handler = () => {
-            if (document.hidden || audioCtx?.state === 'running') return;
+            if (document.hidden || (audioCtx?.state === 'running' && (!currentBgm || bgmPlaying))) return;
             const bgmToResume = currentBgm;
             init();
             if (bgmToResume) startBgm(bgmToResume);

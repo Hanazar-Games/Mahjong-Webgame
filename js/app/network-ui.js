@@ -297,9 +297,9 @@
             showLobbyContent();
             App.isNetworkGame = false;
             if (App.engine) { App.engine.destroy(); App.engine = null; }
+            closeIngameMenus();
             AudioManager.stopBgm();
             AudioManager.stopAllSfx();
-            document.getElementById('ingame-menu')?.classList.add('hidden');
             if (App.currentScreen === 'game-screen' || App.currentScreen === 'game-result') {
                 App.currentScreen = 'network-lobby';
                 UIComponents.switchScreen('network-lobby');
@@ -493,7 +493,7 @@
         const net = App.network;
         _networkGameResultHandled = false;
         closeAllSelectors();
-        document.getElementById('ingame-menu')?.classList.add('hidden');
+        closeIngameMenus();
         AudioManager.stopAllSfx();
         startConfiguredBgm();
         updateAnimSpeed(config.speed);

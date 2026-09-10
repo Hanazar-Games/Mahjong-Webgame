@@ -94,6 +94,39 @@ async function connectPair(browser, baseURL, startViaUI = false) {
     return { contexts, host, guest, errors };
 }
 
+test('guest display preferences preserve authoritative opponent hand counts', async ({ browser, baseURL }) => {
+    const { contexts, host, guest } = await connectPair(browser, baseURL);
+    try {
+        const count = await host.evaluate(() => App.engine.players[0].hand.length);
+        await guest.locator('#btn-menu').click();
+        await guest.locator('#btn-ingame-settings').click();
+        await guest.locator('#opponent-display').selectOption('hidden');
+        await expect(guest.locator('#hand-top')).toHaveText(`${count}张`);
+        await guest.locator('#opponent-display').selectOption('small');
+        await expect(guest.locator('#hand-top .mahjong-tile.back')).toHaveCount(count);
+        expect(await guest.evaluate(() => App.engine.players[0].hand.length)).toBe(0);
+    } finally { await Promise.all(contexts.map(context => context.close())); }
+});
+
+for (const transition of ['result', 'room-close']) {
+    test(`network ${transition} closes game menus and settings`, async ({ browser, baseURL }) => {
+        const { contexts, host, guest } = await connectPair(browser, baseURL);
+        try {
+            await host.locator('#btn-menu').click();
+            await guest.locator('#btn-menu').click();
+            await guest.locator('#btn-ingame-settings').click();
+            await guest.locator('#sfx-volume').fill('25');
+            if (transition === 'result') await host.evaluate(() => App.engine.endRound());
+            else await host.evaluate(() => App.network.leaveRoom());
+            await expect(guest.locator(transition === 'result' ? '#game-result' : '#network-lobby')).toHaveClass(/active/);
+            await expect(host.locator('#ingame-menu')).toBeHidden();
+            await expect(guest.locator('#settings-modal')).toBeHidden();
+            await expect(guest.locator('#ingame-menu')).toBeHidden();
+            expect(await guest.evaluate(() => Stats.getSettings().sfxVolume)).toBe(25);
+        } finally { await Promise.all(contexts.map(context => context.close())); }
+    });
+}
+
 test('a failed data channel reconnects while signaling remains online', async ({ browser, baseURL }) => {
     const { contexts, host, guest, errors } = await connectPair(browser, baseURL);
     try {
