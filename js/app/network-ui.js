@@ -8,10 +8,24 @@
             bindNetworkEvents();
         }
 
-        // 默认连接本地服务器
         const serverInput = document.getElementById('signal-server');
-        const serverUrl = serverInput?.value?.trim() || 'http://localhost:8081';
-        App.network.setServerUrl(serverUrl);
+        if (serverInput && !serverInput.dataset.configured) {
+            const secure = location.protocol === 'https:';
+            serverInput.placeholder = secure ? 'https://你的信令服务器' : 'http://IP:8081';
+            if (!secure && !serverInput.value) serverInput.value = `http://${location.hostname || 'localhost'}:8081`;
+            document.getElementById('signal-server-hint').textContent = secure
+                ? '在线联机需要独立的 HTTPS 信令服务器，所有玩家填写同一地址。单机游戏无需连接服务器。'
+                : '在同一局域网启动信令服务器，所有玩家填写该设备的 IP 与端口。单机游戏无需连接服务器。';
+            serverInput.dataset.configured = 'true';
+        }
+        if (serverInput?.value?.trim()) {
+            const previous = App.network.serverUrl;
+            try {
+                App.network.setServerUrl(serverInput.value.trim());
+                if (App.network.serverUrl !== previous) App.networkServerReachable = false;
+            }
+            catch (error) { App.networkServerReachable = false; showNetworkError(error.message); }
+        }
 
         // 刷新连接状态
         updateConnectionStatus(App.network.connected ? 'online' : 'offline');
@@ -112,22 +126,28 @@
                     return;
                 }
                 hideNetworkError();
-                App.network.setServerUrl(url);
-                updateConnectionStatus('connecting');
                 const button = e.currentTarget;
                 if (button.disabled) return;
                 const originalText = button.textContent;
                 button.disabled = true;
                 button.textContent = '连接中...';
+                App.networkServerReachable = false;
+                const net = App.network;
+                let targetUrl;
                 try {
+                    net.setServerUrl(url);
+                    targetUrl = net.serverUrl;
+                    updateConnectionStatus('connecting');
                     // 测试连接：discoverRooms 可以验证服务器可达
-                    await App.network.discoverRooms();
+                    await net.discoverRooms();
+                    if (App.network !== net || net.serverUrl !== targetUrl) return;
                     App.networkServerReachable = true;
                     updateConnectionStatus('online');
                     Utils.toast('已连接到服务器', 3000, 'success');
                     refreshRoomList();
                 } catch (err) {
-                    updateConnectionStatus('offline');
+                    if (App.network !== net || (targetUrl && net.serverUrl !== targetUrl)) return;
+                    updateConnectionStatus(net.connected ? 'online' : 'offline');
                     showNetworkError('连接失败: ' + (err?.message || '无法连接到服务器'));
                 } finally {
                     button.disabled = false;

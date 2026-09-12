@@ -400,11 +400,11 @@
             <div class="network-config" id="network-config">
                 <div class="config-row">
                     <label for="signal-server">信令服务器</label>
-                    <input type="text" id="signal-server" value="http://localhost:8081" placeholder="http://IP:端口">
+                    <input type="url" id="signal-server" placeholder="信令服务器地址" aria-describedby="signal-server-hint" autocomplete="url" spellcheck="false">
                     <span class="conn-status offline" id="conn-status" role="status" aria-live="polite">未连接</span>
                 </div>
-                <div class="config-hint">
-                    💡 在同一局域网的设备上运行 <code>node server/signaling-server.js</code>，然后输入其 IP 地址
+                <div class="config-hint" id="signal-server-hint">
+                    联机需要独立的信令服务器，所有玩家填写同一地址。单机游戏无需连接服务器。
                 </div>
             </div>
 
@@ -649,7 +649,7 @@
     <script src="js/main.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').catch(() => {});
+            navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
         }
     </script>
 </body>

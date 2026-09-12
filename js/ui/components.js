@@ -370,6 +370,7 @@ const UIComponents = (function() {
             }
         });
         requestAnimationFrame(() => {
+            if (!overlay.isConnected || overlay.contains(document.activeElement)) return;
             const focusTarget = modal.querySelector('.modal-btn') || modal.querySelector('.modal-close') || modal;
             focusTarget.focus();
         });

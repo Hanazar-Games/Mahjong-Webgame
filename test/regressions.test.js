@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 function runtime(overrides = {}) {
-    const context = vm.createContext({ console, setTimeout, clearTimeout, setInterval, clearInterval,
+    const context = vm.createContext({ console, URL, setTimeout, clearTimeout, setInterval, clearInterval,
         document: { getElementById: () => null }, ...overrides });
     for (const file of ['utils/helpers', 'core/tiles', 'core/rules', 'core/player', 'ai/ai-utils',
         'ai/ai-player', 'core/engine', 'network/p2p', 'app/replay-ui']) {

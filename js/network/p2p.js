@@ -37,7 +37,19 @@ class P2PNetwork extends Utils.EventEmitter {
     // ===== 连接管理 =====
 
     setServerUrl(url) {
-        this.serverUrl = url.replace(/\/$/, '');
+        let parsed;
+        try { parsed = new URL(url); }
+        catch { throw new Error('请输入完整的 HTTP 或 HTTPS 服务器地址'); }
+        if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+            throw new Error('服务器地址须使用 HTTP 或 HTTPS，且不含账号、查询参数或片段');
+        }
+        const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+        if (typeof location !== 'undefined' && location.protocol === 'https:' && parsed.protocol === 'http:' && !loopback) {
+            throw new Error('当前页面使用 HTTPS，请连接 HTTPS 信令服务器');
+        }
+        const next = parsed.href.replace(/\/+$/, '');
+        if (this.roomId && next !== this.serverUrl) throw new Error('请先退出房间，再更换服务器');
+        this.serverUrl = next;
     }
 
     async _fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
@@ -77,7 +89,8 @@ class P2PNetwork extends Utils.EventEmitter {
     async discoverRooms() {
         if (!this.serverUrl) throw new Error('未设置服务器地址');
         const data = await this._get('/rooms');
-        return data.rooms || [];
+        if (!Array.isArray(data?.rooms)) throw new Error('服务器未返回有效房间列表，请检查信令服务器地址');
+        return data.rooms;
     }
 
     // ===== 创建房间 =====

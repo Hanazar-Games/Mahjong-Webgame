@@ -166,12 +166,14 @@ test('service worker preserves unrelated caches and serves a complete game offli
         await page.goto('/manifest.json');
         await page.evaluate(async () => {
             await caches.open('unrelated-app');
-            await caches.open('mahjong-v-old');
+            await caches.open(`mahjong:${location.origin}/:old`);
+            await caches.open(`mahjong:${location.origin}/another-project/:old`);
             await navigator.serviceWorker.register('/sw.js');
             await navigator.serviceWorker.ready;
         });
-        await expect.poll(() => page.evaluate(async () => (await caches.keys()).includes('mahjong-v-old'))).toBe(false);
+        await expect.poll(() => page.evaluate(async () => (await caches.keys()).includes(`mahjong:${location.origin}/:old`))).toBe(false);
         expect(await page.evaluate(() => caches.keys())).toContain('unrelated-app');
+        expect(await page.evaluate(() => caches.keys())).toContain(`mahjong:${baseURL}/another-project/:old`);
         await page.goto('/');
         await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
         await context.setOffline(true);

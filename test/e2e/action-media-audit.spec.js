@@ -7,6 +7,7 @@ async function openGame(page) {
     await page.goto('/');
     await page.locator('#loading-screen').waitFor({ state: 'detached' });
     await page.evaluate(() => startGame({ playerCount: 4, speed: 'instant', maxRounds: 1 }));
+    await expect(page.locator('#game-table')).toHaveCSS('opacity', '1');
     await page.evaluate(() => {
         window.__discards = [];
         AppEventBus.on('engine:discard', data => window.__discards.push(data.tile.id));
@@ -18,6 +19,7 @@ test('holding Enter on a hand tile selects it without repeating a discard', asyn
     const tile = page.locator('#hand-bottom .mahjong-tile').first();
     const id = await tile.getAttribute('data-id');
     await tile.focus();
+    await expect(tile).toBeFocused();
     await page.keyboard.down('Enter');
     await page.keyboard.down('Enter');
     await page.keyboard.up('Enter');
@@ -38,7 +40,9 @@ test('Space on a hand tile cannot also trigger the global win shortcut', async (
         App.engine.emit('ziMo', { player: player.toJSON() });
     });
     await expect(page.locator('#btn-hu')).toBeEnabled();
-    await page.locator('#hand-bottom .mahjong-tile').first().focus();
+    const tile = page.locator('#hand-bottom .mahjong-tile').first();
+    await tile.focus();
+    await expect(tile).toBeFocused();
     await page.keyboard.press('Space');
     expect(await page.evaluate(() => App.engine.players[0].isHu)).toBe(false);
     await expect(page.locator('#hand-bottom .mahjong-tile.selected')).toHaveCount(1);

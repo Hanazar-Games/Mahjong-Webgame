@@ -87,7 +87,10 @@
             document.getElementById('ingame-menu')?.classList.add('hidden');
         }
         modal.classList.remove('hidden');
-        requestAnimationFrame(() => document.getElementById('settings-close')?.focus());
+        requestAnimationFrame(() => {
+            if (modal.classList.contains('hidden') || modal.contains(document.activeElement)) return;
+            document.getElementById('settings-close')?.focus();
+        });
     }
 
     function hideSettingsModal() {

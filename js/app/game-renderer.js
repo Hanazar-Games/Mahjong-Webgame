@@ -160,7 +160,7 @@
             // 设置禁用状态和恢复选中
             if (isSelf) {
                 const engine = App.engine;
-                const shouldDisable = !engine || !!engine.pendingRemoteAction || engine.currentPlayerIndex !== localIndex || engine.state !== 'playing';
+                const shouldDisable = !engine || engine.paused || !!engine.pendingRemoteAction || engine.currentPlayerIndex !== localIndex || engine.state !== 'playing';
                 handEl.querySelectorAll('.mahjong-tile').forEach(tile => {
                     tile.classList.toggle('disabled', shouldDisable);
                     tile.setAttribute('aria-disabled', String(shouldDisable));

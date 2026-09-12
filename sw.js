@@ -2,7 +2,8 @@
  * 万能麻将 - Service Worker
  * 缓存静态资源，支持离线运行
  */
-const CACHE_NAME = 'mahjong-v26';
+const CACHE_PREFIX = `mahjong:${self.registration.scope}:`;
+const CACHE_NAME = CACHE_PREFIX + 'v27';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -43,7 +44,9 @@ const STATIC_ASSETS = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(
+      STATIC_ASSETS.map(asset => new Request(new URL(asset, self.registration.scope), { cache: 'reload' }))
+    ))
   );
   self.skipWaiting();
 });
@@ -51,7 +54,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k.startsWith('mahjong-v') && k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE_NAME).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -59,11 +62,20 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  if (!e.request.url.startsWith(self.registration.scope)) return;
 
   e.respondWith(
-    caches.match(e.request).then((res) => res || fetch(e.request)).catch(() => {
-      if (e.request.mode === 'navigate') return caches.match('./index.html');
-      return Response.error();
+    caches.open(CACHE_NAME).then(async cache => {
+      const cached = await cache.match(e.request);
+      if (cached) return cached;
+      try { return await fetch(e.request); }
+      catch {
+        if (e.request.mode === 'navigate') {
+          const fallback = await cache.match(new URL('./index.html', self.registration.scope));
+          if (fallback) return fallback;
+        }
+        return Response.error();
+      }
     })
   );
 });

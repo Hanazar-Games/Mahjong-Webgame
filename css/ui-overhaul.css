@@ -2362,6 +2362,7 @@ select {
 }
 
 #game-screen #melds-bottom .mahjong-tile {
+    flex-shrink: 1;
     min-width: 0;
     min-height: 0;
     width: 20px;

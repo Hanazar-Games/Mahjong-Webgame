@@ -65,6 +65,20 @@ npm run server
 
 然后在浏览器中打开 `http://localhost:8080`
 
+### GitHub Pages 部署
+
+将仓库推送到 `main`，在仓库 **Settings → Pages** 中选择从 `main` 分支的根目录发布。本项目为静态页面，无需安装运行时依赖或构建前端。
+
+站点地址为 `https://hanazar-games.github.io/Mahjong-Webgame/`。资源、安装入口和离线缓存均使用项目子目录；缓存按站点路径隔离。发布后检查 Pages 构建状态，并重新打开或刷新页面取得新版本。
+
+Pages 仅托管页面，不能运行 Node.js 信令服务。单机、设置、回放和音频可直接使用；联机需要另行部署信令服务，为其配置 HTTPS，并让所有玩家填写同一服务地址。服务器的允许来源应使用页面的 origin，不含项目路径，例如：
+
+```bash
+ALLOWED_ORIGINS=https://hanazar-games.github.io NODE_ENV=production npm run server
+```
+
+上述命令启动 HTTP 后端，HTTPS 由部署平台或反向代理提供。HTTPS 页面不接受普通 HTTP 局域网地址；本机回环地址可用于开发调试。跨网络连接仍取决于 WebRTC 的网络可达性，当前项目没有提供公共信令或 TURN 服务。
+
 ### 一键启动（仅适合 macOS / Linux shell）
 ```bash
 npm start

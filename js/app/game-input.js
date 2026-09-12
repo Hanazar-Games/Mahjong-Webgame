@@ -192,7 +192,8 @@
             overlay.appendChild(panel);
             document.body.appendChild(overlay);
             requestAnimationFrame(() => {
-                if (overlay.isConnected) optionsContainer.querySelector('button')?.focus();
+                if (!overlay.isConnected || overlay.contains(document.activeElement)) return;
+                optionsContainer.querySelector('button')?.focus();
             });
         });
     }
@@ -435,7 +436,7 @@
      * 启用/禁用玩家操作
      */
     function enablePlayerActions(enable) {
-        enable = enable && !App.engine?.pendingRemoteAction;
+        enable = enable && !App.engine?.paused && !App.engine?.pendingRemoteAction;
         const handEl = document.getElementById('hand-bottom');
         if (!handEl) return;
         
