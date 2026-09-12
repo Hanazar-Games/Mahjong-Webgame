@@ -55,6 +55,18 @@ test('an ordinary HTML server cannot masquerade as a reachable signaling service
     expect(await page.evaluate(() => canUseSignalServer())).toBe(false);
 });
 
+test('phone connection errors remain visible beside the server controls', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/');
+    await page.locator('#loading-screen').waitFor({ state: 'detached' });
+    await page.getByRole('button', { name: /局域网联机/ }).click();
+    await page.locator('#signal-server').fill('invalid-address');
+    await page.locator('#btn-connect-server').click();
+    await expect(page.locator('#network-error')).toContainText('完整');
+    await expect(page.locator('#network-error')).toBeInViewport();
+    await expect(page.locator('#signal-server')).toBeInViewport();
+});
+
 for (const kind of ['confirmation', 'settings', 'tile options']) {
     test(`delayed ${kind} autofocus preserves focus already moved inside the dialog`, async ({ page }) => {
         await page.goto('/');

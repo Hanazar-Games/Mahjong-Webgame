@@ -3,7 +3,7 @@
  * 缓存静态资源，支持离线运行
  */
 const CACHE_PREFIX = `mahjong:${self.registration.scope}:`;
-const CACHE_NAME = CACHE_PREFIX + 'v27';
+const CACHE_NAME = CACHE_PREFIX + 'v28';
 const STATIC_ASSETS = [
   './',
   './index.html',

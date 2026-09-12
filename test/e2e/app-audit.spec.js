@@ -270,7 +270,7 @@ test('release metadata and announcement history stay aligned', async ({ request 
     expect(packageJson.version).toBe('1.0.26');
     expect(packageLock.version).toBe('1.0.26');
     expect(packageLock.packages[''].version).toBe('1.0.26');
-    expect(serviceWorker).toContain("const CACHE_NAME = CACHE_PREFIX + 'v27'");
+    expect(serviceWorker).toContain("const CACHE_NAME = CACHE_PREFIX + 'v28'");
     expect(serviceWorker).toContain('self.registration.scope');
     expect(serviceWorker).toContain("'./assets/ui/icons.svg'");
     expect(serviceWorker).toContain("'./manifest.json'");

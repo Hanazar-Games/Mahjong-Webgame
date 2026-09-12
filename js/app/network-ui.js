@@ -492,7 +492,11 @@
      */
     function showNetworkError(msg) {
         const el = document.getElementById('network-error');
-        if (el) { el.textContent = msg; el.classList.remove('hidden'); }
+        if (el) {
+            el.textContent = msg;
+            el.classList.remove('hidden');
+            el.scrollIntoView({ block: 'nearest' });
+        }
     }
 
     function hideNetworkError() {
